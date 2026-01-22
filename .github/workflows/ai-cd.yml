@@ -20,6 +20,11 @@ jobs:
 
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          APP_ROOT: ${{ vars.APP_ROOT }}
+          SERVICE_NAME: ${{ vars.SERVICE_NAME }}
+          APP_ENV: prod
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
