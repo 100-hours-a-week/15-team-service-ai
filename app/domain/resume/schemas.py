@@ -12,7 +12,7 @@ class CommitInfo(BaseModel):
 
 
 class CommitDetail(BaseModel):
-    """커밋 상세 정보 (diff 포함)."""
+    """커밋 상세 정보."""
 
     sha: str
     message: str

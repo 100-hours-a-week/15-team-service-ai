@@ -7,8 +7,6 @@ from app.domain.resume.service import create_resume
 
 async def collect_data(state: ResumeState) -> ResumeState:
     """GitHub에서 커밋/diff 수집."""
-    # service.py의 create_resume에서 수집과 생성을 함께 처리
-    # 이 노드는 상태 초기화 역할
     state["retry_count"] = state.get("retry_count", 0)
     return state
 

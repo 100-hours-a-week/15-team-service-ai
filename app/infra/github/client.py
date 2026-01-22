@@ -55,7 +55,7 @@ async def get_commits(
         response.raise_for_status()
         data = response.json()
 
-    # merge 커밋 제외 (부모가 2개 이상인 커밋)
+    # merge 커밋 제외
     commits = [
         CommitInfo(
             sha=commit["sha"],
