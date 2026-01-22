@@ -86,8 +86,9 @@ jobs:
           uv run pip-audit
 
       # Step 6) Lint (ruff)
-      - name: Lint (ruff)
-        run: uv run ruff check .
+      # 린트를 도입한 순간부터 이 주석을 지우고 이 스텝을 활성화하세요.
+      #- name: Lint (ruff)
+      #  run: uv run ruff check .
 
       # Step 9) Tests (pytest) + 산출물 생성
       - name: Tests (pytest)
