@@ -10,7 +10,6 @@ concurrency:
 
 permissions:
   contents: read
-  security-events: write
 
 jobs:
   deploy:
@@ -28,7 +27,7 @@ jobs:
           port: 22
           script_stop: true
           command_timeout: 15m
-          envs: APP_ENV,SECRET_KEY,APP_ROOT,SERVICE_NAME,HEALTH_URL,HEALTH_TIMEOUT,HEALTH_INTERVAL
+          envs: APP_ENV,SECRET_KEY,APP_ROOT,SERVICE_NAME
           env:
             APP_ROOT: ${{ vars.APP_ROOT }}
             SERVICE_NAME: ${{ vars.SERVICE_NAME }}
