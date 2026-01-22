@@ -78,6 +78,8 @@ jobs:
               sudo journalctl -u "$SERVICE_NAME" -n 200 --no-pager || true
               exit 1
             }
+
+            sleep 2
             
             echo "[6/6] health check"
             elapsed=0
@@ -85,6 +87,8 @@ jobs:
               if [ "$elapsed" -ge "$HEALTH_TIMEOUT" ]; then
                 echo "Health check failed after ${HEALTH_TIMEOUT}s"
                 sudo systemctl status "$SERVICE_NAME" --no-pager || true
+                sudo journalctl -u "$SERVICE_NAME" -n 200 --no-pager || true
+                sudo ss -lntp | grep -E ':(8000)\b' || true
                 exit 1
               fi
               sleep "$HEALTH_INTERVAL"
