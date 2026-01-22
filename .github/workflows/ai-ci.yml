@@ -100,6 +100,12 @@ jobs:
       - name: Tests (pytest)
         run: |
           mkdir -p test-results coverage
+
+          if ! find . -type f \( -name "test_*.py" -o -name "*_test.py" \) | grep -q .; then
+            echo "No tests found. Skipping pytest."
+            exit 0
+          fi
+          
           uv run pytest \
             --junitxml=test-results/junit.xml \
             --cov=. --cov-report=xml:coverage/coverage.xml --cov-report=html:coverage/htmlcov
