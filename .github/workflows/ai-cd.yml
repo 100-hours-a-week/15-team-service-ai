@@ -67,8 +67,8 @@ jobs:
             command -v uv
             uv --version
 
-            source "$VENV_DIR/bin/activate"
-            uv pip sync "$REPO_DIR/uv.lock"
+            cd "$REPO_DIR"
+            uv sync --frozen
 
             echo "[5/5] restart service"
             sudo systemctl restart "$SERVICE_NAME"
