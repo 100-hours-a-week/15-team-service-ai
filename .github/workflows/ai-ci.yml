@@ -75,6 +75,13 @@ jobs:
             exit 1
           fi
           
+      # Step 5.1) Install CI tools (ruff/pytest/pytest-cov)
+      - name: Install CI tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv pip install -U ruff pytest pytest-cov pip-audit
+
       # Step 5.5) SCA (pip-audit) - 의존성 취약점 점검
       - name: SCA (pip-audit)
         shell: bash
@@ -86,9 +93,8 @@ jobs:
           uv run pip-audit
 
       # Step 6) Lint (ruff)
-      # 린트를 도입한 순간부터 이 주석을 지우고 이 스텝을 활성화하세요.
-      #- name: Lint (ruff)
-      #  run: uv run ruff check .
+      - name: Lint (ruff)
+        run: uv run ruff check .
 
       # Step 9) Tests (pytest) + 산출물 생성
       - name: Tests (pytest)
