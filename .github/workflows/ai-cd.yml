@@ -71,7 +71,13 @@ jobs:
             uv sync --frozen
 
             echo "[5/5] restart service"
+            sudo systemctl daemon-reload
             sudo systemctl restart "$SERVICE_NAME"
+            sudo systemctl is-active --quiet "$SERVICE_NAME" || {
+              sudo systemctl status "$SERVICE_NAME" --no-pager -l || true
+              sudo journalctl -u "$SERVICE_NAME" -n 200 --no-pager || true
+              exit 1
+            }
             
             echo "[6/6] health check"
             elapsed=0
