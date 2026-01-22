@@ -22,7 +22,10 @@ def parse_repo_url(repo_url: str) -> tuple[str, str]:
 
 
 async def get_commits(
-    repo_url: str, token: str, author: str | None = None
+    repo_url: str,
+    token: str,
+    author: str | None = None,
+    per_page: int = 100,
 ) -> list[CommitInfo]:
     """레포지토리의 커밋 목록 조회.
 
@@ -30,9 +33,10 @@ async def get_commits(
         repo_url: GitHub 레포지토리 URL
         token: GitHub OAuth 토큰
         author: GitHub 유저네임 (해당 유저의 커밋만 필터링)
+        per_page: 가져올 커밋 개수 (기본 100, 최대 100)
 
     Returns:
-        커밋 목록 (sha, message, author 등 포함)
+        커밋 목록 (sha, message, author 등 포함), merge 커밋 제외
     """
     owner, repo = parse_repo_url(repo_url)
     url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/commits"
@@ -42,7 +46,7 @@ async def get_commits(
         "Accept": "application/vnd.github.v3+json",
     }
 
-    params = {}
+    params = {"per_page": min(per_page, 100)}
     if author:
         params["author"] = author
 
@@ -51,14 +55,18 @@ async def get_commits(
         response.raise_for_status()
         data = response.json()
 
-    return [
+    # merge 커밋 제외 (부모가 2개 이상인 커밋)
+    commits = [
         CommitInfo(
             sha=commit["sha"],
             message=commit["commit"]["message"],
             author=commit["commit"]["author"]["name"],
         )
         for commit in data
+        if len(commit.get("parents", [])) < 2
     ]
+
+    return commits
 
 
 async def get_commit_detail(repo_url: str, sha: str, token: str) -> CommitDetail:

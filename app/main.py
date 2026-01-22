@@ -1,6 +1,11 @@
 from fastapi import FastAPI
 
-app = FastAPI(title="Health Check", version="1.0.0")
+from app.api.routers import api_router
+
+
+app = FastAPI(title="Dev Experience Extractor", version="1.0.0")
+
+app.include_router(api_router)
 
 
 @app.get("/health")

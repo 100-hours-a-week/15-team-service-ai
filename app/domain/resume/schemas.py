@@ -54,3 +54,5 @@ class ResumeState(TypedDict, total=False):
     resume_data: ResumeData
     evaluation: str
     retry_count: int
+    error_code: str
+    error_message: str
