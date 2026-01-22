@@ -28,11 +28,6 @@ jobs:
           script_stop: true
           command_timeout: 15m
           envs: APP_ENV,SECRET_KEY,APP_ROOT,SERVICE_NAME
-          env:
-            APP_ROOT: ${{ vars.APP_ROOT }}
-            SERVICE_NAME: ${{ vars.SERVICE_NAME }}
-            APP_ENV: prod
-            SECRET_KEY: ${{ secrets.SECRET_KEY }}
           script: |
             set -euo pipefail
 
