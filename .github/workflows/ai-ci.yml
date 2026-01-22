@@ -97,15 +97,11 @@ jobs:
         run: uv run ruff check .
 
       # Step 9) Tests (pytest) + 산출물 생성
+      # 이 스텝은 testfile이 없으면 실패합니다. 개발기간에는 상관없지만 운영/배포 기간에는 testfile을 반드시 만들어 주세요.
       - name: Tests (pytest)
         run: |
           mkdir -p test-results coverage
 
-          if ! find . -type f \( -name "test_*.py" -o -name "*_test.py" \) | grep -q .; then
-            echo "No tests found. Skipping pytest."
-            exit 0
-          fi
-          
           uv run pytest \
             --junitxml=test-results/junit.xml \
             --cov=. --cov-report=xml:coverage/coverage.xml --cov-report=html:coverage/htmlcov
