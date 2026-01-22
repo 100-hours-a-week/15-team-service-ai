@@ -1,0 +1,115 @@
+name: AI CI
+
+on:
+  pull_request:
+	  branches: [ "main" ]
+  push:
+    branches: [ "dev" ]
+    
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  ai-ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      # Step 1) Checkout
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Step 1.1) Trivy Secret Scan (Fail-fast)
+      - name: Trivy Secret Scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: "fs"
+          scan-ref: "."
+          scanners: "secret"
+          format: "table"
+          exit-code: "1"
+          ignore-unfixed: "true"
+  
+      # Step 1.2) CodeQL Init (SAST 준비)
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: python
+          
+      # Step 2) Setup Python
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Step 3) Install uv
+      - name: Install uv
+        run: pip install -U uv
+
+      # Step 4) Cache uv + venv
+      - name: Cache uv + venv
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/uv
+            .venv
+          key: ${{ runner.os }}-py${{ steps.setup-python.outputs.python-version }}-uv-${{ hashFiles('**/uv.lock', '**/pyproject.toml', '**/requirements.txt') }}
+
+      # Step 5) Sync dependencies (uv)
+      - name: Sync dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f "pyproject.toml" ]; then
+            uv sync --group dev
+          elif [ -f "requirements.txt" ]; then
+            uv venv
+            uv pip install -r requirements.txt
+          else
+            echo "No pyproject.toml or requirements.txt found. Failing."
+            exit 1
+          fi
+          
+      # Step 5.5) SCA (pip-audit) - 의존성 취약점 점검
+      - name: SCA (pip-audit)
+        shell: bash
+        run: |
+          set -euo pipefail
+          # pip-audit를 현재 프로젝트 venv(.venv)에 설치
+          uv pip install -U pip-audit
+          # 현재 venv에 설치된 패키지들 대상으로 취약점 감사
+          uv run pip-audit
+
+      # Step 6) Lint (ruff)
+      - name: Lint (ruff)
+        run: uv run ruff check .
+
+      # Step 9) Tests (pytest) + 산출물 생성
+      - name: Tests (pytest)
+        run: |
+          mkdir -p test-results coverage
+          uv run pytest \
+            --junitxml=test-results/junit.xml \
+            --cov=. --cov-report=xml:coverage/coverage.xml --cov-report=html:coverage/htmlcov
+
+      # Step 9.5) CodeQL Analyze (SAST 실행/업로드)
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:python"
+
+      # Step 10) Upload test artifacts
+      - name: Upload test artifacts
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: ai-test-artifacts
+          path: |
+            test-results/
+            coverage/
+          retention-days: 1
