@@ -63,6 +63,10 @@ jobs:
             git pull --ff-only origin main
 
             echo "[4/5] install deps"
+            export PATH="$HOME/.local/bin:$PATH"
+            command -v uv
+            uv --version
+
             source "$VENV_DIR/bin/activate"
             uv pip sync "$REPO_DIR/uv.lock"
 
