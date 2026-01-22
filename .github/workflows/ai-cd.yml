@@ -1,0 +1,86 @@
+name: CD (FastAPI deploy via SSH)
+
+on:
+  push:
+    branches: [ "dev" ]
+    
+concurrency:
+  group: cd-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: 22
+          script_stop: true
+          command_timeout: 15m
+          envs: APP_ENV,SECRET_KEY,APP_ROOT,SERVICE_NAME,HEALTH_URL,HEALTH_TIMEOUT,HEALTH_INTERVAL
+          env:
+            APP_ROOT: ${{ vars.APP_ROOT }}
+            SERVICE_NAME: ${{ vars.SERVICE_NAME }}
+            APP_ENV: prod
+            SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          script: |
+            set -euo pipefail
+
+            APP_ROOT="${APP_ROOT:-/opt/myapi}"
+            SERVICE_NAME="${SERVICE_NAME:-myapi}"
+
+            REPO_DIR="$APP_ROOT/repo"
+            VENV_DIR="$APP_ROOT/venv"
+            ENV_FILE="$APP_ROOT/.env"
+            
+            HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:8000/health}"
+            HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-30}"   # seconds
+            HEALTH_INTERVAL=2
+
+            echo "[1/5] write env file"
+            cat > "$ENV_FILE" <<ENV
+            APP_ENV=${APP_ENV}
+            SECRET_KEY=${SECRET_KEY}
+            ENV
+            chmod 600 "$ENV_FILE"
+
+            echo "[2/5] cd repo"
+            cd "$REPO_DIR"
+
+            echo "[3/5] checkout main & pull"
+            git fetch origin
+            git checkout main
+            git pull --ff-only origin main
+
+            echo "[4/5] install deps"
+            source "$VENV_DIR/bin/activate"
+            uv pip sync "$REPO_DIR/uv.lock"
+
+            echo "[5/5] restart service"
+            sudo systemctl restart "$SERVICE_NAME"
+            
+            echo "[6/6] health check"
+            elapsed=0
+            until curl -fsS "$HEALTH_URL" > /dev/null; do
+              if [ "$elapsed" -ge "$HEALTH_TIMEOUT" ]; then
+               echo "Health check failed after ${HEALTH_TIMEOUT}s"
+                sudo systemctl status "$SERVICE_NAME" --no-pager || true
+                exit 1
+              fi
+              sleep "$HEALTH_INTERVAL"
+              elapsed=$((elapsed + HEALTH_INTERVAL))
+            done
+
+            echo "deploy done (branch=main)"
+
