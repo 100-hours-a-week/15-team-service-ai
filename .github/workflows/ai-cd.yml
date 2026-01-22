@@ -59,8 +59,8 @@ jobs:
 
             echo "[3/5] checkout main & pull"
             git fetch origin
-            git checkout main
-            git pull --ff-only origin main
+            git checkout dev
+            git pull --ff-only origin dev
 
             echo "[4/5] install deps"
             export PATH="$HOME/.local/bin:$PATH"
