@@ -29,10 +29,10 @@ jobs:
           command_timeout: 15m
           envs: APP_ENV,SECRET_KEY,APP_ROOT,SERVICE_NAME
           env:
-	          APP_ROOT: ${{ vars.APP_ROOT }}
-	          SERVICE_NAME: ${{ vars.SERVICE_NAME }}
-	          APP_ENV: prod
-	          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+            APP_ROOT: ${{ vars.APP_ROOT }}
+            SERVICE_NAME: ${{ vars.SERVICE_NAME }}
+            APP_ENV: prod
+            SECRET_KEY: ${{ secrets.SECRET_KEY }}
           script: |
             set -euo pipefail
 
@@ -70,16 +70,16 @@ jobs:
             sudo systemctl restart "$SERVICE_NAME"
             
             echo "[6/6] health check"
-					  elapsed=0
-					  until curl -fsS "$HEALTH_URL" > /dev/null; do
-					    if [ "$elapsed" -ge "$HEALTH_TIMEOUT" ]; then
-					      echo "Health check failed after ${HEALTH_TIMEOUT}s"
-					      sudo systemctl status "$SERVICE_NAME" --no-pager || true
-					      exit 1
-					    fi
-					    sleep "$HEALTH_INTERVAL"
-					    elapsed=$((elapsed + HEALTH_INTERVAL))
-					  done
+            elapsed=0
+            until curl -fsS "$HEALTH_URL" > /dev/null; do
+              if [ "$elapsed" -ge "$HEALTH_TIMEOUT" ]; then
+                echo "Health check failed after ${HEALTH_TIMEOUT}s"
+                sudo systemctl status "$SERVICE_NAME" --no-pager || true
+                exit 1
+              fi
+              sleep "$HEALTH_INTERVAL"
+              elapsed=$((elapsed + HEALTH_INTERVAL))
+            done
 
             echo "deploy done (branch=main)"
 
