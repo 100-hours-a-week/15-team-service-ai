@@ -30,6 +30,19 @@ class ResumeRequest(BaseModel):
     callback_url: str
 
 
+class DiffAnalysisOutput(BaseModel):
+    """diff 분석 LLM 출력 (단일)."""
+
+    tech_stack: list[str]
+    description: str
+
+
+class DiffBatchOutput(BaseModel):
+    """diff 배치 분석 LLM 출력."""
+
+    experiences: list[DiffAnalysisOutput]
+
+
 class ProjectInfo(BaseModel):
     """프로젝트 정보."""
 
@@ -45,14 +58,23 @@ class ResumeData(BaseModel):
     projects: list[ProjectInfo]
 
 
+class EvaluationOutput(BaseModel):
+    """이력서 평가 LLM 출력."""
+
+    result: str
+    feedback: str
+
+
 class ResumeState(TypedDict, total=False):
     """LangGraph 워크플로우 상태."""
 
     request: ResumeRequest
     job_id: str
-    collected_data: list[CommitDetail]
+    collected_data: list[dict]
+    experiences: list[DiffAnalysisOutput]
     resume_data: ResumeData
     evaluation: str
+    evaluation_feedback: str
     retry_count: int
     error_code: str
     error_message: str

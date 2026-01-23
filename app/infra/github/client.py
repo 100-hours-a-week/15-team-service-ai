@@ -1,9 +1,19 @@
 import httpx
 
+from app.core.config import settings
+from app.core.logging import get_logger
 from app.domain.resume.schemas import CommitDetail, CommitInfo
 
+logger = get_logger(__name__)
 
 GITHUB_API_BASE = "https://api.github.com"
+
+_client = httpx.AsyncClient(timeout=settings.github_timeout)
+
+
+async def close_client():
+    """httpx 클라이언트 종료."""
+    await _client.aclose()
 
 
 def parse_repo_url(repo_url: str) -> tuple[str, str]:
@@ -50,12 +60,10 @@ async def get_commits(
     if author:
         params["author"] = author
 
-    async with httpx.AsyncClient() as client:
-        response = await client.get(url, headers=headers, params=params)
-        response.raise_for_status()
-        data = response.json()
+    response = await _client.get(url, headers=headers, params=params)
+    response.raise_for_status()
+    data = response.json()
 
-    # merge 커밋 제외
     commits = [
         CommitInfo(
             sha=commit["sha"],
@@ -66,6 +74,7 @@ async def get_commits(
         if len(commit.get("parents", [])) < 2
     ]
 
+    logger.info("커밋 조회 완료 repo=%s/%s count=%d", owner, repo, len(commits))
     return commits
 
 
@@ -88,11 +97,11 @@ async def get_commit_detail(repo_url: str, sha: str, token: str) -> CommitDetail
         "Accept": "application/vnd.github.v3+json",
     }
 
-    async with httpx.AsyncClient() as client:
-        response = await client.get(url, headers=headers)
-        response.raise_for_status()
-        data = response.json()
+    response = await _client.get(url, headers=headers)
+    response.raise_for_status()
+    data = response.json()
 
+    logger.info("커밋 상세 조회 완료 repo=%s/%s sha=%s", owner, repo, sha[:7])
     return CommitDetail(
         sha=data["sha"],
         message=data["commit"]["message"],

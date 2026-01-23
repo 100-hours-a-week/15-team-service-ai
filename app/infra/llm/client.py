@@ -1,10 +1,25 @@
-import json
-
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 
 from app.core.config import settings
-from app.domain.resume.schemas import ProjectInfo, ResumeData
+from app.core.logging import get_logger
+from app.domain.resume.prompts import (
+    DIFF_ANALYSIS_HUMAN,
+    DIFF_ANALYSIS_SYSTEM,
+    RESUME_EVALUATOR_HUMAN,
+    RESUME_EVALUATOR_SYSTEM,
+    RESUME_GENERATOR_HUMAN,
+    RESUME_GENERATOR_RETRY_HUMAN,
+    RESUME_GENERATOR_SYSTEM,
+)
+from app.domain.resume.schemas import (
+    DiffAnalysisOutput,
+    DiffBatchOutput,
+    EvaluationOutput,
+    ResumeData,
+)
+
+logger = get_logger(__name__)
 
 
 def get_llm():
@@ -16,89 +31,116 @@ def get_llm():
     )
 
 
-async def analyze_diff(diff_content: str, repo_name: str) -> dict:
-    """diff에서 경험 추출.
+async def analyze_diffs_batch(
+    diffs: list[str], repo_name: str
+) -> list[DiffAnalysisOutput]:
+    """여러 diff를 한 번에 분석하여 경험 추출.
 
     Args:
-        diff_content: 커밋 diff 내용
+        diffs: diff 내용 리스트
         repo_name: 레포지토리 이름
 
     Returns:
-        추출된 경험 정보 (기술스택, 구현 내용 등)
+        추출된 경험 목록
     """
-    prompt = f"""다음은 GitHub 커밋의 diff 내용입니다. 이 diff를 분석하여 개발자의 경험을 추출해주세요.
+    logger.info("diff 배치 분석 요청 repo=%s count=%d", repo_name, len(diffs))
 
-레포지토리: {repo_name}
+    diffs_content = "\n\n---\n\n".join(
+        f"[커밋 {i + 1}]\n{diff}" for i, diff in enumerate(diffs)
+    )
 
-diff 내용:
-{diff_content}
+    llm = get_llm().with_structured_output(DiffBatchOutput)
+    messages = [
+        SystemMessage(content=DIFF_ANALYSIS_SYSTEM),
+        HumanMessage(
+            content=DIFF_ANALYSIS_HUMAN.format(
+                repo_name=repo_name,
+                diffs_content=diffs_content,
+            )
+        ),
+    ]
 
-다음 형식으로 JSON만 응답해주세요 (다른 텍스트 없이):
-{{
-    "tech_stack": ["사용된 기술/라이브러리 목록"],
-    "description": "이 커밋에서 구현한 내용을 이력서에 쓸 수 있는 문장으로 작성"
-}}
-"""
-
-    llm = get_llm()
-    response = await llm.ainvoke([HumanMessage(content=prompt)])
-
-    return json.loads(response.content)
+    result = await llm.ainvoke(messages)
+    logger.info(
+        "diff 배치 분석 완료 repo=%s experiences=%d", repo_name, len(result.experiences)
+    )
+    return result.experiences
 
 
 async def generate_resume(
-    experiences: list[dict], position: str, repo_urls: list[str]
+    experiences: list[DiffAnalysisOutput],
+    position: str,
+    repo_urls: list[str],
+    feedback: str | None = None,
 ) -> ResumeData:
     """경험 기반 이력서 생성.
 
     Args:
-        experiences: analyze_diff로 추출된 경험 목록
+        experiences: 분석된 경험 목록
         position: 희망 포지션
         repo_urls: 레포지토리 URL 목록
+        feedback: 이전 평가 피드백 (재시도 시)
 
     Returns:
         생성된 이력서 데이터
     """
+    logger.info("이력서 생성 요청 position=%s", position)
+
     experiences_text = "\n".join(
-        f"- 기술: {exp.get('tech_stack', [])}, 내용: {exp.get('description', '')}"
-        for exp in experiences
+        f"- 기술: {exp.tech_stack}, 내용: {exp.description}" for exp in experiences
     )
+    repo_urls_text = "\n".join(repo_urls)
 
-    prompt = f"""다음은 개발자의 GitHub 커밋에서 추출한 경험 목록입니다.
-이 정보를 바탕으로 {position} 포지션에 맞는 이력서를 작성해주세요.
+    if feedback:
+        human_content = RESUME_GENERATOR_RETRY_HUMAN.format(
+            position=position,
+            experiences_text=experiences_text,
+            repo_urls=repo_urls_text,
+            feedback=feedback,
+        )
+    else:
+        human_content = RESUME_GENERATOR_HUMAN.format(
+            position=position,
+            experiences_text=experiences_text,
+            repo_urls=repo_urls_text,
+        )
 
-경험 목록:
-{experiences_text}
-
-레포지토리 URL:
-{chr(10).join(repo_urls)}
-
-다음 형식으로 JSON만 응답해주세요 (다른 텍스트 없이):
-{{
-    "tech_stack": ["핵심 기술 스택 목록"],
-    "projects": [
-        {{
-            "name": "프로젝트명",
-            "repo_url": "레포지토리 URL",
-            "description": "프로젝트 설명 (이력서에 적합한 문장)"
-        }}
+    llm = get_llm().with_structured_output(ResumeData)
+    messages = [
+        SystemMessage(content=RESUME_GENERATOR_SYSTEM),
+        HumanMessage(content=human_content),
     ]
-}}
-"""
 
-    llm = get_llm()
-    response = await llm.ainvoke([HumanMessage(content=prompt)])
+    result = await llm.ainvoke(messages)
+    logger.info("이력서 생성 완료 position=%s", position)
+    return result
 
-    data = json.loads(response.content)
 
-    return ResumeData(
-        tech_stack=data.get("tech_stack", []),
-        projects=[
-            ProjectInfo(
-                name=p.get("name", ""),
-                repo_url=p.get("repo_url", ""),
-                description=p.get("description", ""),
+async def evaluate_resume(resume_data: ResumeData, position: str) -> EvaluationOutput:
+    """이력서 품질 평가.
+
+    Args:
+        resume_data: 생성된 이력서
+        position: 희망 포지션
+
+    Returns:
+        평가 결과 (pass/fail + 피드백)
+    """
+    logger.info("이력서 평가 요청 position=%s", position)
+
+    resume_json = resume_data.model_dump_json(indent=2)
+
+    llm = get_llm().with_structured_output(EvaluationOutput)
+    messages = [
+        SystemMessage(content=RESUME_EVALUATOR_SYSTEM.format(position=position)),
+        HumanMessage(
+            content=RESUME_EVALUATOR_HUMAN.format(
+                position=position,
+                resume_json=resume_json,
             )
-            for p in data.get("projects", [])
-        ],
-    )
+        ),
+    ]
+
+    result = await llm.ainvoke(messages)
+    logger.info("이력서 평가 완료 result=%s", result.result)
+    return result

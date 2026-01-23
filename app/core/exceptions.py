@@ -2,6 +2,15 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 
 
+class ErrorCode:
+    GITHUB_UNAUTHORIZED = "GITHUB_UNAUTHORIZED"
+    GITHUB_NOT_FOUND = "GITHUB_NOT_FOUND"
+    GITHUB_ERROR = "GITHUB_ERROR"
+    LLM_ERROR = "LLM_ERROR"
+    INTERNAL_ERROR = "INTERNAL_ERROR"
+    GENERATION_FAILED = "GENERATION_FAILED"
+
+
 class CustomException(Exception):
     def __init__(
         self,
