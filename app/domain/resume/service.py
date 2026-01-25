@@ -64,7 +64,7 @@ async def collect_diffs(request: ResumeRequest) -> list[dict]:
 
     for repo_url in request.repo_urls:
         _, repo_name = parse_repo_url(repo_url)
-        commits = await get_commits(repo_url, request.github_token)
+        commits = await get_commits(repo_url, request.github_token, per_page=30)
 
         for commit in commits:
             commit_detail = await get_commit_detail(
