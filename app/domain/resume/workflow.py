@@ -87,7 +87,7 @@ async def evaluate_node(state: ResumeState) -> ResumeState:
     logger.info("이력서 평가 시작 job_id=%s", state.get("job_id"))
     try:
         result = await evaluate_resume(state["resume_data"], state["request"].position)
-        state["evaluation"] = result.result
+        state["evaluation"] = result.result.lower()
         state["evaluation_feedback"] = result.feedback
         state["retry_count"] = state.get("retry_count", 0) + 1
     except Exception as e:

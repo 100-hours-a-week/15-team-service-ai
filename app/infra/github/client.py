@@ -33,7 +33,7 @@ def parse_repo_url(repo_url: str) -> tuple[str, str]:
 
 async def get_commits(
     repo_url: str,
-    token: str,
+    token: str | None = None,
     author: str | None = None,
     per_page: int = 100,
 ) -> list[CommitInfo]:
@@ -41,7 +41,7 @@ async def get_commits(
 
     Args:
         repo_url: GitHub 레포지토리 URL
-        token: GitHub OAuth 토큰
+        token: GitHub OAuth 토큰 (공개 레포는 생략 가능)
         author: GitHub 유저네임 (해당 유저의 커밋만 필터링)
         per_page: 가져올 커밋 개수 (기본 100, 최대 100)
 
@@ -51,10 +51,9 @@ async def get_commits(
     owner, repo = parse_repo_url(repo_url)
     url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/commits"
 
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Accept": "application/vnd.github.v3+json",
-    }
+    headers = {"Accept": "application/vnd.github.v3+json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
 
     params = {"per_page": min(per_page, 100)}
     if author:
@@ -78,13 +77,13 @@ async def get_commits(
     return commits
 
 
-async def get_commit_detail(repo_url: str, sha: str, token: str) -> CommitDetail:
+async def get_commit_detail(repo_url: str, sha: str, token: str | None = None) -> CommitDetail:
     """개별 커밋의 상세 정보 (diff 포함) 조회.
 
     Args:
         repo_url: GitHub 레포지토리 URL
         sha: 커밋 SHA
-        token: GitHub OAuth 토큰
+        token: GitHub OAuth 토큰 (공개 레포는 생략 가능)
 
     Returns:
         커밋 상세 정보 (files 필드에 diff 포함)
@@ -92,10 +91,9 @@ async def get_commit_detail(repo_url: str, sha: str, token: str) -> CommitDetail
     owner, repo = parse_repo_url(repo_url)
     url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/commits/{sha}"
 
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Accept": "application/vnd.github.v3+json",
-    }
+    headers = {"Accept": "application/vnd.github.v3+json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
 
     response = await _client.get(url, headers=headers)
     response.raise_for_status()
