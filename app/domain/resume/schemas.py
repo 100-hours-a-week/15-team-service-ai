@@ -1,4 +1,4 @@
-from typing import TypedDict
+from typing import Literal, TypedDict
 
 from pydantic import BaseModel
 
@@ -18,6 +18,17 @@ class CommitDetail(BaseModel):
     message: str
     author: str
     files: list[dict]
+
+
+class PRInfo(BaseModel):
+    """PR 기본 정보."""
+
+    number: int
+    title: str
+    body: str | None
+    author: str
+    merged_at: str
+    repo_url: str
 
 
 class ResumeRequest(BaseModel):
@@ -61,7 +72,7 @@ class ResumeData(BaseModel):
 class EvaluationOutput(BaseModel):
     """이력서 평가 LLM 출력."""
 
-    result: str
+    result: Literal["pass", "fail"]
     feedback: str
 
 

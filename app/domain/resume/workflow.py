@@ -5,7 +5,8 @@ from app.core.config import settings
 from app.core.exceptions import ErrorCode
 from app.core.logging import get_logger
 from app.domain.resume.schemas import ResumeState
-from app.domain.resume.service import analyze_experiences, collect_diffs
+from app.domain.resume.service import analyze_experiences
+from app.domain.resume.service import collect_data as collect_repo_data
 from app.infra.llm.client import evaluate_resume, generate_resume
 
 logger = get_logger(__name__)
@@ -14,11 +15,11 @@ MAX_RETRY = 1
 
 
 async def collect_data(state: ResumeState) -> ResumeState:
-    """GitHub에서 커밋/diff 수집."""
-    logger.info("diff 수집 시작 job_id=%s", state.get("job_id"))
+    """GitHub에서 PR/커밋 데이터 수집."""
+    logger.info("데이터 수집 시작 job_id=%s", state.get("job_id"))
     try:
-        diffs = await collect_diffs(state["request"])
-        state["collected_data"] = diffs
+        data = await collect_repo_data(state["request"])
+        state["collected_data"] = data
         state["retry_count"] = 0
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 401:
