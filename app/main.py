@@ -1,6 +1,15 @@
 from fastapi import FastAPI
 
-app = FastAPI(title="Health Check", version="1.0.0")
+from app.api.routers import api_router
+from app.core.exceptions import register_exception_handlers
+from app.core.logging import setup_logging
+
+setup_logging()
+
+app = FastAPI(title="Dev Experience Extractor", version="1.0.0")
+
+register_exception_handlers(app)
+app.include_router(api_router)
 
 
 @app.get("/health")

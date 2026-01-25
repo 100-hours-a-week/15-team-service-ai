@@ -214,7 +214,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
-
 docs
 api_test
 .agent
