@@ -1,3 +1,5 @@
+import base64
+
 import httpx
 
 from app.core.config import settings
@@ -157,3 +159,87 @@ async def get_pulls(
 
     logger.info("PR 조회 완료 repo=%s/%s count=%d", owner, repo, len(prs))
     return prs
+
+
+async def get_repo_languages(repo_url: str, token: str | None = None) -> dict[str, int]:
+    """레포지토리 언어 비율 조회.
+
+    Args:
+        repo_url: GitHub 레포지토리 URL
+        token: GitHub OAuth 토큰, 공개 레포는 생략 가능
+
+    Returns:
+        언어별 바이트 수 딕셔너리. 예: {"TypeScript": 50000, "Python": 20000}
+    """
+    owner, repo = parse_repo_url(repo_url)
+    url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/languages"
+
+    headers = {"Accept": "application/vnd.github.v3+json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    response = await _client.get(url, headers=headers)
+    response.raise_for_status()
+
+    logger.info("언어 조회 완료 repo=%s/%s", owner, repo)
+    return response.json()
+
+
+async def get_repo_info(repo_url: str, token: str | None = None) -> dict:
+    """레포지토리 메타데이터 조회.
+
+    Args:
+        repo_url: GitHub 레포지토리 URL
+        token: GitHub OAuth 토큰, 공개 레포는 생략 가능
+
+    Returns:
+        description과 topics를 포함한 딕셔너리
+    """
+    owner, repo = parse_repo_url(repo_url)
+    url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}"
+
+    headers = {"Accept": "application/vnd.github.v3+json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    response = await _client.get(url, headers=headers)
+    response.raise_for_status()
+    data = response.json()
+
+    logger.info("레포 정보 조회 완료 repo=%s/%s", owner, repo)
+    return {
+        "description": data.get("description"),
+        "topics": data.get("topics", []),
+    }
+
+
+async def get_repo_readme(repo_url: str, token: str | None = None) -> str | None:
+    """레포지토리 README 내용 조회.
+
+    Args:
+        repo_url: GitHub 레포지토리 URL
+        token: GitHub OAuth 토큰, 공개 레포는 생략 가능
+
+    Returns:
+        README 내용 앞 2000자, 없으면 None
+    """
+    owner, repo = parse_repo_url(repo_url)
+    url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/readme"
+
+    headers = {"Accept": "application/vnd.github.v3+json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    try:
+        response = await _client.get(url, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+
+        content = base64.b64decode(data["content"]).decode("utf-8")
+        logger.info("README 조회 완료 repo=%s/%s", owner, repo)
+        return content[:2000]
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 404:
+            logger.info("README 없음 repo=%s/%s", owner, repo)
+            return None
+        raise

@@ -16,6 +16,7 @@ from app.domain.resume.schemas import (
     DiffAnalysisOutput,
     DiffBatchOutput,
     EvaluationOutput,
+    RepoContext,
     ResumeData,
 )
 
@@ -31,9 +32,7 @@ def get_llm():
     )
 
 
-async def analyze_diffs_batch(
-    diffs: list[str], repo_name: str
-) -> list[DiffAnalysisOutput]:
+async def analyze_diffs_batch(diffs: list[str], repo_name: str) -> list[DiffAnalysisOutput]:
     """여러 diff를 한 번에 분석하여 경험 추출.
 
     Args:
@@ -45,9 +44,8 @@ async def analyze_diffs_batch(
     """
     logger.info("diff 배치 분석 요청 repo=%s count=%d", repo_name, len(diffs))
 
-    diffs_content = "\n\n---\n\n".join(
-        f"[커밋 {i + 1}]\n{diff}" for i, diff in enumerate(diffs)
-    )
+    diffs_content = "\n\n---\n\n".join(f"[커밋 {i + 1}]\n{diff}" for i, diff in enumerate(diffs))
+    logger.info("diffs_content 크기 repo=%s chars=%d", repo_name, len(diffs_content))
 
     llm = get_llm().with_structured_output(DiffBatchOutput)
     messages = [
@@ -61,9 +59,7 @@ async def analyze_diffs_batch(
     ]
 
     result = await llm.ainvoke(messages)
-    logger.info(
-        "diff 배치 분석 완료 repo=%s experiences=%d", repo_name, len(result.experiences)
-    )
+    logger.info("diff 배치 분석 완료 repo=%s experiences=%d", repo_name, len(result.experiences))
     return result.experiences
 
 
@@ -72,6 +68,7 @@ async def generate_resume(
     position: str,
     repo_urls: list[str],
     feedback: str | None = None,
+    repo_contexts: dict[str, RepoContext] | None = None,
 ) -> ResumeData:
     """경험 기반 이력서 생성.
 
@@ -79,7 +76,8 @@ async def generate_resume(
         experiences: 분석된 경험 목록
         position: 희망 포지션
         repo_urls: 레포지토리 URL 목록
-        feedback: 이전 평가 피드백 (재시도 시)
+        feedback: 이전 평가 피드백, 재시도 시 사용
+        repo_contexts: 레포지토리 컨텍스트 정보
 
     Returns:
         생성된 이력서 데이터
@@ -91,18 +89,30 @@ async def generate_resume(
     )
     repo_urls_text = "\n".join(repo_urls)
 
+    if repo_contexts:
+        contexts_text = "\n".join(
+            f"- {name}: 언어={list(ctx.languages.keys())}, 설명={ctx.description or '없음'}, "
+            f"토픽={ctx.topics}"
+            + (f"\n  README: {ctx.readme_summary[:500]}..." if ctx.readme_summary else "")
+            for name, ctx in repo_contexts.items()
+        )
+    else:
+        contexts_text = "없음"
+
     if feedback:
         human_content = RESUME_GENERATOR_RETRY_HUMAN.format(
             position=position,
             experiences_text=experiences_text,
             repo_urls=repo_urls_text,
             feedback=feedback,
+            repo_contexts=contexts_text,
         )
     else:
         human_content = RESUME_GENERATOR_HUMAN.format(
             position=position,
             experiences_text=experiences_text,
             repo_urls=repo_urls_text,
+            repo_contexts=contexts_text,
         )
 
     llm = get_llm().with_structured_output(ResumeData)
@@ -142,5 +152,5 @@ async def evaluate_resume(resume_data: ResumeData, position: str) -> EvaluationO
     ]
 
     result = await llm.ainvoke(messages)
-    logger.info("이력서 평가 완료 result=%s", result.result)
+    logger.info("이력서 평가 완료 result=%s feedback=%s", result.result, result.feedback)
     return result

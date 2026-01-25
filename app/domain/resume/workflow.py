@@ -5,7 +5,7 @@ from app.core.config import settings
 from app.core.exceptions import ErrorCode
 from app.core.logging import get_logger
 from app.domain.resume.schemas import ResumeState
-from app.domain.resume.service import analyze_experiences
+from app.domain.resume.service import analyze_experiences, collect_repo_contexts
 from app.domain.resume.service import collect_data as collect_repo_data
 from app.infra.llm.client import evaluate_resume, generate_resume
 
@@ -15,11 +15,13 @@ MAX_RETRY = 1
 
 
 async def collect_data(state: ResumeState) -> ResumeState:
-    """GitHub에서 PR/커밋 데이터 수집."""
+    """GitHub에서 PR/커밋 데이터 및 컨텍스트 수집."""
     logger.info("데이터 수집 시작 job_id=%s", state.get("job_id"))
     try:
         data = await collect_repo_data(state["request"])
+        contexts = await collect_repo_contexts(state["request"])
         state["collected_data"] = data
+        state["repo_contexts"] = contexts
         state["retry_count"] = 0
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 401:
@@ -73,6 +75,7 @@ async def compose_resume_node(state: ResumeState) -> ResumeState:
             position=request.position,
             repo_urls=request.repo_urls,
             feedback=state.get("evaluation_feedback"),
+            repo_contexts=state.get("repo_contexts"),
         )
         state["resume_data"] = resume_data
     except Exception as e:
@@ -149,12 +152,12 @@ async def send_callback(state: ResumeState) -> ResumeState:
             "jobId": job_id,
             "status": "success",
             "resume": {
-                "techStack": resume_data.tech_stack,
                 "projects": [
                     {
                         "name": p.name,
                         "repoUrl": p.repo_url,
                         "description": p.description,
+                        "techStack": p.tech_stack,
                     }
                     for p in resume_data.projects
                 ],

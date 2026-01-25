@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     environment: str = "development"
 
     # LLM 설정
-    llm_model: str = "gpt-4o-mini"
+    llm_model: str = "gpt-5.2"
 
     # OpenAI
     openai_api_key: str = ""

@@ -31,6 +31,16 @@ class PRInfo(BaseModel):
     repo_url: str
 
 
+class RepoContext(BaseModel):
+    """레포지토리 컨텍스트 정보."""
+
+    name: str
+    languages: dict[str, int]
+    description: str | None
+    topics: list[str]
+    readme_summary: str | None
+
+
 class ResumeRequest(BaseModel):
     """이력서 생성 요청."""
 
@@ -60,6 +70,7 @@ class ProjectInfo(BaseModel):
     name: str
     repo_url: str
     description: str
+    tech_stack: list[str]
 
 
 class ResumeData(BaseModel):
@@ -82,6 +93,7 @@ class ResumeState(TypedDict, total=False):
     request: ResumeRequest
     job_id: str
     collected_data: list[dict]
+    repo_contexts: dict[str, RepoContext]
     experiences: list[DiffAnalysisOutput]
     resume_data: ResumeData
     evaluation: str
