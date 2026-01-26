@@ -33,8 +33,10 @@ def test_project_info():
         name="my-project",
         repo_url="https://github.com/user/my-project",
         description="프로젝트 설명",
+        tech_stack=["Python", "FastAPI"],
     )
     assert project.name == "my-project"
+    assert project.tech_stack == ["Python", "FastAPI"]
 
 
 def test_resume_data():
@@ -46,6 +48,7 @@ def test_resume_data():
                 name="my-project",
                 repo_url="https://github.com/user/my-project",
                 description="프로젝트 설명",
+                tech_stack=["Python", "FastAPI"],
             )
         ],
     )

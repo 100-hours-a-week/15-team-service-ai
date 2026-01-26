@@ -161,6 +161,35 @@ async def get_pulls(
     return prs
 
 
+async def get_pull_files(
+    repo_url: str,
+    pull_number: int,
+    token: str | None = None,
+) -> list[dict]:
+    """PR에서 변경된 파일 목록 조회.
+
+    Args:
+        repo_url: GitHub 레포지토리 URL
+        pull_number: PR 번호
+        token: GitHub OAuth 토큰
+
+    Returns:
+        변경된 파일 목록 (filename, patch 포함)
+    """
+    owner, repo = parse_repo_url(repo_url)
+    url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/pulls/{pull_number}/files"
+
+    headers = {"Accept": "application/vnd.github.v3+json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    response = await _client.get(url, headers=headers)
+    response.raise_for_status()
+
+    logger.info("PR 파일 조회 완료 repo=%s/%s pr=%d", owner, repo, pull_number)
+    return response.json()
+
+
 async def get_repo_languages(repo_url: str, token: str | None = None) -> dict[str, int]:
     """레포지토리 언어 비율 조회.
 

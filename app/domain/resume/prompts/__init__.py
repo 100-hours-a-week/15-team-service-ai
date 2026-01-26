@@ -1,0 +1,33 @@
+from app.domain.resume.prompts.agent import (
+    AGENT_ANALYZE_INSTRUCTION,
+    AGENT_COLLECT_INSTRUCTION,
+    AGENT_GENERATE_INSTRUCTION,
+    AGENT_SYSTEM,
+)
+from app.domain.resume.prompts.analysis import (
+    DIFF_ANALYSIS_HUMAN,
+    DIFF_ANALYSIS_SYSTEM,
+)
+from app.domain.resume.prompts.evaluation import (
+    RESUME_EVALUATOR_HUMAN,
+    RESUME_EVALUATOR_SYSTEM,
+)
+from app.domain.resume.prompts.generation import (
+    RESUME_GENERATOR_HUMAN,
+    RESUME_GENERATOR_RETRY_HUMAN,
+    RESUME_GENERATOR_SYSTEM,
+)
+
+__all__ = [
+    "DIFF_ANALYSIS_SYSTEM",
+    "DIFF_ANALYSIS_HUMAN",
+    "RESUME_GENERATOR_SYSTEM",
+    "RESUME_GENERATOR_HUMAN",
+    "RESUME_GENERATOR_RETRY_HUMAN",
+    "RESUME_EVALUATOR_SYSTEM",
+    "RESUME_EVALUATOR_HUMAN",
+    "AGENT_SYSTEM",
+    "AGENT_COLLECT_INSTRUCTION",
+    "AGENT_ANALYZE_INSTRUCTION",
+    "AGENT_GENERATE_INSTRUCTION",
+]

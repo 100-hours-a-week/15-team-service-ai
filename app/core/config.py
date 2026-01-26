@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     openai_timeout: float = 120.0
     callback_timeout: float = 30.0
 
+    # Langfuse 설정
+    langfuse_public_key: str = ""
+    langfuse_secret_key: str = ""
+    langfuse_base_url: str = "https://cloud.langfuse.com"
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 

@@ -3,6 +3,7 @@ from app.domain.resume.schemas import DiffAnalysisOutput, PRInfo, RepoContext, R
 from app.infra.github.client import (
     get_commit_detail,
     get_commits,
+    get_pull_files,
     get_pulls,
     get_repo_info,
     get_repo_languages,
@@ -154,7 +155,7 @@ async def analyze_experiences(diffs: list[dict]) -> list[DiffAnalysisOutput]:
 
 
 def format_pr_data(prs: list[PRInfo]) -> list[dict]:
-    """PR 목록을 LLM 입력 형식으로 변환.
+    """PR 목록을 LLM 입력 형식으로 변환 (제목/본문만).
 
     Args:
         prs: PR 정보 목록
@@ -169,6 +170,57 @@ def format_pr_data(prs: list[PRInfo]) -> list[dict]:
         if pr.body:
             content += f"\n\n{pr.body}"
         results.append({"repo_name": repo_name, "diff_content": content})
+    return results
+
+
+async def collect_pr_diffs_for_repo(
+    repo_url: str, token: str | None = None, per_page: int = 30
+) -> list[dict]:
+    """레포지토리에서 PR의 실제 코드 변경을 수집.
+
+    Args:
+        repo_url: GitHub 레포지토리 URL
+        token: GitHub OAuth 토큰
+        per_page: 가져올 PR 개수
+
+    Returns:
+        [{"repo_name": str, "diff_content": str}] 형태의 리스트
+    """
+    _, repo_name = parse_repo_url(repo_url)
+    results = []
+
+    prs = await get_pulls(repo_url, token, per_page=per_page)
+    if not prs:
+        return results
+
+    for pr in prs:
+        try:
+            files = await get_pull_files(repo_url, pr.number, token)
+
+            meaningful_patches = []
+            for f in files:
+                filename = f.get("filename", "")
+                patch = f.get("patch", "")
+
+                if not patch:
+                    continue
+                if _should_skip_file(filename):
+                    continue
+                if _count_added_lines(patch) < MIN_ADDED_LINES:
+                    continue
+
+                truncated = patch[:MAX_PATCH_LENGTH] if len(patch) > MAX_PATCH_LENGTH else patch
+                meaningful_patches.append(f"파일: {filename}\n{truncated}")
+
+            if meaningful_patches:
+                content = f"PR #{pr.number}: {pr.title}\n\n"
+                content += "\n".join(meaningful_patches)
+                results.append({"repo_name": repo_name, "diff_content": content})
+
+        except Exception as e:
+            logger.warning("PR 파일 수집 실패 pr=%d error=%s", pr.number, e)
+
+    logger.info("PR diff 수집 완료 repo=%s count=%d", repo_name, len(results))
     return results
 
 
