@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import re
 
 import httpx
 
@@ -18,6 +19,9 @@ logger = get_logger(__name__)
 GITHUB_API_BASE = "https://api.github.com"
 GITHUB_GRAPHQL_URL = "https://api.github.com/graphql"
 
+GITHUB_URL_PATTERN = re.compile(r"github\.com/([a-zA-Z0-9_.-]+)/([a-zA-Z0-9_.-]+)")
+FILE_PATH_PATTERN = re.compile(r"^[\w\-./]+$")
+
 _client = httpx.AsyncClient(timeout=settings.github_timeout)
 
 
@@ -34,11 +38,33 @@ def parse_repo_url(repo_url: str) -> tuple[str, str]:
 
     Returns:
         (owner, repo) 튜플
+
+    Raises:
+        ValueError: 유효하지 않은 GitHub URL인 경우
     """
-    parts = repo_url.rstrip("/").split("/")
-    owner = parts[-2]
-    repo = parts[-1].replace(".git", "")
+    match = GITHUB_URL_PATTERN.search(repo_url)
+    if not match:
+        raise ValueError(f"유효하지 않은 GitHub URL: {repo_url}")
+    owner = match.group(1)
+    repo = match.group(2).replace(".git", "")
     return owner, repo
+
+
+def _sanitize_file_path(path: str) -> str:
+    """파일 경로 검증.
+
+    Args:
+        path: 파일 경로
+
+    Returns:
+        검증된 파일 경로
+
+    Raises:
+        ValueError: 유효하지 않은 파일 경로인 경우
+    """
+    if not FILE_PATH_PATTERN.match(path):
+        raise ValueError(f"유효하지 않은 파일 경로: {path}")
+    return path
 
 
 async def get_commits(
@@ -310,7 +336,7 @@ async def get_repo_tree(repo_url: str, token: str | None = None) -> list[str]:
         logger.info("파일 트리 조회 완료 repo=%s/%s files=%d", owner, repo, len(files))
         return files
     except httpx.HTTPStatusError as e:
-        logger.warning("파일 트리 조회 실패 repo=%s/%s error=%s", owner, repo, e)
+        logger.warning("파일 트리 조회 실패 repo=%s/%s error=%s", owner, repo, type(e).__name__)
         return []
 
 
@@ -347,7 +373,9 @@ async def get_file_content(repo_url: str, path: str, token: str | None = None) -
         if e.response.status_code == 404:
             logger.info("파일 없음 repo=%s/%s path=%s", owner, repo, path)
             return None
-        logger.warning("파일 조회 실패 repo=%s/%s path=%s error=%s", owner, repo, path, e)
+        logger.warning(
+            "파일 조회 실패 repo=%s/%s path=%s error=%s", owner, repo, path, type(e).__name__
+        )
         return None
     except UnicodeDecodeError:
         logger.info("바이너리 파일 스킵 repo=%s/%s path=%s", owner, repo, path)
@@ -595,7 +623,8 @@ async def get_files_content_graphql(
 
     file_aliases = []
     for i, path in enumerate(paths):
-        alias = f'file{i}: object(expression: "HEAD:{path}") {{ ... on Blob {{ text }} }}'
+        safe_path = _sanitize_file_path(path)
+        alias = f'file{i}: object(expression: "HEAD:{safe_path}") {{ ... on Blob {{ text }} }}'
         file_aliases.append(alias)
 
     query = f"""
@@ -643,7 +672,7 @@ async def get_files_content(
         try:
             return await get_files_content_graphql(repo_url, paths, token)
         except Exception as e:
-            logger.warning("GraphQL 파일 조회 실패, REST 폴백: %s", e)
+            logger.warning("GraphQL 파일 조회 실패, REST 폴백: %s", type(e).__name__)
 
     tasks = [get_file_content(repo_url, path, token) for path in paths]
     contents = await asyncio.gather(*tasks)
@@ -683,7 +712,7 @@ async def get_project_info(
                 "pulls": graphql_data["pulls"],
             }
         except Exception as e:
-            logger.warning("GraphQL 프로젝트 정보 조회 실패, REST 폴백: %s", e)
+            logger.warning("GraphQL 프로젝트 정보 조회 실패, REST 폴백: %s", type(e).__name__)
 
     commits = await get_commits(repo_url, token, author, commits_count)
     pulls = await get_pulls_extended(repo_url, token, author, prs_count)
@@ -709,7 +738,7 @@ async def get_repo_context(repo_url: str, token: str | None = None) -> dict:
         try:
             return await get_repo_context_graphql(repo_url, token)
         except Exception as e:
-            logger.warning("GraphQL 컨텍스트 조회 실패, REST 폴백: %s", e)
+            logger.warning("GraphQL 컨텍스트 조회 실패, REST 폴백: %s", type(e).__name__)
 
     languages = await get_repo_languages(repo_url, token)
     info = await get_repo_info(repo_url, token)
