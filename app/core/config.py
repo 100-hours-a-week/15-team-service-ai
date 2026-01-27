@@ -18,14 +18,13 @@ class Settings(BaseSettings):
     # Callback
     backend_callback_url: str = ""
 
-    # RunPod
-    runpod_api_url: str = ""
-    runpod_api_key: str = ""
-
     # Timeout 설정
     github_timeout: float = 60.0
     openai_timeout: float = 120.0
     callback_timeout: float = 30.0
+
+    # 로깅 설정
+    log_level: str = "INFO"
 
     # Langfuse 설정
     langfuse_public_key: str = ""

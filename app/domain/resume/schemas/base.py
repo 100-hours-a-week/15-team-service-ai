@@ -15,19 +15,6 @@ class ResumeRequest(BaseModel):
     callback_url: str | None = None
 
 
-class DiffAnalysisOutput(BaseModel):
-    """diff 분석 LLM 출력 (단일)."""
-
-    tech_stack: list[str]
-    description: str
-
-
-class DiffBatchOutput(BaseModel):
-    """diff 배치 분석 LLM 출력."""
-
-    experiences: list[DiffAnalysisOutput]
-
-
 class ProjectInfo(BaseModel):
     """프로젝트 정보."""
 
@@ -56,9 +43,8 @@ class ResumeState(TypedDict, total=False):
 
     request: ResumeRequest
     job_id: str
-    collected_data: list[dict]
+    project_info: list[dict]
     repo_contexts: dict[str, RepoContext]
-    experiences: list[DiffAnalysisOutput]
     resume_data: ResumeData
     evaluation: str
     evaluation_feedback: str

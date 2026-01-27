@@ -1,8 +1,12 @@
 import logging
 import sys
 
+from app.core.config import settings
 
-def setup_logging(level: str = "INFO"):
+
+def setup_logging(level: str | None = None):
+    if level is None:
+        level = settings.log_level
     log_level = getattr(logging, level.upper(), logging.INFO)
 
     formatter = logging.Formatter(

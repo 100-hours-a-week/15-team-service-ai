@@ -1,307 +1,252 @@
 from app.core.logging import get_logger
-from app.domain.resume.schemas import DiffAnalysisOutput, PRInfo, RepoContext, ResumeRequest
+from app.domain.resume.parsers import DEPENDENCY_FILES, parse_dependency_file
+from app.domain.resume.schemas import RepoContext, ResumeRequest, UserStats
 from app.infra.github.client import (
-    get_commit_detail,
-    get_commits,
-    get_pull_files,
-    get_pulls,
-    get_repo_info,
-    get_repo_languages,
-    get_repo_readme,
+    get_files_content,
+    get_project_info,
+    get_repo_context,
+    get_user_stats,
     parse_repo_url,
 )
-from app.infra.llm.client import analyze_diffs_batch
+
+__all__ = [
+    "collect_project_info",
+    "collect_repo_contexts",
+    "collect_user_stats",
+]
 
 logger = get_logger(__name__)
 
-MIN_ADDED_LINES = 3
+EXCLUDE_PATTERNS = [
+    "test",
+    "pytest",
+    "junit",
+    "mockito",
+    "jest",
+    "mocha",
+    "vitest",
+    "eslint",
+    "prettier",
+    "ruff",
+    "black",
+    "flake8",
+    "mypy",
+    "types-",
+    "@types/",
+    "pre-commit",
+    "husky",
+    "lint-staged",
+]
 
-SKIP_FILENAMES = {
-    # lock 파일
-    "package-lock.json",
-    "yarn.lock",
-    "pnpm-lock.yaml",
-    "poetry.lock",
-    "uv.lock",
-    "Pipfile.lock",
-    "composer.lock",
-    "Gemfile.lock",
-    "go.sum",
-    # 설정 파일
-    ".gitignore",
-    ".dockerignore",
-    ".eslintrc.js",
-    ".eslintrc.json",
-    ".prettierrc",
-    ".prettierrc.json",
-    "tsconfig.json",
-    "tsconfig.node.json",
-    "vite.config.ts",
-    "vite.config.js",
-    "postcss.config.js",
-    "tailwind.config.js",
-    "tailwind.config.ts",
-    "next.config.js",
-    "next.config.ts",
-    "webpack.config.js",
-    "babel.config.js",
-    ".babelrc",
-    "jest.config.js",
-    "jest.config.ts",
-}
-
-SKIP_EXTENSIONS = {".md", ".txt", ".rst", ".json", ".yaml", ".yml", ".toml", ".ini", ".cfg"}
-
-SKIP_DIRECTORIES = {".vscode/", ".idea/", ".github/", ".husky/"}
-
-MAX_PATCH_LENGTH = 2000
-
-
-def _should_skip_file(filename: str) -> bool:
-    """분석 가치가 없는 파일인지 판단."""
-    if filename in SKIP_FILENAMES:
-        return True
-    if any(filename.startswith(d) for d in SKIP_DIRECTORIES):
-        return True
-    if filename.endswith(".iml"):
-        return True
-    ext = "." + filename.rsplit(".", 1)[-1] if "." in filename else ""
-    if ext in SKIP_EXTENSIONS:
-        return True
-    return False
+PRIORITY_PATTERNS = [
+    "fastapi",
+    "flask",
+    "django",
+    "uvicorn",
+    "pydantic",
+    "sqlalchemy",
+    "celery",
+    "spring",
+    "quarkus",
+    "jpa",
+    "hibernate",
+    "lombok",
+    "querydsl",
+    "mapstruct",
+    "react",
+    "vue",
+    "angular",
+    "next",
+    "nuxt",
+    "express",
+    "nestjs",
+    "prisma",
+    "typeorm",
+    "redis",
+    "kafka",
+    "rabbitmq",
+]
 
 
-def _count_added_lines(patch: str) -> int:
-    """patch에서 추가된 줄 수를 계산."""
-    return sum(
-        1 for line in patch.split("\n") if line.startswith("+") and not line.startswith("+++")
-    )
+def _filter_and_sort_dependencies(deps: list[str]) -> list[str]:
+    """의존성 필터링 및 우선순위 정렬.
+
+    Args:
+        deps: 원본 의존성 리스트
+
+    Returns:
+        필터링되고 정렬된 의존성 리스트
+    """
+    filtered = []
+    for dep in deps:
+        dep_lower = dep.lower()
+        should_exclude = any(pattern in dep_lower for pattern in EXCLUDE_PATTERNS)
+        if not should_exclude:
+            filtered.append(dep)
+
+    def priority_key(dep: str) -> int:
+        dep_lower = dep.lower()
+        for i, pattern in enumerate(PRIORITY_PATTERNS):
+            if pattern in dep_lower:
+                return i
+        return len(PRIORITY_PATTERNS)
+
+    sorted_deps = sorted(filtered, key=priority_key)
+    return sorted_deps
 
 
-async def collect_diffs(request: ResumeRequest) -> list[dict]:
-    """GitHub에서 커밋을 조회하고 의미 있는 diff만 추출.
+async def collect_project_info(request: ResumeRequest) -> list[dict]:
+    """파일 목록 + 의존성 파일 기반으로 프로젝트 정보 수집.
 
     Args:
         request: 이력서 생성 요청
 
     Returns:
-        [{"repo_name": str, "diff_content": str}] 형태의 리스트
+        프로젝트 정보 리스트
     """
-    diffs = []
-    skipped = 0
+    results = []
 
     for repo_url in request.repo_urls:
         _, repo_name = parse_repo_url(repo_url)
-        commits = await get_commits(repo_url, request.github_token, per_page=30)
 
-        for commit in commits:
-            commit_detail = await get_commit_detail(repo_url, commit.sha, request.github_token)
+        try:
+            project_info = await get_project_info(repo_url, request.github_token)
+            file_tree = project_info["file_tree"]
+            commits = project_info["commits"]
+            pulls = project_info["pulls"]
 
-            meaningful_patches = []
-            for f in commit_detail.files:
-                filename = f.get("filename", "")
-                patch = f.get("patch", "")
+            dependencies = await _parse_dependencies(repo_url, file_tree, request.github_token)
+            messages = _format_messages(commits, pulls)
 
-                if not patch:
-                    continue
-                if _should_skip_file(filename):
-                    continue
-                if _count_added_lines(patch) < MIN_ADDED_LINES:
-                    continue
+            results.append(
+                {
+                    "repo_name": repo_name,
+                    "repo_url": repo_url,
+                    "file_tree": _summarize_file_tree(file_tree),
+                    "dependencies": dependencies,
+                    "messages": messages,
+                }
+            )
 
-                meaningful_patches.append(f"파일: {filename}\n{patch}")
+            logger.info(
+                "프로젝트 정보 수집 완료 repo=%s files=%d deps=%d messages=%d",
+                repo_name,
+                len(file_tree),
+                len(dependencies),
+                len(messages),
+            )
 
-            if meaningful_patches:
-                diff_content = "\n".join(meaningful_patches)
-                diffs.append({"repo_name": repo_name, "diff_content": diff_content})
-            else:
-                skipped += 1
+        except Exception as e:
+            logger.error("프로젝트 정보 수집 실패 repo=%s error=%s", repo_name, e)
+            results.append(
+                {
+                    "repo_name": repo_name,
+                    "repo_url": repo_url,
+                    "file_tree": [],
+                    "dependencies": [],
+                    "messages": [],
+                }
+            )
 
-    logger.info("diff 수집 완료 total=%d skipped=%d", len(diffs), skipped)
-    return diffs
-
-
-MAX_DIFFS_PER_BATCH = 10
-
-
-async def analyze_experiences(diffs: list[dict]) -> list[DiffAnalysisOutput]:
-    """수집된 diff들을 레포별로 순차 분석.
-
-    Args:
-        diffs: collect_diffs의 반환값
-
-    Returns:
-        분석된 경험 목록
-    """
-    repo_groups: dict[str, list[str]] = {}
-    for diff in diffs:
-        repo_name = diff["repo_name"]
-        if repo_name not in repo_groups:
-            repo_groups[repo_name] = []
-        repo_groups[repo_name].append(diff["diff_content"])
-
-    all_experiences = []
-    batch_count = 0
-
-    for repo_name, diff_contents in repo_groups.items():
-        for i in range(0, len(diff_contents), MAX_DIFFS_PER_BATCH):
-            batch = diff_contents[i : i + MAX_DIFFS_PER_BATCH]
-            batch_result = await analyze_diffs_batch(batch, repo_name)
-            all_experiences.extend(batch_result)
-            batch_count += 1
-
-    logger.info("경험 분석 완료 batches=%d experiences=%d", batch_count, len(all_experiences))
-    return all_experiences
+    logger.info("전체 프로젝트 정보 수집 완료 count=%d", len(results))
+    return results
 
 
-def format_pr_data(prs: list[PRInfo]) -> list[dict]:
-    """PR 목록을 LLM 입력 형식으로 변환 (제목/본문만).
+def _summarize_file_tree(file_tree: list[str]) -> list[str]:
+    """파일 트리를 디렉토리 구조 중심으로 요약.
 
     Args:
-        prs: PR 정보 목록
+        file_tree: 전체 파일 경로 리스트
 
     Returns:
-        [{"repo_name": str, "diff_content": str}] 형태의 리스트
+        주요 디렉토리와 파일 확장자 요약
     """
-    results = []
-    for pr in prs:
-        _, repo_name = parse_repo_url(pr.repo_url)
-        content = f"PR #{pr.number}: {pr.title}"
+    dirs = set()
+    extensions = set()
+
+    for path in file_tree:
+        parts = path.split("/")
+        if len(parts) > 1:
+            dirs.add(parts[0])
+            if len(parts) > 2:
+                dirs.add(f"{parts[0]}/{parts[1]}")
+
+        if "." in path:
+            ext = path.rsplit(".", 1)[-1]
+            if len(ext) <= 5:
+                extensions.add(ext)
+
+    summary = []
+    summary.extend(sorted(dirs)[:20])
+    summary.append(f"extensions: {', '.join(sorted(extensions))}")
+
+    return summary
+
+
+async def _parse_dependencies(repo_url: str, file_tree: list[str], token: str | None) -> list[str]:
+    """파일 트리에서 의존성 파일을 찾아 파싱.
+
+    Args:
+        repo_url: GitHub 레포지토리 URL
+        file_tree: 파일 경로 리스트
+        token: GitHub 토큰
+
+    Returns:
+        의존성 패키지 리스트
+    """
+    dependency_paths = []
+    for file_path in file_tree:
+        filename = file_path.split("/")[-1]
+        if filename in DEPENDENCY_FILES:
+            dependency_paths.append(file_path)
+
+    if not dependency_paths:
+        return []
+
+    contents = await get_files_content(repo_url, dependency_paths, token)
+
+    all_deps = []
+    for file_path, content in contents.items():
+        if not content:
+            continue
+
+        filename = file_path.split("/")[-1]
+        parsed = parse_dependency_file(filename, content)
+        deps = parsed.get("dependencies", [])
+        dev_deps = parsed.get("devDependencies", [])
+        all_deps.extend(deps)
+        all_deps.extend(dev_deps)
+
+    unique_deps = list(set(all_deps))
+    filtered_deps = _filter_and_sort_dependencies(unique_deps)
+    return filtered_deps
+
+
+def _format_messages(commits: list, pulls: list) -> list[str]:
+    """커밋과 PR 정보를 메시지 리스트로 포맷팅.
+
+    Args:
+        commits: CommitInfo 리스트
+        pulls: PRInfoExtended 리스트
+
+    Returns:
+        메시지 리스트
+    """
+    messages = []
+
+    for pr in pulls:
+        msg = f"PR #{pr.number}: {pr.title}"
+        msg += f" [커밋 {pr.commits_count}개, +{pr.additions}/-{pr.deletions}]"
         if pr.body:
-            content += f"\n\n{pr.body}"
-        results.append({"repo_name": repo_name, "diff_content": content})
-    return results
-
-
-async def collect_pr_diffs_for_repo(
-    repo_url: str, token: str | None = None, per_page: int = 30
-) -> list[dict]:
-    """레포지토리에서 PR의 실제 코드 변경을 수집.
-
-    Args:
-        repo_url: GitHub 레포지토리 URL
-        token: GitHub OAuth 토큰
-        per_page: 가져올 PR 개수
-
-    Returns:
-        [{"repo_name": str, "diff_content": str}] 형태의 리스트
-    """
-    _, repo_name = parse_repo_url(repo_url)
-    results = []
-
-    prs = await get_pulls(repo_url, token, per_page=per_page)
-    if not prs:
-        return results
-
-    for pr in prs:
-        try:
-            files = await get_pull_files(repo_url, pr.number, token)
-
-            meaningful_patches = []
-            for f in files:
-                filename = f.get("filename", "")
-                patch = f.get("patch", "")
-
-                if not patch:
-                    continue
-                if _should_skip_file(filename):
-                    continue
-                if _count_added_lines(patch) < MIN_ADDED_LINES:
-                    continue
-
-                truncated = patch[:MAX_PATCH_LENGTH] if len(patch) > MAX_PATCH_LENGTH else patch
-                meaningful_patches.append(f"파일: {filename}\n{truncated}")
-
-            if meaningful_patches:
-                content = f"PR #{pr.number}: {pr.title}\n\n"
-                content += "\n".join(meaningful_patches)
-                results.append({"repo_name": repo_name, "diff_content": content})
-
-        except Exception as e:
-            logger.warning("PR 파일 수집 실패 pr=%d error=%s", pr.number, e)
-
-    logger.info("PR diff 수집 완료 repo=%s count=%d", repo_name, len(results))
-    return results
-
-
-async def collect_data(request: ResumeRequest) -> list[dict]:
-    """PR 기반 데이터 수집 (PR 없으면 commit 폴백).
-
-    Args:
-        request: 이력서 생성 요청
-
-    Returns:
-        [{"repo_name": str, "diff_content": str}] 형태의 리스트
-    """
-    results = []
-
-    for repo_url in request.repo_urls:
-        _, repo_name = parse_repo_url(repo_url)
-
-        try:
-            prs = await get_pulls(repo_url, request.github_token)
-
-            if prs:
-                pr_data = format_pr_data(prs)
-                results.extend(pr_data)
-                logger.info("PR 데이터 수집 repo=%s count=%d", repo_name, len(prs))
-            else:
-                logger.info("PR 없음, commit 폴백 repo=%s", repo_name)
-                commit_data = await _collect_diffs_for_repo(repo_url, request)
-                results.extend(commit_data)
-
-        except Exception as e:
-            logger.warning("PR 수집 실패, commit 폴백 repo=%s error=%s", repo_name, e)
-            commit_data = await _collect_diffs_for_repo(repo_url, request)
-            results.extend(commit_data)
-
-    logger.info("데이터 수집 완료 total=%d", len(results))
-    return results
-
-
-async def _collect_diffs_for_repo(repo_url: str, request: ResumeRequest) -> list[dict]:
-    """단일 레포에서 commit diff 수집.
-
-    Args:
-        repo_url: GitHub 레포지토리 URL
-        request: 이력서 생성 요청
-
-    Returns:
-        [{"repo_name": str, "diff_content": str}] 형태의 리스트
-    """
-    _, repo_name = parse_repo_url(repo_url)
-    diffs = []
-    skipped = 0
-
-    commits = await get_commits(repo_url, request.github_token, per_page=30)
+            body_summary = pr.body[:200].replace("\n", " ")
+            msg += f" - {body_summary}"
+        messages.append(msg)
 
     for commit in commits:
-        commit_detail = await get_commit_detail(repo_url, commit.sha, request.github_token)
+        first_line = commit.message.split("\n")[0]
+        messages.append(f"commit: {first_line}")
 
-        meaningful_patches = []
-        for f in commit_detail.files:
-            filename = f.get("filename", "")
-            patch = f.get("patch", "")
-
-            if not patch:
-                continue
-            if _should_skip_file(filename):
-                continue
-            if _count_added_lines(patch) < MIN_ADDED_LINES:
-                continue
-
-            truncated = patch[:MAX_PATCH_LENGTH] if len(patch) > MAX_PATCH_LENGTH else patch
-            logger.info("파일 포함 file=%s orig=%d trunc=%d", filename, len(patch), len(truncated))
-            meaningful_patches.append(f"파일: {filename}\n{truncated}")
-
-        if meaningful_patches:
-            diff_content = "\n".join(meaningful_patches)
-            diffs.append({"repo_name": repo_name, "diff_content": diff_content})
-        else:
-            skipped += 1
-
-    logger.info("commit diff 수집 repo=%s total=%d skipped=%d", repo_name, len(diffs), skipped)
-    return diffs
+    return messages
 
 
 async def collect_repo_contexts(request: ResumeRequest) -> dict[str, RepoContext]:
@@ -319,16 +264,14 @@ async def collect_repo_contexts(request: ResumeRequest) -> dict[str, RepoContext
         _, repo_name = parse_repo_url(repo_url)
 
         try:
-            languages = await get_repo_languages(repo_url, request.github_token)
-            info = await get_repo_info(repo_url, request.github_token)
-            readme = await get_repo_readme(repo_url, request.github_token)
+            context = await get_repo_context(repo_url, request.github_token)
 
             contexts[repo_name] = RepoContext(
                 name=repo_name,
-                languages=languages,
-                description=info["description"],
-                topics=info["topics"],
-                readme_summary=readme,
+                languages=context["languages"],
+                description=context["description"],
+                topics=context["topics"],
+                readme_summary=context["readme"],
             )
         except Exception as e:
             logger.warning("컨텍스트 수집 실패 repo=%s error=%s", repo_name, e)
@@ -342,3 +285,32 @@ async def collect_repo_contexts(request: ResumeRequest) -> dict[str, RepoContext
 
     logger.info("컨텍스트 수집 완료 repos=%d", len(contexts))
     return contexts
+
+
+async def collect_user_stats(username: str, token: str | None) -> UserStats | None:
+    """사용자 GitHub 통계 수집.
+
+    Args:
+        username: GitHub 유저네임
+        token: GitHub OAuth 토큰
+
+    Returns:
+        사용자 통계 정보, 토큰 없거나 실패하면 None
+    """
+    if not token:
+        logger.info("토큰 없음, 사용자 통계 수집 건너뜀 username=%s", username)
+        return None
+
+    try:
+        stats = await get_user_stats(username, token)
+        logger.info(
+            "사용자 통계 수집 완료 username=%s commits=%d prs=%d issues=%d",
+            username,
+            stats.total_commits,
+            stats.total_prs,
+            stats.total_issues,
+        )
+        return stats
+    except Exception as e:
+        logger.warning("사용자 통계 수집 실패 username=%s error=%s", username, e)
+        return None

@@ -1,3 +1,4 @@
+import json
 import os
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -7,8 +8,6 @@ from langfuse.langchain import CallbackHandler
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.domain.resume.prompts import (
-    DIFF_ANALYSIS_HUMAN,
-    DIFF_ANALYSIS_SYSTEM,
     RESUME_EVALUATOR_HUMAN,
     RESUME_EVALUATOR_SYSTEM,
     RESUME_GENERATOR_HUMAN,
@@ -16,11 +15,10 @@ from app.domain.resume.prompts import (
     RESUME_GENERATOR_SYSTEM,
 )
 from app.domain.resume.schemas import (
-    DiffAnalysisOutput,
-    DiffBatchOutput,
     EvaluationOutput,
     RepoContext,
     ResumeData,
+    UserStats,
 )
 
 logger = get_logger(__name__)
@@ -41,79 +39,62 @@ def get_langfuse_handler(session_id: str | None = None) -> CallbackHandler | Non
     return CallbackHandler()
 
 
-def get_llm(callbacks: list | None = None):
+def get_llm(callbacks: list | None = None) -> ChatOpenAI:
     """OpenAI LLM 클라이언트 반환."""
     return ChatOpenAI(
         model=settings.llm_model,
         api_key=settings.openai_api_key,
         timeout=settings.openai_timeout,
+        temperature=0,
         callbacks=callbacks,
     )
 
 
-async def analyze_diffs_batch(
-    diffs: list[str], repo_name: str, session_id: str | None = None
-) -> list[DiffAnalysisOutput]:
-    """여러 diff를 한 번에 분석하여 경험 추출.
+def format_project_info(project_info: list[dict]) -> str:
+    """프로젝트 정보를 프롬프트용 텍스트로 포맷."""
+    lines = []
+    for project in project_info:
+        lines.append(f"## 프로젝트: {project['repo_name']}")
+        lines.append(f"- 레포지토리: {project['repo_url']}")
 
-    Args:
-        diffs: diff 내용 리스트
-        repo_name: 레포지토리 이름
-        session_id: Langfuse 세션 ID
+        if project.get("file_tree"):
+            tree_summary = ", ".join(project["file_tree"][:10])
+            lines.append(f"- 파일 구조: {tree_summary}")
 
-    Returns:
-        추출된 경험 목록
-    """
-    logger.info("diff 배치 분석 요청 repo=%s count=%d", repo_name, len(diffs))
+        if project.get("dependencies"):
+            lines.append("- 핵심 의존성 [tech_stack에 반드시 포함]:")
+            for dep in project["dependencies"][:30]:
+                lines.append(f"  * {dep}")
 
-    diffs_content = "\n\n---\n\n".join(f"[커밋 {i + 1}]\n{diff}" for i, diff in enumerate(diffs))
-    logger.info("diffs_content 크기 repo=%s chars=%d", repo_name, len(diffs_content))
+        if project.get("messages"):
+            lines.append("- 주요 작업:")
+            for msg in project["messages"][:15]:
+                lines.append(f"  - {msg}")
 
-    langfuse_handler = get_langfuse_handler(session_id)
-    callbacks = [langfuse_handler] if langfuse_handler else None
+        lines.append("")
 
-    llm = get_llm(callbacks).with_structured_output(DiffBatchOutput)
-    messages = [
-        SystemMessage(content=DIFF_ANALYSIS_SYSTEM),
-        HumanMessage(
-            content=DIFF_ANALYSIS_HUMAN.format(
-                repo_name=repo_name,
-                diffs_content=diffs_content,
-            )
-        ),
-    ]
+    return "\n".join(lines)
 
-    result = await llm.ainvoke(messages)
-    logger.info("diff 배치 분석 완료 repo=%s experiences=%d", repo_name, len(result.experiences))
-    return result.experiences
+
+def _get_json_schema_prompt(model_class: type) -> str:
+    """Pydantic 모델의 JSON 스키마를 프롬프트용 문자열로 변환."""
+    schema = model_class.model_json_schema()
+    return json.dumps(schema, indent=2, ensure_ascii=False)
 
 
 async def generate_resume(
-    experiences: list[DiffAnalysisOutput],
+    project_info: list[dict],
     position: str,
     repo_urls: list[str],
     feedback: str | None = None,
     repo_contexts: dict[str, RepoContext] | None = None,
+    user_stats: UserStats | None = None,
     session_id: str | None = None,
 ) -> ResumeData:
-    """경험 기반 이력서 생성.
+    """프로젝트 정보 기반 이력서 생성."""
+    logger.debug("이력서 생성 요청 position=%s projects=%d", position, len(project_info))
 
-    Args:
-        experiences: 분석된 경험 목록
-        position: 희망 포지션
-        repo_urls: 레포지토리 URL 목록
-        feedback: 이전 평가 피드백, 재시도 시 사용
-        repo_contexts: 레포지토리 컨텍스트 정보
-        session_id: Langfuse 세션 ID
-
-    Returns:
-        생성된 이력서 데이터
-    """
-    logger.info("이력서 생성 요청 position=%s", position)
-
-    experiences_text = "\n".join(
-        f"- 기술: {exp.tech_stack}, 내용: {exp.description}" for exp in experiences
-    )
+    project_info_text = format_project_info(project_info)
     repo_urls_text = "\n".join(repo_urls)
 
     if repo_contexts:
@@ -126,21 +107,35 @@ async def generate_resume(
     else:
         contexts_text = "없음"
 
+    if user_stats:
+        user_stats_text = (
+            f"총 커밋: {user_stats.total_commits}개, "
+            f"총 PR: {user_stats.total_prs}개, "
+            f"총 이슈: {user_stats.total_issues}개"
+        )
+    else:
+        user_stats_text = "없음"
+
     if feedback:
         human_content = RESUME_GENERATOR_RETRY_HUMAN.format(
             position=position,
-            experiences_text=experiences_text,
+            project_info=project_info_text,
             repo_urls=repo_urls_text,
             feedback=feedback,
             repo_contexts=contexts_text,
+            user_stats=user_stats_text,
         )
     else:
         human_content = RESUME_GENERATOR_HUMAN.format(
             position=position,
-            experiences_text=experiences_text,
+            project_info=project_info_text,
             repo_urls=repo_urls_text,
             repo_contexts=contexts_text,
+            user_stats=user_stats_text,
         )
+
+    json_schema = _get_json_schema_prompt(ResumeData)
+    human_content += f"\n\n반드시 다음 JSON 형식으로만 응답하세요:\n```json\n{json_schema}\n```"
 
     langfuse_handler = get_langfuse_handler(session_id)
     callbacks = [langfuse_handler] if langfuse_handler else None
@@ -150,28 +145,27 @@ async def generate_resume(
         SystemMessage(content=RESUME_GENERATOR_SYSTEM),
         HumanMessage(content=human_content),
     ]
-
     result = await llm.ainvoke(messages)
-    logger.info("이력서 생성 완료 position=%s", position)
+
+    logger.debug("이력서 생성 완료 position=%s", position)
     return result
 
 
 async def evaluate_resume(
     resume_data: ResumeData, position: str, session_id: str | None = None
 ) -> EvaluationOutput:
-    """이력서 품질 평가.
-
-    Args:
-        resume_data: 생성된 이력서
-        position: 희망 포지션
-        session_id: Langfuse 세션 ID
-
-    Returns:
-        평가 결과 (pass/fail + 피드백)
-    """
-    logger.info("이력서 평가 요청 position=%s", position)
+    """이력서 품질 평가."""
+    logger.debug("이력서 평가 요청 position=%s", position)
 
     resume_json = resume_data.model_dump_json(indent=2)
+
+    human_content = RESUME_EVALUATOR_HUMAN.format(
+        position=position,
+        resume_json=resume_json,
+    )
+
+    json_schema = _get_json_schema_prompt(EvaluationOutput)
+    human_content += f"\n\n반드시 다음 JSON 형식으로만 응답하세요:\n```json\n{json_schema}\n```"
 
     langfuse_handler = get_langfuse_handler(session_id)
     callbacks = [langfuse_handler] if langfuse_handler else None
@@ -179,14 +173,9 @@ async def evaluate_resume(
     llm = get_llm(callbacks).with_structured_output(EvaluationOutput)
     messages = [
         SystemMessage(content=RESUME_EVALUATOR_SYSTEM.format(position=position)),
-        HumanMessage(
-            content=RESUME_EVALUATOR_HUMAN.format(
-                position=position,
-                resume_json=resume_json,
-            )
-        ),
+        HumanMessage(content=human_content),
     ]
-
     result = await llm.ainvoke(messages)
-    logger.info("이력서 평가 완료 result=%s feedback=%s", result.result, result.feedback)
+
+    logger.debug("이력서 평가 완료 result=%s feedback=%s", result.result, result.feedback)
     return result

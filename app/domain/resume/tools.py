@@ -4,11 +4,8 @@ from langchain_core.tools import tool
 
 from app.core.logging import get_logger
 from app.domain.resume.schemas import (
-    AnalyzeExperiencesInput,
-    CollectCommitDiffsInput,
-    CollectPRDiffsInput,
+    CollectProjectInfoInput,
     CollectRepoContextInput,
-    DiffAnalysisOutput,
     EvaluateResumeInput,
     GenerateResumeInput,
     RepoContext,
@@ -16,16 +13,11 @@ from app.domain.resume.schemas import (
     ResumeRequest,
 )
 from app.domain.resume.service import (
-    _collect_diffs_for_repo,
-    collect_pr_diffs_for_repo,
-)
-from app.domain.resume.service import (
-    analyze_experiences as analyze_experiences_service,
+    collect_project_info as collect_project_info_service,
 )
 from app.domain.resume.service import (
     collect_repo_contexts as collect_repo_contexts_service,
 )
-from app.infra.github.client import parse_repo_url
 from app.infra.llm.client import (
     evaluate_resume as evaluate_resume_llm,
 )
@@ -36,74 +28,28 @@ from app.infra.llm.client import (
 logger = get_logger(__name__)
 
 
-@tool(args_schema=CollectPRDiffsInput)
-async def collect_pr_diffs(
+@tool(args_schema=CollectProjectInfoInput)
+async def collect_project_info(
     repo_urls: list[str], github_token: str | None = None
 ) -> dict[str, Any]:
-    """Collect merged PR diffs from GitHub repositories.
+    """Collect project information from GitHub repositories.
 
-    Returns actual code changes from PRs, not just titles/bodies.
-    If no PRs are found, returns empty and marks repo for commit fallback.
+    Gathers file structure, dependencies, and PR/commit messages.
+    This replaces the old diff-based collection approach.
     """
-    logger.info("Tool: collect_pr_diffs repo_count=%d", len(repo_urls))
+    logger.info("Tool: collect_project_info repo_count=%d", len(repo_urls))
 
-    results = []
-    repos_with_prs = []
-    repos_without_prs = []
-
-    for repo_url in repo_urls:
-        _, repo_name = parse_repo_url(repo_url)
-        try:
-            pr_diffs = await collect_pr_diffs_for_repo(repo_url, github_token)
-            if pr_diffs:
-                results.extend(pr_diffs)
-                repos_with_prs.append(repo_url)
-                logger.info("PR diff 수집 성공 repo=%s count=%d", repo_name, len(pr_diffs))
-            else:
-                repos_without_prs.append(repo_url)
-                logger.info("PR 없음 repo=%s", repo_name)
-        except Exception as e:
-            repos_without_prs.append(repo_url)
-            logger.warning("PR 수집 실패 repo=%s error=%s", repo_name, e)
-
-    return {
-        "diffs": results,
-        "repos_with_prs": repos_with_prs,
-        "repos_without_prs": repos_without_prs,
-        "total_diffs": len(results),
-    }
-
-
-@tool(args_schema=CollectCommitDiffsInput)
-async def collect_commit_diffs(
-    repo_urls: list[str], github_token: str | None = None, per_page: int = 30
-) -> dict[str, Any]:
-    """Collect commit diffs from GitHub repositories.
-
-    Use this as a fallback when no PRs are available.
-    Extracts meaningful code changes from recent commits.
-    """
-    logger.info("Tool: collect_commit_diffs repo_count=%d per_page=%d", len(repo_urls), per_page)
-
-    results = []
-    dummy_request = ResumeRequest(
+    request = ResumeRequest(
         repo_urls=repo_urls,
         position="",
         github_token=github_token,
     )
 
-    for repo_url in repo_urls:
-        _, repo_name = parse_repo_url(repo_url)
-        try:
-            diffs = await _collect_diffs_for_repo(repo_url, dummy_request)
-            results.extend(diffs)
-            logger.info("커밋 수집 성공 repo=%s count=%d", repo_name, len(diffs))
-        except Exception as e:
-            logger.error("커밋 수집 실패 repo=%s error=%s", repo_name, e)
+    project_info = await collect_project_info_service(request)
 
     return {
-        "diffs": results,
-        "total_diffs": len(results),
+        "project_info": project_info,
+        "total_projects": len(project_info),
     }
 
 
@@ -118,68 +64,42 @@ async def collect_repo_context(
     """
     logger.info("Tool: collect_repo_context repo_count=%d", len(repo_urls))
 
-    dummy_request = ResumeRequest(
+    request = ResumeRequest(
         repo_urls=repo_urls,
         position="",
         github_token=github_token,
     )
 
-    contexts = await collect_repo_contexts_service(dummy_request)
+    contexts = await collect_repo_contexts_service(request)
     return {name: ctx.model_dump() for name, ctx in contexts.items()}
-
-
-@tool(args_schema=AnalyzeExperiencesInput)
-async def analyze_experiences(
-    diffs: list[dict[str, str]], session_id: str | None = None
-) -> list[dict]:
-    """Analyze collected diffs to extract developer experiences.
-
-    Groups diffs by repository and uses LLM to extract:
-    - Technology stack used
-    - Description of implementation
-
-    Returns list of experiences that can be used for resume generation.
-    """
-    logger.info("Tool: analyze_experiences diff_count=%d", len(diffs))
-
-    experiences = await analyze_experiences_service(diffs)
-    return [exp.model_dump() for exp in experiences]
 
 
 @tool(args_schema=GenerateResumeInput)
 async def generate_resume(
-    experiences: list[dict[str, Any]],
+    project_info: list[dict[str, Any]],
     position: str,
     repo_urls: list[str],
     repo_contexts: dict[str, dict] | None = None,
     feedback: str | None = None,
     session_id: str | None = None,
 ) -> dict[str, Any]:
-    """Generate a resume based on extracted experiences.
+    """Generate a resume based on project information.
 
     Creates a structured resume with:
     - Overall tech stack
     - Project list with individual tech stacks and descriptions
 
-    If feedback is provided, incorporates it to improve the resume.
-    Output is in Korean.
+    Uses file structure, dependencies, and PR/commit messages to understand
+    what technologies were used and what was implemented.
     """
-    logger.info("Tool: generate_resume position=%s exp_count=%d", position, len(experiences))
-
-    exp_objects = [
-        DiffAnalysisOutput(tech_stack=exp["tech_stack"], description=exp["description"])
-        for exp in experiences
-    ]
+    logger.info("Tool: generate_resume position=%s projects=%d", position, len(project_info))
 
     ctx_objects = None
     if repo_contexts:
-        ctx_objects = {
-            name: RepoContext(**ctx)
-            for name, ctx in repo_contexts.items()
-        }
+        ctx_objects = {name: RepoContext(**ctx) for name, ctx in repo_contexts.items()}
 
     resume = await generate_resume_llm(
-        experiences=exp_objects,
+        project_info=project_info,
         position=position,
         repo_urls=repo_urls,
         feedback=feedback,
@@ -200,11 +120,11 @@ async def evaluate_resume(
     - Annotations or class names in tech_stack
     - Description length
     - Missing projects or tech_stack
-    - Invalid tech_stack entries (API, infrastructure tools, AI models, etc.)
+    - Invalid tech_stack entries
 
     Returns:
     - result: "pass" or "fail"
-    - feedback: Explanation of issues (if fail)
+    - feedback: Explanation of issues
     """
     logger.info("Tool: evaluate_resume position=%s", position)
 
@@ -221,10 +141,8 @@ async def evaluate_resume(
 def get_resume_tools() -> list:
     """에이전트용 툴 목록 반환."""
     return [
-        collect_pr_diffs,
-        collect_commit_diffs,
+        collect_project_info,
         collect_repo_context,
-        analyze_experiences,
         generate_resume,
         evaluate_resume,
     ]

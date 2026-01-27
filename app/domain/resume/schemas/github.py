@@ -37,3 +37,25 @@ class RepoContext(BaseModel):
     description: str | None
     topics: list[str]
     readme_summary: str | None
+
+
+class UserStats(BaseModel):
+    """사용자 GitHub 통계."""
+
+    total_commits: int
+    total_prs: int
+    total_issues: int
+
+
+class PRInfoExtended(BaseModel):
+    """확장된 PR 정보 - 커밋 수와 변경 라인 포함."""
+
+    number: int
+    title: str
+    body: str | None
+    author: str
+    merged_at: str
+    repo_url: str
+    commits_count: int
+    additions: int
+    deletions: int

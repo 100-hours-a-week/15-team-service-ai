@@ -1,15 +1,12 @@
-from typing import Any
-
 from app.core.logging import get_logger
 from app.domain.resume.schemas import ResumeData, ResumeRequest
-from app.domain.resume.tools import (
-    analyze_experiences,
-    collect_commit_diffs,
-    collect_pr_diffs,
-    collect_repo_context,
-    evaluate_resume,
-    generate_resume,
+from app.domain.resume.service import (
+    collect_project_info,
+    collect_repo_contexts,
+    collect_user_stats,
 )
+from app.infra.github.client import parse_repo_url
+from app.infra.llm.client import evaluate_resume, generate_resume
 
 logger = get_logger(__name__)
 
@@ -27,7 +24,7 @@ async def run_resume_agent(
         session_id: Langfuse 세션 ID
 
     Returns:
-        (resume_data, error_message) 튜플
+        resume_data, error_message 튜플
     """
     logger.info(
         "에이전트 시작 repos=%d position=%s session_id=%s",
@@ -37,117 +34,76 @@ async def run_resume_agent(
     )
 
     try:
-        collected_diffs = await _collect_data(request)
-        if not collected_diffs:
-            return None, "데이터 수집 실패: PR과 커밋 모두 없음"
+        project_info = await collect_project_info(request)
+        if not project_info:
+            return None, "프로젝트 정보 수집 실패"
 
-        repo_contexts = await _collect_contexts(request)
+        repo_contexts = await collect_repo_contexts(request)
 
-        experiences = await _analyze_data(collected_diffs, session_id)
-        if not experiences:
-            return None, "경험 분석 실패: 추출된 경험 없음"
+        username, _ = parse_repo_url(request.repo_urls[0])
+        user_stats = await collect_user_stats(username, request.github_token)
 
         resume_data = await _generate_and_evaluate(
-            experiences=experiences,
+            project_info=project_info,
             request=request,
             repo_contexts=repo_contexts,
+            user_stats=user_stats,
             session_id=session_id,
         )
 
         return resume_data, None
 
     except Exception as e:
-        logger.error("에이전트 실패 error=%s", e)
+        logger.error("에이전트 실패 error=%s", e, exc_info=True)
         return None, str(e)
 
 
-async def _collect_data(request: ResumeRequest) -> list[dict]:
-    """PR 우선 수집, PR 없는 레포만 커밋 폴백."""
-    collected_diffs: list[dict] = []
-
-    pr_result = await collect_pr_diffs.ainvoke({
-        "repo_urls": request.repo_urls,
-        "github_token": request.github_token,
-    })
-    collected_diffs.extend(pr_result["diffs"])
-    repos_without_prs = pr_result.get("repos_without_prs", [])
-    logger.info(
-        "PR diff 수집 완료 diffs=%d repos_without_prs=%d",
-        len(pr_result["diffs"]),
-        len(repos_without_prs),
-    )
-
-    if repos_without_prs:
-        commit_result = await collect_commit_diffs.ainvoke({
-            "repo_urls": repos_without_prs,
-            "github_token": request.github_token,
-        })
-        collected_diffs.extend(commit_result["diffs"])
-        logger.info("커밋 폴백 완료 diffs=%d", len(commit_result["diffs"]))
-
-    logger.info("데이터 수집 완료 total_diffs=%d", len(collected_diffs))
-    return collected_diffs
-
-
-async def _collect_contexts(request: ResumeRequest) -> dict[str, dict]:
-    """레포지토리 컨텍스트 수집."""
-    context_result = await collect_repo_context.ainvoke({
-        "repo_urls": request.repo_urls,
-        "github_token": request.github_token,
-    })
-    logger.info("컨텍스트 수집 완료 repos=%d", len(context_result))
-    return context_result
-
-
-async def _analyze_data(
-    diffs: list[dict], session_id: str | None = None
-) -> list[dict[str, Any]]:
-    """diff 분석하여 경험 추출."""
-    experiences = await analyze_experiences.ainvoke({
-        "diffs": diffs,
-        "session_id": session_id,
-    })
-    logger.info("경험 분석 완료 count=%d", len(experiences))
-    return experiences
-
-
 async def _generate_and_evaluate(
-    experiences: list[dict[str, Any]],
+    project_info: list[dict],
     request: ResumeRequest,
-    repo_contexts: dict[str, dict],
+    repo_contexts: dict,
+    user_stats=None,
     session_id: str | None = None,
 ) -> ResumeData:
-    """이력서 생성 및 평가 (재시도 포함)."""
+    """이력서 생성 및 평가.
+
+    Args:
+        project_info: collect_project_info의 반환값
+        request: 이력서 생성 요청
+        repo_contexts: 레포지토리 컨텍스트
+        user_stats: 사용자 GitHub 통계
+        session_id: Langfuse 세션 ID
+
+    Returns:
+        생성된 이력서 데이터
+    """
     feedback = None
 
     for attempt in range(MAX_RETRIES):
-        resume_result = await generate_resume.ainvoke({
-            "experiences": experiences,
-            "position": request.position,
-            "repo_urls": request.repo_urls,
-            "repo_contexts": repo_contexts,
-            "feedback": feedback,
-            "session_id": session_id,
-        })
-        logger.info("이력서 생성 완료 attempt=%d", attempt + 1)
-
-        eval_result = await evaluate_resume.ainvoke({
-            "resume_data": resume_result,
-            "position": request.position,
-            "session_id": session_id,
-        })
-        logger.info(
-            "평가 완료 result=%s feedback=%s",
-            eval_result["result"],
-            eval_result.get("feedback"),
+        resume_data = await generate_resume(
+            project_info=project_info,
+            position=request.position,
+            repo_urls=request.repo_urls,
+            repo_contexts=repo_contexts,
+            user_stats=user_stats,
+            feedback=feedback,
+            session_id=session_id,
         )
+        logger.debug("이력서 생성 완료 attempt=%d", attempt + 1)
 
-        if eval_result["result"] == "pass":
-            logger.info("평가 통과")
-            return ResumeData(**resume_result)
+        evaluation = await evaluate_resume(
+            resume_data=resume_data,
+            position=request.position,
+            session_id=session_id,
+        )
+        logger.debug("평가 완료 result=%s", evaluation.result)
 
-        feedback = eval_result.get("feedback")
+        if evaluation.result == "pass":
+            logger.debug("평가 통과")
+            return resume_data
+
+        feedback = evaluation.feedback
         if attempt == MAX_RETRIES - 1:
             logger.warning("최대 재시도 도달, 마지막 결과 반환")
 
-    return ResumeData(**resume_result)
+    return resume_data
