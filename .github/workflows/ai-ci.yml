@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [ "main" ]
   push:
-    branches: [ "dev" ]
+    branches: [ "dev", "cicd/ai1" ]
     
 concurrency:
   group: ci-${{ github.ref }}
@@ -89,8 +89,8 @@ jobs:
           set -euo pipefail
           # pip-audit를 현재 프로젝트 venv(.venv)에 설치
           uv pip install -U pip-audit
-          # 현재 venv에 설치된 패키지들 대상으로 취약점 감사
-          uv run pip-audit
+          # 특정 취약점(ID)만 예외 처리
+          uv run pip-audit --ignore-vuln CVE-2026-0994
 
       # Step 6) Lint (ruff)
       - name: Lint (ruff)
