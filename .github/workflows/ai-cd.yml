@@ -2,7 +2,7 @@ name: CD (FastAPI deploy via SSH)
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "cicd/ai1" ]
     
 concurrency:
   group: cd-${{ github.ref }}
@@ -79,7 +79,7 @@ jobs:
               exit 1
             }
 
-            sleep 2
+            sleep 5
             
             echo "[6/6] health check"
             elapsed=0
