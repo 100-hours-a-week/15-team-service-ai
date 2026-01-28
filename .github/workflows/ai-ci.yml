@@ -92,9 +92,9 @@ jobs:
           # 특정 취약점(ID)만 예외 처리
           uv run pip-audit --ignore-vuln CVE-2026-0994
 
-      # # Step 6) Lint (ruff)
-      # - name: Lint (ruff)
-      #   run: uv run ruff check .
+      # Step 6) Lint (ruff)
+      - name: Lint (ruff)
+        run: uv run ruff check .
 
       # Step 9) Tests (pytest) + 산출물 생성
       # 이 스텝은 testfile이 없으면 실패합니다. 개발기간에는 상관없지만 운영/배포 기간에는 testfile을 반드시 만들어 주세요.
