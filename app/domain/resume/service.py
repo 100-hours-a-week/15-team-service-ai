@@ -238,7 +238,7 @@ def _format_messages(commits: list, pulls: list) -> list[str]:
         msg = f"PR #{pr.number}: {pr.title}"
         msg += f" [커밋 {pr.commits_count}개, +{pr.additions}/-{pr.deletions}]"
         if pr.body:
-            body_summary = pr.body[:200].replace("\n", " ")
+            body_summary = pr.body[:500].replace("\n", " ")
             msg += f" - {body_summary}"
         messages.append(msg)
 

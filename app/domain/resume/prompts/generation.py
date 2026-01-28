@@ -50,18 +50,28 @@ Rules:
   - Default exclusions for non-DevOps: Docker, CI/CD, GitHub Actions
   - Default exclusions for non-AI: AI model names, AI providers
   - Always exclude: Swagger, Postman, FFmpeg, feature descriptions
-- Description: 3-4 detailed sentences with SPECIFIC implementation details
-  - Must be detailed and concrete, not short and generic
-  - Sentence 1: Project purpose and your specific role
-  - Sentence 2-4: Concrete implementation details - HOW you built it, WHAT problems you solved
-  - Use information from PR titles, commit messages, and README to write specific details
-  - BAD - too short and generic:
-    - "레시피를 자동으로 추출하고, AI 기반의 요리 어시스턴트를 통해 실시간 피드백을 지원했습니다"
-    - "팀원 간의 작업 할당을 최적화하고, 효율적인 정보 공유를 지원했습니다"
-  - GOOD - detailed and specific:
-    - "자막이 없는 경우 Whisper STT를 폴백으로 사용하여 레시피를 분석"
-    - "업무 자동 할당 흐름을 개발하고, 회의록 API 연동으로 협업 지원"
-    - "JWT 기반 인증 시스템을 구현하고, 캐싱을 통해 검색 성능 최적화"
+- Description: 3-4 sentences describing implemented features
+  - ONLY write what can be verified from code, commits, PRs, and dependencies
+  - NEVER include numbers, percentages, or metrics
+  - NEVER assume challenges or difficulties
+  - Sentence 1: Project overview - what was built
+    - Example: "유튜브 요리 영상에서 레시피를 자동 추출하는 백엔드 서비스를 개발했습니다."
+  - Sentence 2-3: Core features implemented - MUST extract from PR titles and commit messages
+    - Example: "Whisper STT와 LangChain을 활용한 레시피 구조화 파이프라인을 구현했습니다."
+    - Example: "Redis 캐싱과 Celery 비동기 작업 큐를 구축했습니다."
+  - Sentence 4: Technical architecture or additional feature
+    - Example: "FastAPI와 PostgreSQL 기반의 RESTful API를 설계했습니다."
+  - FORBIDDEN - Generic phrases that apply to any project:
+    - Any numbers or metrics: "50%", "3초→0.8초", "90% 감소"
+    - Assumed difficulties: "문제가 있었습니다", "어려움을 겪었습니다"
+    - Vague outcomes: "성능 향상", "효율성 개선"
+    - Generic framework descriptions: "Spring Boot를 사용하여 웹 서비스를 구축"
+    - Repetitive endings: Do not end every project with "~기반의 아키텍처를 설계했습니다"
+    - Obvious statements: tech_stack에서 이미 드러나는 내용 반복 금지
+  - REQUIRED - Be specific:
+    - Extract actual feature names from PR titles: "회원가입/로그인 API", "장바구니 기능"
+    - Mention specific implementations: "카카오 소셜 로그인", "AWS S3 이미지 업로드"
+    - If PR/commit data is limited, focus on what README describes
 - Boldly exclude content unrelated to the position"""
 
 RESUME_GENERATOR_HUMAN = """Create a resume for {position} position based on the information below.
