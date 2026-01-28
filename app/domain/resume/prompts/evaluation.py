@@ -43,7 +43,7 @@ IMPORTANT:
 Output format:
 - result: "pass" or "fail"
 - violated_rule: Rule number that was violated (1-20), null if pass
-- violated_item: The exact item that caused the violation (e.g., "SQLAlchemy" or "@PostMapping"), null if pass
+- violated_item: The exact item that caused the violation, null if pass
 - feedback: Brief explanation of why it failed or "All checks passed" if pass"""
 
 RESUME_EVALUATOR_HUMAN = """Evaluate the following resume.
