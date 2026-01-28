@@ -31,20 +31,29 @@ if settings.langfuse_base_url:
     os.environ["LANGFUSE_HOST"] = settings.langfuse_base_url
 
 
-def get_langfuse_handler(
-    session_id: str | None = None,
-    trace_name: str | None = None,
-    tags: list[str] | None = None,
-) -> CallbackHandler | None:
+def get_langfuse_handler() -> CallbackHandler | None:
     """Langfuse 콜백 핸들러 반환"""
     if not settings.langfuse_public_key or not settings.langfuse_secret_key:
         return None
 
-    return CallbackHandler(
-        session_id=session_id,
-        trace_name=trace_name,
-        tags=tags or [],
-    )
+    return CallbackHandler()
+
+
+def get_langfuse_config(
+    session_id: str | None = None,
+    tags: list[str] | None = None,
+) -> dict | None:
+    """Langfuse metadata config 생성"""
+    if not settings.langfuse_public_key or not settings.langfuse_secret_key:
+        return None
+
+    metadata = {}
+    if session_id:
+        metadata["langfuse_session_id"] = session_id
+    if tags:
+        metadata["langfuse_tags"] = tags
+
+    return {"metadata": metadata} if metadata else None
 
 
 def get_llm(callbacks: list | None = None) -> ChatOpenAI:
@@ -151,19 +160,19 @@ async def generate_resume(
     json_schema = _get_json_schema_prompt(ResumeData)
     human_content += f"\n\n반드시 다음 JSON 형식으로만 응답하세요:\n```json\n{json_schema}\n```"
 
-    langfuse_handler = get_langfuse_handler(
+    langfuse_handler = get_langfuse_handler()
+    callbacks = [langfuse_handler] if langfuse_handler else None
+    langfuse_config = get_langfuse_config(
         session_id=session_id,
-        trace_name="resume-generate",
         tags=["resume", "generate", position],
     )
-    callbacks = [langfuse_handler] if langfuse_handler else None
 
     llm = get_llm(callbacks).with_structured_output(ResumeData)
     messages = [
-        SystemMessage(content=RESUME_GENERATOR_SYSTEM),
+        SystemMessage(content=RESUME_GENERATOR_SYSTEM.format(position=position)),
         HumanMessage(content=human_content),
     ]
-    result = await llm.ainvoke(messages)
+    result = await llm.ainvoke(messages, config=langfuse_config)
 
     logger.debug("이력서 생성 완료 position=%s", position)
     return result
@@ -185,19 +194,19 @@ async def evaluate_resume(
     json_schema = _get_json_schema_prompt(EvaluationOutput)
     human_content += f"\n\n반드시 다음 JSON 형식으로만 응답하세요:\n```json\n{json_schema}\n```"
 
-    langfuse_handler = get_langfuse_handler(
+    langfuse_handler = get_langfuse_handler()
+    callbacks = [langfuse_handler] if langfuse_handler else None
+    langfuse_config = get_langfuse_config(
         session_id=session_id,
-        trace_name="resume-evaluate",
         tags=["resume", "evaluate", position],
     )
-    callbacks = [langfuse_handler] if langfuse_handler else None
 
     llm = get_llm(callbacks).with_structured_output(EvaluationOutput)
     messages = [
         SystemMessage(content=RESUME_EVALUATOR_SYSTEM.format(position=position)),
         HumanMessage(content=human_content),
     ]
-    result = await llm.ainvoke(messages)
+    result = await llm.ainvoke(messages, config=langfuse_config)
 
     logger.debug(
         "이력서 평가 완료 result=%s rule=%s item=%s feedback=%s",
