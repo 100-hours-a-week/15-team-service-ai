@@ -16,7 +16,9 @@ CRITICAL - Tech Stack Extraction from Dependencies:
 - If dependency exists, it MUST be in tech_stack. No exceptions.
 
 Rules:
-- 1 repository = 1 project
+- Only include projects that have technologies relevant to the {position} position.
+- Skip projects that have NO relevant technologies for the position.
+- Example: For frontend position, skip pure backend projects with only Spring Boot/FastAPI.
 - Overall tech_stack: Consolidate technologies from all projects
 - Per-project tech_stack: Only technologies actually used in that project
   - Order: Primary language → Framework → Libraries/Tools

@@ -6,7 +6,7 @@ from app.domain.resume.schemas.github import RepoContext
 
 
 class ResumeRequest(BaseModel):
-    """이력서 생성 요청."""
+    """이력서 생성 요청"""
 
     repo_urls: list[str]
     position: str
@@ -16,7 +16,7 @@ class ResumeRequest(BaseModel):
 
 
 class ProjectInfo(BaseModel):
-    """프로젝트 정보."""
+    """프로젝트 정보"""
 
     name: str
     repo_url: str
@@ -25,21 +25,23 @@ class ProjectInfo(BaseModel):
 
 
 class ResumeData(BaseModel):
-    """생성된 이력서 데이터."""
+    """생성된 이력서 데이터"""
 
     tech_stack: list[str]
     projects: list[ProjectInfo]
 
 
 class EvaluationOutput(BaseModel):
-    """이력서 평가 LLM 출력."""
+    """이력서 평가 LLM 출력"""
 
     result: Literal["pass", "fail"]
+    violated_rule: int | None = None
+    violated_item: str | None = None
     feedback: str
 
 
 class ResumeState(TypedDict, total=False):
-    """LangGraph 워크플로우 상태."""
+    """LangGraph 워크플로우 상태"""
 
     request: ResumeRequest
     job_id: str

@@ -2,7 +2,7 @@ from pydantic import BaseModel
 
 
 class CommitInfo(BaseModel):
-    """커밋 기본 정보."""
+    """커밋 기본 정보"""
 
     sha: str
     message: str
@@ -10,7 +10,7 @@ class CommitInfo(BaseModel):
 
 
 class CommitDetail(BaseModel):
-    """커밋 상세 정보."""
+    """커밋 상세 정보"""
 
     sha: str
     message: str
@@ -19,7 +19,7 @@ class CommitDetail(BaseModel):
 
 
 class PRInfo(BaseModel):
-    """PR 기본 정보."""
+    """PR 기본 정보"""
 
     number: int
     title: str
@@ -30,7 +30,7 @@ class PRInfo(BaseModel):
 
 
 class RepoContext(BaseModel):
-    """레포지토리 컨텍스트 정보."""
+    """레포지토리 컨텍스트 정보"""
 
     name: str
     languages: dict[str, int]
@@ -40,7 +40,7 @@ class RepoContext(BaseModel):
 
 
 class UserStats(BaseModel):
-    """사용자 GitHub 통계."""
+    """사용자 GitHub 통계"""
 
     total_commits: int
     total_prs: int
@@ -48,7 +48,7 @@ class UserStats(BaseModel):
 
 
 class PRInfoExtended(BaseModel):
-    """확장된 PR 정보 - 커밋 수와 변경 라인 포함."""
+    """확장된 PR 정보"""
 
     number: int
     title: str

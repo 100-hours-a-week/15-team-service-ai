@@ -139,7 +139,7 @@ async def evaluate_resume(
 
 
 def get_resume_tools() -> list:
-    """에이전트용 툴 목록 반환."""
+    """에이전트용 툴 목록 반환"""
     return [
         collect_project_info,
         collect_repo_context,

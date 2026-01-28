@@ -69,7 +69,7 @@ PRIORITY_PATTERNS = [
 
 
 def _filter_and_sort_dependencies(deps: list[str]) -> list[str]:
-    """의존성 필터링 및 우선순위 정렬.
+    """의존성 필터링 및 우선순위 정렬
 
     Args:
         deps: 원본 의존성 리스트

@@ -1,6 +1,8 @@
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
+from app.core.config import settings
+
 
 class ErrorCode:
     GITHUB_UNAUTHORIZED = "GITHUB_UNAUTHORIZED"
@@ -73,7 +75,7 @@ def register_exception_handlers(app):
             "error_code": exc.error_code,
             "message": exc.message,
         }
-        if exc.detail:
+        if exc.detail and not settings.is_production:
             content["detail"] = exc.detail
 
         return JSONResponse(

@@ -23,21 +23,22 @@ GITHUB_URL_PATTERN = re.compile(r"github\.com/([a-zA-Z0-9_.-]+)/([a-zA-Z0-9_.-]+
 FILE_PATH_PATTERN = re.compile(r"^[\w\-./]+$")
 
 _client = httpx.AsyncClient(timeout=settings.github_timeout)
+_request_semaphore = asyncio.Semaphore(settings.github_max_concurrent_requests)
 
 
 async def close_client():
-    """httpx 클라이언트 종료."""
+    """httpx 클라이언트 종료"""
     await _client.aclose()
 
 
 def parse_repo_url(repo_url: str) -> tuple[str, str]:
-    """GitHub URL에서 owner와 repo 추출.
+    """GitHub URL에서 owner와 repo 추출
 
     Args:
         repo_url: GitHub 레포지토리 URL
 
     Returns:
-        (owner, repo) 튜플
+        owner, repo 튜플
 
     Raises:
         ValueError: 유효하지 않은 GitHub URL인 경우
@@ -51,7 +52,7 @@ def parse_repo_url(repo_url: str) -> tuple[str, str]:
 
 
 def _sanitize_file_path(path: str) -> str:
-    """파일 경로 검증.
+    """파일 경로 검증
 
     Args:
         path: 파일 경로
@@ -73,16 +74,16 @@ async def get_commits(
     author: str | None = None,
     per_page: int = 100,
 ) -> list[CommitInfo]:
-    """레포지토리의 커밋 목록 조회.
+    """레포지토리 커밋 목록 조회
 
     Args:
         repo_url: GitHub 레포지토리 URL
-        token: GitHub OAuth 토큰 (공개 레포는 생략 가능)
-        author: GitHub 유저네임 (해당 유저의 커밋만 필터링)
-        per_page: 가져올 커밋 개수 (기본 100, 최대 100)
+        token: GitHub OAuth 토큰
+        author: GitHub 유저네임
+        per_page: 가져올 커밋 개수
 
     Returns:
-        커밋 목록 (sha, message, author 등 포함), merge 커밋 제외
+        커밋 목록, merge 커밋 제외
     """
     owner, repo = parse_repo_url(repo_url)
     url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/commits"
@@ -114,15 +115,15 @@ async def get_commits(
 
 
 async def get_commit_detail(repo_url: str, sha: str, token: str | None = None) -> CommitDetail:
-    """개별 커밋의 상세 정보 (diff 포함) 조회.
+    """개별 커밋 상세 정보 조회
 
     Args:
         repo_url: GitHub 레포지토리 URL
         sha: 커밋 SHA
-        token: GitHub OAuth 토큰 (공개 레포는 생략 가능)
+        token: GitHub OAuth 토큰
 
     Returns:
-        커밋 상세 정보 (files 필드에 diff 포함)
+        커밋 상세 정보
     """
     owner, repo = parse_repo_url(repo_url)
     url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/commits/{sha}"
@@ -150,16 +151,16 @@ async def get_pulls(
     author: str | None = None,
     per_page: int = 30,
 ) -> list[PRInfo]:
-    """레포지토리의 Merged PR 목록 조회.
+    """레포지토리 Merged PR 목록 조회
 
     Args:
         repo_url: GitHub 레포지토리 URL
-        token: GitHub OAuth 토큰 (공개 레포는 생략 가능)
-        author: GitHub 유저네임 (해당 유저의 PR만 필터링)
-        per_page: 가져올 PR 개수 (기본 30)
+        token: GitHub OAuth 토큰
+        author: GitHub 유저네임
+        per_page: 가져올 PR 개수
 
     Returns:
-        Merged PR 목록 (number, title, body, author, merged_at 포함)
+        Merged PR 목록
     """
     owner, repo = parse_repo_url(repo_url)
     url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/pulls"
@@ -200,7 +201,7 @@ async def get_pull_files(
     pull_number: int,
     token: str | None = None,
 ) -> list[dict]:
-    """PR에서 변경된 파일 목록 조회.
+    """PR에서 변경된 파일 목록 조회
 
     Args:
         repo_url: GitHub 레포지토리 URL
@@ -208,7 +209,7 @@ async def get_pull_files(
         token: GitHub OAuth 토큰
 
     Returns:
-        변경된 파일 목록 (filename, patch 포함)
+        변경된 파일 목록
     """
     owner, repo = parse_repo_url(repo_url)
     url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/pulls/{pull_number}/files"
@@ -225,14 +226,14 @@ async def get_pull_files(
 
 
 async def get_repo_languages(repo_url: str, token: str | None = None) -> dict[str, int]:
-    """레포지토리 언어 비율 조회.
+    """레포지토리 언어 비율 조회
 
     Args:
         repo_url: GitHub 레포지토리 URL
-        token: GitHub OAuth 토큰, 공개 레포는 생략 가능
+        token: GitHub OAuth 토큰
 
     Returns:
-        언어별 바이트 수 딕셔너리. 예: {"TypeScript": 50000, "Python": 20000}
+        언어별 바이트 수 딕셔너리
     """
     owner, repo = parse_repo_url(repo_url)
     url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/languages"
@@ -249,11 +250,11 @@ async def get_repo_languages(repo_url: str, token: str | None = None) -> dict[st
 
 
 async def get_repo_info(repo_url: str, token: str | None = None) -> dict:
-    """레포지토리 메타데이터 조회.
+    """레포지토리 메타데이터 조회
 
     Args:
         repo_url: GitHub 레포지토리 URL
-        token: GitHub OAuth 토큰, 공개 레포는 생략 가능
+        token: GitHub OAuth 토큰
 
     Returns:
         description과 topics를 포함한 딕셔너리
@@ -277,11 +278,11 @@ async def get_repo_info(repo_url: str, token: str | None = None) -> dict:
 
 
 async def get_repo_readme(repo_url: str, token: str | None = None) -> str | None:
-    """레포지토리 README 내용 조회.
+    """레포지토리 README 내용 조회
 
     Args:
         repo_url: GitHub 레포지토리 URL
-        token: GitHub OAuth 토큰, 공개 레포는 생략 가능
+        token: GitHub OAuth 토큰
 
     Returns:
         README 내용 앞 2000자, 없으면 None
@@ -309,11 +310,11 @@ async def get_repo_readme(repo_url: str, token: str | None = None) -> str | None
 
 
 async def get_repo_tree(repo_url: str, token: str | None = None) -> list[str]:
-    """레포지토리의 전체 파일 목록 조회.
+    """레포지토리 전체 파일 목록 조회
 
     Args:
         repo_url: GitHub 레포지토리 URL
-        token: GitHub OAuth 토큰, 공개 레포는 생략 가능
+        token: GitHub OAuth 토큰
 
     Returns:
         파일 경로 리스트
@@ -341,12 +342,12 @@ async def get_repo_tree(repo_url: str, token: str | None = None) -> list[str]:
 
 
 async def get_file_content(repo_url: str, path: str, token: str | None = None) -> str | None:
-    """특정 파일 내용 조회.
+    """특정 파일 내용 조회
 
     Args:
         repo_url: GitHub 레포지토리 URL
         path: 파일 경로
-        token: GitHub OAuth 토큰, 공개 레포는 생략 가능
+        token: GitHub OAuth 토큰
 
     Returns:
         파일 내용 문자열, 없거나 바이너리면 None
@@ -383,7 +384,7 @@ async def get_file_content(repo_url: str, path: str, token: str | None = None) -
 
 
 async def _graphql_query(query: str, variables: dict, token: str) -> dict:
-    """GraphQL 쿼리 실행.
+    """GraphQL 쿼리 실행
 
     Args:
         query: GraphQL 쿼리 문자열
@@ -415,9 +416,7 @@ async def _graphql_query(query: str, variables: dict, token: str) -> dict:
 
 
 async def get_repo_context_graphql(repo_url: str, token: str) -> dict:
-    """GraphQL로 레포지토리 컨텍스트 정보 조회.
-
-    한 번의 쿼리로 languages, description, topics, README를 가져옵니다.
+    """GraphQL로 레포지토리 컨텍스트 정보 조회
 
     Args:
         repo_url: GitHub 레포지토리 URL
@@ -476,30 +475,23 @@ async def get_project_info_graphql(
     commits_count: int = 30,
     prs_count: int = 30,
 ) -> dict:
-    """GraphQL로 프로젝트 정보 조회.
-
-    한 번의 쿼리로 파일 트리, 커밋 목록, PR 목록을 가져옵니다.
+    """GraphQL로 커밋과 PR 목록 조회
 
     Args:
         repo_url: GitHub 레포지토리 URL
         token: GitHub OAuth 토큰
-        author: GitHub 유저네임 - PR 필터링용
+        author: GitHub 유저네임
         commits_count: 가져올 커밋 개수
         prs_count: 가져올 PR 개수
 
     Returns:
-        file_tree, commits, pulls를 포함한 딕셔너리
+        commits, pulls를 포함한 딕셔너리
     """
     owner, repo = parse_repo_url(repo_url)
 
     query = """
     query($owner: String!, $repo: String!, $commitsCount: Int!, $prsCount: Int!) {
       repository(owner: $owner, name: $repo) {
-        object(expression: "HEAD:") {
-          ... on Tree {
-            entries { name type path }
-          }
-        }
         defaultBranchRef {
           target {
             ... on Commit {
@@ -544,13 +536,6 @@ async def get_project_info_graphql(
     data = await _graphql_query(query, variables, token)
     repository = data["repository"]
 
-    file_tree = []
-    tree_obj = repository.get("object")
-    if tree_obj and tree_obj.get("entries"):
-        for entry in tree_obj["entries"]:
-            if entry["type"] == "blob":
-                file_tree.append(entry["path"])
-
     commits = []
     branch_ref = repository.get("defaultBranchRef")
     if branch_ref and branch_ref.get("target"):
@@ -587,15 +572,13 @@ async def get_project_info_graphql(
         )
 
     logger.info(
-        "GraphQL 프로젝트 정보 조회 완료 repo=%s/%s files=%d commits=%d prs=%d",
+        "GraphQL 프로젝트 정보 조회 완료 repo=%s/%s commits=%d prs=%d",
         owner,
         repo,
-        len(file_tree),
         len(commits),
         len(pulls),
     )
     return {
-        "file_tree": file_tree,
         "commits": commits,
         "pulls": pulls,
     }
@@ -606,7 +589,7 @@ async def get_files_content_graphql(
     paths: list[str],
     token: str,
 ) -> dict[str, str | None]:
-    """GraphQL로 여러 파일 내용을 한 번에 조회.
+    """GraphQL로 여러 파일 내용을 한 번에 조회
 
     Args:
         repo_url: GitHub 레포지토리 URL
@@ -655,7 +638,7 @@ async def get_files_content(
     paths: list[str],
     token: str | None = None,
 ) -> dict[str, str | None]:
-    """여러 파일 내용 조회 - GraphQL 우선, REST 폴백.
+    """여러 파일 내용 조회
 
     Args:
         repo_url: GitHub 레포지토리 URL
@@ -674,7 +657,11 @@ async def get_files_content(
         except Exception as e:
             logger.warning("GraphQL 파일 조회 실패, REST 폴백: %s", type(e).__name__)
 
-    tasks = [get_file_content(repo_url, path, token) for path in paths]
+    async def fetch_with_limit(path: str) -> str | None:
+        async with _request_semaphore:
+            return await get_file_content(repo_url, path, token)
+
+    tasks = [fetch_with_limit(path) for path in paths]
     contents = await asyncio.gather(*tasks)
 
     return dict(zip(paths, contents, strict=True))
@@ -687,7 +674,7 @@ async def get_project_info(
     commits_count: int = 30,
     prs_count: int = 30,
 ) -> dict:
-    """프로젝트 정보 조회 - file_tree는 REST, commits/pulls는 GraphQL 우선.
+    """프로젝트 정보 조회
 
     Args:
         repo_url: GitHub 레포지토리 URL
@@ -725,7 +712,7 @@ async def get_project_info(
 
 
 async def get_repo_context(repo_url: str, token: str | None = None) -> dict:
-    """레포지토리 컨텍스트 정보 조회 - GraphQL 우선, REST 폴백.
+    """레포지토리 컨텍스트 정보 조회
 
     Args:
         repo_url: GitHub 레포지토리 URL
@@ -753,7 +740,7 @@ async def get_repo_context(repo_url: str, token: str | None = None) -> dict:
 
 
 async def get_user_stats(username: str, token: str) -> UserStats:
-    """사용자 GitHub 통계 조회.
+    """사용자 GitHub 통계 조회
 
     Args:
         username: GitHub 유저네임
@@ -791,7 +778,7 @@ async def get_pulls_extended(
     author: str | None = None,
     per_page: int = 30,
 ) -> list[PRInfoExtended]:
-    """레포지토리의 Merged PR 목록 조회 - 커밋 수와 변경 라인 포함.
+    """레포지토리 Merged PR 목록 조회
 
     Args:
         repo_url: GitHub 레포지토리 URL
@@ -822,7 +809,11 @@ async def get_pulls_extended(
         and (not author or pr["user"]["login"].lower() == author.lower())
     ]
 
-    tasks = [_get_pull_detail(owner, repo, pr["number"], headers) for pr in merged_prs]
+    async def fetch_detail_with_limit(pr_number: int) -> dict:
+        async with _request_semaphore:
+            return await _get_pull_detail(owner, repo, pr_number, headers)
+
+    tasks = [fetch_detail_with_limit(pr["number"]) for pr in merged_prs]
     details = await asyncio.gather(*tasks)
 
     prs = [
@@ -845,7 +836,7 @@ async def get_pulls_extended(
 
 
 async def _get_pull_detail(owner: str, repo: str, pull_number: int, headers: dict) -> dict:
-    """개별 PR의 상세 정보 조회.
+    """개별 PR 상세 정보 조회
 
     Args:
         owner: 레포지토리 소유자

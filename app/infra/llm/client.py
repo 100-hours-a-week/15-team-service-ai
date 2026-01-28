@@ -32,7 +32,7 @@ if settings.langfuse_base_url:
 
 
 def get_langfuse_handler(session_id: str | None = None) -> CallbackHandler | None:
-    """Langfuse 콜백 핸들러 반환. 설정되지 않으면 None."""
+    """Langfuse 콜백 핸들러 반환"""
     if not settings.langfuse_public_key or not settings.langfuse_secret_key:
         return None
 
@@ -40,7 +40,7 @@ def get_langfuse_handler(session_id: str | None = None) -> CallbackHandler | Non
 
 
 def get_llm(callbacks: list | None = None) -> ChatOpenAI:
-    """OpenAI LLM 클라이언트 반환."""
+    """OpenAI LLM 클라이언트 반환"""
     return ChatOpenAI(
         model=settings.llm_model,
         api_key=settings.openai_api_key,
@@ -51,7 +51,7 @@ def get_llm(callbacks: list | None = None) -> ChatOpenAI:
 
 
 def format_project_info(project_info: list[dict]) -> str:
-    """프로젝트 정보를 프롬프트용 텍스트로 포맷."""
+    """프로젝트 정보를 프롬프트용 텍스트로 포맷"""
     lines = []
     for project in project_info:
         lines.append(f"## 프로젝트: {project['repo_name']}")
@@ -77,7 +77,7 @@ def format_project_info(project_info: list[dict]) -> str:
 
 
 def _get_json_schema_prompt(model_class: type) -> str:
-    """Pydantic 모델의 JSON 스키마를 프롬프트용 문자열로 변환."""
+    """Pydantic 모델의 JSON 스키마를 프롬프트용 문자열로 변환"""
     schema = model_class.model_json_schema()
     return json.dumps(schema, indent=2, ensure_ascii=False)
 
@@ -91,7 +91,7 @@ async def generate_resume(
     user_stats: UserStats | None = None,
     session_id: str | None = None,
 ) -> ResumeData:
-    """프로젝트 정보 기반 이력서 생성."""
+    """프로젝트 정보 기반 이력서 생성"""
     logger.debug("이력서 생성 요청 position=%s projects=%d", position, len(project_info))
 
     project_info_text = format_project_info(project_info)
@@ -154,7 +154,7 @@ async def generate_resume(
 async def evaluate_resume(
     resume_data: ResumeData, position: str, session_id: str | None = None
 ) -> EvaluationOutput:
-    """이력서 품질 평가."""
+    """이력서 품질 평가"""
     logger.debug("이력서 평가 요청 position=%s", position)
 
     resume_json = resume_data.model_dump_json(indent=2)
@@ -177,5 +177,11 @@ async def evaluate_resume(
     ]
     result = await llm.ainvoke(messages)
 
-    logger.debug("이력서 평가 완료 result=%s feedback=%s", result.result, result.feedback)
+    logger.debug(
+        "이력서 평가 완료 result=%s rule=%s item=%s feedback=%s",
+        result.result,
+        result.violated_rule,
+        result.violated_item,
+        result.feedback,
+    )
     return result
