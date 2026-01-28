@@ -31,12 +31,20 @@ if settings.langfuse_base_url:
     os.environ["LANGFUSE_HOST"] = settings.langfuse_base_url
 
 
-def get_langfuse_handler(session_id: str | None = None) -> CallbackHandler | None:
+def get_langfuse_handler(
+    session_id: str | None = None,
+    trace_name: str | None = None,
+    tags: list[str] | None = None,
+) -> CallbackHandler | None:
     """Langfuse 콜백 핸들러 반환"""
     if not settings.langfuse_public_key or not settings.langfuse_secret_key:
         return None
 
-    return CallbackHandler()
+    return CallbackHandler(
+        session_id=session_id,
+        trace_name=trace_name,
+        tags=tags or [],
+    )
 
 
 def get_llm(callbacks: list | None = None) -> ChatOpenAI:
@@ -53,8 +61,13 @@ def get_llm(callbacks: list | None = None) -> ChatOpenAI:
 def format_project_info(project_info: list[dict]) -> str:
     """프로젝트 정보를 프롬프트용 텍스트로 포맷"""
     lines = []
-    for project in project_info:
-        lines.append(f"## 프로젝트: {project['repo_name']}")
+    total_projects = len(project_info)
+    separator = "=" * 80
+
+    for idx, project in enumerate(project_info, start=1):
+        lines.append(separator)
+        lines.append(f"## [프로젝트 {idx}/{total_projects}] {project['repo_name']}")
+        lines.append(separator)
         lines.append(f"- 레포지토리: {project['repo_url']}")
 
         if project.get("file_tree"):
@@ -71,6 +84,7 @@ def format_project_info(project_info: list[dict]) -> str:
             for msg in project["messages"][:15]:
                 lines.append(f"  - {msg}")
 
+        lines.append(separator)
         lines.append("")
 
     return "\n".join(lines)
@@ -137,7 +151,11 @@ async def generate_resume(
     json_schema = _get_json_schema_prompt(ResumeData)
     human_content += f"\n\n반드시 다음 JSON 형식으로만 응답하세요:\n```json\n{json_schema}\n```"
 
-    langfuse_handler = get_langfuse_handler(session_id)
+    langfuse_handler = get_langfuse_handler(
+        session_id=session_id,
+        trace_name="resume-generate",
+        tags=["resume", "generate", position],
+    )
     callbacks = [langfuse_handler] if langfuse_handler else None
 
     llm = get_llm(callbacks).with_structured_output(ResumeData)
@@ -167,7 +185,11 @@ async def evaluate_resume(
     json_schema = _get_json_schema_prompt(EvaluationOutput)
     human_content += f"\n\n반드시 다음 JSON 형식으로만 응답하세요:\n```json\n{json_schema}\n```"
 
-    langfuse_handler = get_langfuse_handler(session_id)
+    langfuse_handler = get_langfuse_handler(
+        session_id=session_id,
+        trace_name="resume-evaluate",
+        tags=["resume", "evaluate", position],
+    )
     callbacks = [langfuse_handler] if langfuse_handler else None
 
     llm = get_llm(callbacks).with_structured_output(EvaluationOutput)
