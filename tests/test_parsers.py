@@ -32,11 +32,14 @@ class TestParsePackageJson:
         assert "jest" in result["devDependencies"]
         assert "typescript" in result["devDependencies"]
 
-    @pytest.mark.parametrize("invalid_content", [
-        "not valid json",
-        "{invalid}",
-        "",
-    ])
+    @pytest.mark.parametrize(
+        "invalid_content",
+        [
+            "not valid json",
+            "{invalid}",
+            "",
+        ],
+    )
     def test_handles_invalid_json(self, invalid_content):
         """잘못된 JSON 처리."""
         result = parse_package_json(invalid_content)
@@ -48,11 +51,14 @@ class TestParsePackageJson:
 class TestParsePomXml:
     """pom.xml 파서 테스트."""
 
-    @pytest.mark.parametrize("artifact, should_include", [
-        ("spring-boot-starter-web", True),
-        ("lombok", True),
-        ("my-project-parent", False),
-    ])
+    @pytest.mark.parametrize(
+        "artifact, should_include",
+        [
+            ("spring-boot-starter-web", True),
+            ("lombok", True),
+            ("my-project-parent", False),
+        ],
+    )
     def test_parses_artifacts(self, artifact, should_include):
         """artifactId 파싱 및 parent 제외."""
         content = f"<artifactId>{artifact}</artifactId>"
@@ -67,13 +73,16 @@ class TestParsePomXml:
 class TestParseBuildGradle:
     """build.gradle 파서 테스트."""
 
-    @pytest.mark.parametrize("line, expected_dep", [
-        ("implementation 'org.springframework:spring-web:3.0.0'", "spring-web"),
-        ('implementation("io.projectreactor:reactor-core:3.5.0")', "reactor-core"),
-        ("api 'com.google.guava:guava:31.0'", "guava"),
-        ("compileOnly 'org.projectlombok:lombok:1.18.0'", "lombok"),
-        ("runtimeOnly 'mysql:mysql-connector-java:8.0.0'", "mysql-connector-java"),
-    ])
+    @pytest.mark.parametrize(
+        "line, expected_dep",
+        [
+            ("implementation 'org.springframework:spring-web:3.0.0'", "spring-web"),
+            ('implementation("io.projectreactor:reactor-core:3.5.0")', "reactor-core"),
+            ("api 'com.google.guava:guava:31.0'", "guava"),
+            ("compileOnly 'org.projectlombok:lombok:1.18.0'", "lombok"),
+            ("runtimeOnly 'mysql:mysql-connector-java:8.0.0'", "mysql-connector-java"),
+        ],
+    )
     def test_parses_dependencies(self, line, expected_dep):
         """다양한 의존성 선언 파싱."""
         result = parse_build_gradle(line)
@@ -83,24 +92,30 @@ class TestParseBuildGradle:
 class TestParseRequirementsTxt:
     """requirements.txt 파서 테스트."""
 
-    @pytest.mark.parametrize("line, expected", [
-        ("fastapi==0.100.0", "fastapi"),
-        ("uvicorn>=0.22.0", "uvicorn"),
-        ("pydantic~=2.0", "pydantic"),
-        ("requests", "requests"),
-        ("fastapi[all]>=0.100.0", "fastapi"),
-    ])
+    @pytest.mark.parametrize(
+        "line, expected",
+        [
+            ("fastapi==0.100.0", "fastapi"),
+            ("uvicorn>=0.22.0", "uvicorn"),
+            ("pydantic~=2.0", "pydantic"),
+            ("requests", "requests"),
+            ("fastapi[all]>=0.100.0", "fastapi"),
+        ],
+    )
     def test_parses_packages(self, line, expected):
         """다양한 형식의 패키지 파싱."""
         result = parse_requirements_txt(line)
         assert expected in result["dependencies"]
 
-    @pytest.mark.parametrize("line", [
-        "# This is a comment",
-        "-r base.txt",
-        "-e git+https://github.com/user/repo.git",
-        "",
-    ])
+    @pytest.mark.parametrize(
+        "line",
+        [
+            "# This is a comment",
+            "-r base.txt",
+            "-e git+https://github.com/user/repo.git",
+            "",
+        ],
+    )
     def test_ignores_non_packages(self, line):
         """주석과 플래그 무시."""
         result = parse_requirements_txt(line)
@@ -112,13 +127,13 @@ class TestParsePyprojectToml:
 
     def test_parses_inline_dependencies(self):
         """인라인 dependencies 파싱."""
-        content = '''
+        content = """
 [project]
 dependencies = [
     "fastapi>=0.100.0",
     "pydantic>=2.0",
 ]
-        '''
+        """
         result = parse_pyproject_toml(content)
 
         assert "fastapi" in result["dependencies"]
@@ -194,21 +209,27 @@ criterion = "0.4"
 class TestParseDependencyFile:
     """parse_dependency_file 함수 테스트."""
 
-    @pytest.mark.parametrize("filename, content, expected_dep", [
-        ("package.json", '{"dependencies": {"react": "^18.0.0"}}', "react"),
-        ("requirements.txt", "fastapi==0.100.0", "fastapi"),
-        ("pom.xml", "<artifactId>spring-boot</artifactId>", "spring-boot"),
-    ])
+    @pytest.mark.parametrize(
+        "filename, content, expected_dep",
+        [
+            ("package.json", '{"dependencies": {"react": "^18.0.0"}}', "react"),
+            ("requirements.txt", "fastapi==0.100.0", "fastapi"),
+            ("pom.xml", "<artifactId>spring-boot</artifactId>", "spring-boot"),
+        ],
+    )
     def test_routes_to_correct_parser(self, filename, content, expected_dep):
         """올바른 파서로 라우팅."""
         result = parse_dependency_file(filename, content)
         assert expected_dep in result["dependencies"]
 
-    @pytest.mark.parametrize("filename", [
-        "unknown.txt",
-        "random.file",
-        "Makefile",
-    ])
+    @pytest.mark.parametrize(
+        "filename",
+        [
+            "unknown.txt",
+            "random.file",
+            "Makefile",
+        ],
+    )
     def test_unknown_file_returns_empty(self, filename):
         """알 수 없는 파일은 빈 결과 반환."""
         result = parse_dependency_file(filename, "some content")
