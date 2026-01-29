@@ -36,7 +36,8 @@ VALID tech_stack items - always PASS for these:
 IMPORTANT:
 - Do NOT over-interpret rules. Only fail for EXACT matches.
 - Korean text in project "description" field is ALLOWED and EXPECTED.
-- Only check "tech_stack" array items, NOT project descriptions.
+- Only check each project's "tech_stack" array, NOT project descriptions.
+- Check ALL projects' tech_stack arrays for violations.
 - AI models mentioned in "description" are OK if they are not in "tech_stack".
 
 Output format:

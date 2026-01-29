@@ -1,5 +1,5 @@
 from app.core.logging import get_logger
-from app.domain.resume.parsers import DEPENDENCY_FILES, parse_dependency_file
+from app.domain.resume.parsers import DEPENDENCY_FILE_NAMES, parse_dependency_file
 from app.domain.resume.schemas import RepoContext, ResumeRequest, UserStats
 from app.infra.github.client import (
     get_files_content,
@@ -96,7 +96,7 @@ def _filter_and_sort_dependencies(deps: list[str]) -> list[str]:
 
 
 async def collect_project_info(request: ResumeRequest) -> list[dict]:
-    """파일 목록 + 의존성 파일 기반으로 프로젝트 정보 수집.
+    """파일 목록 + 의존성 파일 기반으로 프로젝트 정보 수집
 
     Args:
         request: 이력서 생성 요청
@@ -104,9 +104,17 @@ async def collect_project_info(request: ResumeRequest) -> list[dict]:
     Returns:
         프로젝트 정보 리스트
     """
+    unique_urls = list(dict.fromkeys(request.repo_urls))
+    if len(unique_urls) < len(request.repo_urls):
+        logger.warning(
+            "중복 URL 제거 original=%d unique=%d",
+            len(request.repo_urls),
+            len(unique_urls),
+        )
+
     results = []
 
-    for repo_url in request.repo_urls:
+    for repo_url in unique_urls:
         _, repo_name = parse_repo_url(repo_url)
 
         try:
@@ -197,7 +205,7 @@ async def _parse_dependencies(repo_url: str, file_tree: list[str], token: str | 
     dependency_paths = []
     for file_path in file_tree:
         filename = file_path.split("/")[-1]
-        if filename in DEPENDENCY_FILES:
+        if filename in DEPENDENCY_FILE_NAMES:
             dependency_paths.append(file_path)
 
     if not dependency_paths:
