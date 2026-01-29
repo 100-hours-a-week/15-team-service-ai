@@ -5,17 +5,19 @@ from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
-DEPENDENCY_FILES = {
-    "package.json": "parse_package_json",
-    "pom.xml": "parse_pom_xml",
-    "build.gradle": "parse_build_gradle",
-    "build.gradle.kts": "parse_build_gradle",
-    "requirements.txt": "parse_requirements_txt",
-    "pyproject.toml": "parse_pyproject_toml",
-    "Pipfile": "parse_pipfile",
-    "go.mod": "parse_go_mod",
-    "Cargo.toml": "parse_cargo_toml",
-}
+DEPENDENCY_FILE_NAMES = frozenset(
+    {
+        "package.json",
+        "pom.xml",
+        "build.gradle",
+        "build.gradle.kts",
+        "requirements.txt",
+        "pyproject.toml",
+        "Pipfile",
+        "go.mod",
+        "Cargo.toml",
+    }
+)
 
 
 def parse_package_json(content: str) -> dict:
@@ -235,8 +237,21 @@ def parse_cargo_toml(content: str) -> dict:
     return {"dependencies": deps}
 
 
+PARSERS = {
+    "package.json": parse_package_json,
+    "pom.xml": parse_pom_xml,
+    "build.gradle": parse_build_gradle,
+    "build.gradle.kts": parse_build_gradle,
+    "requirements.txt": parse_requirements_txt,
+    "pyproject.toml": parse_pyproject_toml,
+    "Pipfile": parse_pipfile,
+    "go.mod": parse_go_mod,
+    "Cargo.toml": parse_cargo_toml,
+}
+
+
 def parse_dependency_file(filename: str, content: str) -> dict:
-    """파일 이름에 따라 적절한 파서 호출.
+    """파일 이름에 따라 적절한 파서 호출
 
     Args:
         filename: 의존성 파일 이름
@@ -245,19 +260,7 @@ def parse_dependency_file(filename: str, content: str) -> dict:
     Returns:
         파싱된 의존성 정보
     """
-    parsers = {
-        "package.json": parse_package_json,
-        "pom.xml": parse_pom_xml,
-        "build.gradle": parse_build_gradle,
-        "build.gradle.kts": parse_build_gradle,
-        "requirements.txt": parse_requirements_txt,
-        "pyproject.toml": parse_pyproject_toml,
-        "Pipfile": parse_pipfile,
-        "go.mod": parse_go_mod,
-        "Cargo.toml": parse_cargo_toml,
-    }
-
-    parser = parsers.get(filename)
+    parser = PARSERS.get(filename)
     if parser:
         return parser(content)
 

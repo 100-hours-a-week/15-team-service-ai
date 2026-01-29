@@ -2,13 +2,15 @@
 
 import re
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 GITHUB_REPO_PATTERN = re.compile(r"^https://github\.com/[^/]+/[^/]+$")
 
 
 class GenerateRequest(BaseModel):
     """이력서 생성 요청"""
+
+    model_config = ConfigDict(populate_by_name=True)
 
     repo_urls: list[str] = Field(alias="repoUrls")
     position: str = Field(min_length=1)
@@ -25,15 +27,10 @@ class GenerateRequest(BaseModel):
                 raise ValueError(f"올바른 GitHub URL 형식이 아닙니다: {url}")
         return v
 
-    class Config:
-        populate_by_name = True
-
 
 class GenerateResponse(BaseModel):
     """이력서 생성 응답"""
 
-    job_id: str = Field(alias="jobId")
+    model_config = ConfigDict(populate_by_name=True, by_alias=True)
 
-    class Config:
-        populate_by_name = True
-        by_alias = True
+    job_id: str = Field(alias="jobId")

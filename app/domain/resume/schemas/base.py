@@ -2,7 +2,7 @@ from typing import Literal, TypedDict
 
 from pydantic import BaseModel
 
-from app.domain.resume.schemas.github import RepoContext
+from app.domain.resume.schemas.github import RepoContext, UserStats
 
 
 class ResumeRequest(BaseModel):
@@ -27,7 +27,6 @@ class ProjectInfo(BaseModel):
 class ResumeData(BaseModel):
     """생성된 이력서 데이터"""
 
-    tech_stack: list[str]
     projects: list[ProjectInfo]
 
 
@@ -45,8 +44,10 @@ class ResumeState(TypedDict, total=False):
 
     request: ResumeRequest
     job_id: str
+    session_id: str | None
     project_info: list[dict]
     repo_contexts: dict[str, RepoContext]
+    user_stats: UserStats | None
     resume_data: ResumeData
     evaluation: str
     evaluation_feedback: str
