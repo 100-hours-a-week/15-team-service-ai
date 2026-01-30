@@ -219,3 +219,5 @@ api_test
 .agent
 verify_*.json
 CLAUDE.md
+.serena
+15-*

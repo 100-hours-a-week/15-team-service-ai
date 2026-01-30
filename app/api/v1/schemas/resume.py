@@ -12,10 +12,10 @@ class GenerateRequest(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True)
 
-    repo_urls: list[str] = Field(alias="repoUrls")
-    position: str = Field(min_length=1)
-    company: str | None = None
-    github_token: str = Field(alias="githubToken")
+    repo_urls: list[str] = Field(alias="repoUrls", max_length=10)
+    position: str = Field(min_length=1, max_length=100)
+    company: str | None = Field(default=None, max_length=100)
+    github_token: str = Field(alias="githubToken", min_length=1, max_length=255)
 
     @field_validator("repo_urls")
     @classmethod
