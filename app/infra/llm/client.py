@@ -45,7 +45,7 @@ def get_llm(model: str) -> ChatOpenAI:
         model=model,
         api_key=settings.openai_api_key,
         timeout=settings.openai_timeout,
-        temperature=0.2,
+        # temperature=0.2,
     )
 
 

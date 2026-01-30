@@ -56,6 +56,15 @@ class Settings(BaseSettings):
     def is_production(self) -> bool:
         return self.environment.lower() == "production"
 
+    def validate_for_production(self) -> list[str]:
+        """프로덕션 환경에서 필수 설정 검증 후 누락된 항목 반환"""
+        errors = []
+        if not self.openai_api_key:
+            errors.append("OPENAI_API_KEY")
+        if not self.backend_callback_url:
+            errors.append("BACKEND_CALLBACK_URL")
+        return errors
+
     @model_validator(mode="after")
     def validate_production_settings(self):
         """프로덕션 환경에서 필수 설정 검증"""

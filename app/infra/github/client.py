@@ -19,7 +19,7 @@ logger = get_logger(__name__)
 GITHUB_API_BASE = "https://api.github.com"
 GITHUB_GRAPHQL_URL = "https://api.github.com/graphql"
 
-GITHUB_URL_PATTERN = re.compile(r"github\.com/([a-zA-Z0-9_.-]+)/([a-zA-Z0-9_.-]+)")
+GITHUB_URL_PATTERN = re.compile(r"^https://github\.com/([a-zA-Z0-9_.-]+)/([a-zA-Z0-9_.-]+)")
 FILE_PATH_PATTERN = re.compile(r"^[\w\-./]+$")
 
 DANGEROUS_PATH_PARTS = frozenset(
