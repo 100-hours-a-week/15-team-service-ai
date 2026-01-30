@@ -19,11 +19,39 @@ logger = get_logger(__name__)
 GITHUB_API_BASE = "https://api.github.com"
 GITHUB_GRAPHQL_URL = "https://api.github.com/graphql"
 
-GITHUB_URL_PATTERN = re.compile(r"github\.com/([a-zA-Z0-9_.-]+)/([a-zA-Z0-9_.-]+)")
+GITHUB_URL_PATTERN = re.compile(r"^https://github\.com/([a-zA-Z0-9_.-]+)/([a-zA-Z0-9_.-]+)")
 FILE_PATH_PATTERN = re.compile(r"^[\w\-./]+$")
+
+DANGEROUS_PATH_PARTS = frozenset(
+    {
+        ".git",
+        ".github",
+        ".env",
+        "secrets",
+        "credentials",
+        ".aws",
+        ".ssh",
+        "private",
+    }
+)
 
 _client = httpx.AsyncClient(timeout=settings.github_timeout)
 _request_semaphore = asyncio.Semaphore(settings.github_max_concurrent_requests)
+
+
+def _get_headers(token: str | None = None) -> dict[str, str]:
+    """GitHub API 요청 헤더 생성
+
+    Args:
+        token: GitHub OAuth 토큰
+
+    Returns:
+        HTTP 헤더 딕셔너리
+    """
+    headers = {"Accept": "application/vnd.github.v3+json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    return headers
 
 
 async def close_client():
@@ -63,8 +91,20 @@ def _sanitize_file_path(path: str) -> str:
     Raises:
         ValueError: 유효하지 않은 파일 경로인 경우
     """
+    if ".." in path:
+        raise ValueError(f"경로 순회 차단: {path}")
+
+    if path.startswith("/"):
+        raise ValueError(f"절대 경로 차단: {path}")
+
+    path_parts = path.lower().split("/")
+    for part in path_parts:
+        if part in DANGEROUS_PATH_PARTS:
+            raise ValueError(f"민감한 경로 차단: {path}")
+
     if not FILE_PATH_PATTERN.match(path):
         raise ValueError(f"유효하지 않은 파일 경로: {path}")
+
     return path
 
 
@@ -88,15 +128,11 @@ async def get_commits(
     owner, repo = parse_repo_url(repo_url)
     url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/commits"
 
-    headers = {"Accept": "application/vnd.github.v3+json"}
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-
     params = {"per_page": min(per_page, 100)}
     if author:
         params["author"] = author
 
-    response = await _client.get(url, headers=headers, params=params)
+    response = await _client.get(url, headers=_get_headers(token), params=params)
     response.raise_for_status()
     data = response.json()
 
@@ -128,11 +164,7 @@ async def get_commit_detail(repo_url: str, sha: str, token: str | None = None) -
     owner, repo = parse_repo_url(repo_url)
     url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/commits/{sha}"
 
-    headers = {"Accept": "application/vnd.github.v3+json"}
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-
-    response = await _client.get(url, headers=headers)
+    response = await _client.get(url, headers=_get_headers(token))
     response.raise_for_status()
     data = response.json()
 
@@ -165,13 +197,9 @@ async def get_pulls(
     owner, repo = parse_repo_url(repo_url)
     url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/pulls"
 
-    headers = {"Accept": "application/vnd.github.v3+json"}
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-
     params = {"state": "closed", "per_page": min(per_page, 100)}
 
-    response = await _client.get(url, headers=headers, params=params)
+    response = await _client.get(url, headers=_get_headers(token), params=params)
     response.raise_for_status()
     data = response.json()
 
@@ -214,11 +242,7 @@ async def get_pull_files(
     owner, repo = parse_repo_url(repo_url)
     url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/pulls/{pull_number}/files"
 
-    headers = {"Accept": "application/vnd.github.v3+json"}
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-
-    response = await _client.get(url, headers=headers)
+    response = await _client.get(url, headers=_get_headers(token))
     response.raise_for_status()
 
     logger.info("PR 파일 조회 완료 repo=%s/%s pr=%d", owner, repo, pull_number)
@@ -238,11 +262,7 @@ async def get_repo_languages(repo_url: str, token: str | None = None) -> dict[st
     owner, repo = parse_repo_url(repo_url)
     url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/languages"
 
-    headers = {"Accept": "application/vnd.github.v3+json"}
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-
-    response = await _client.get(url, headers=headers)
+    response = await _client.get(url, headers=_get_headers(token))
     response.raise_for_status()
 
     logger.info("언어 조회 완료 repo=%s/%s", owner, repo)
@@ -262,11 +282,7 @@ async def get_repo_info(repo_url: str, token: str | None = None) -> dict:
     owner, repo = parse_repo_url(repo_url)
     url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}"
 
-    headers = {"Accept": "application/vnd.github.v3+json"}
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-
-    response = await _client.get(url, headers=headers)
+    response = await _client.get(url, headers=_get_headers(token))
     response.raise_for_status()
     data = response.json()
 
@@ -290,18 +306,14 @@ async def get_repo_readme(repo_url: str, token: str | None = None) -> str | None
     owner, repo = parse_repo_url(repo_url)
     url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/readme"
 
-    headers = {"Accept": "application/vnd.github.v3+json"}
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-
     try:
-        response = await _client.get(url, headers=headers)
+        response = await _client.get(url, headers=_get_headers(token))
         response.raise_for_status()
         data = response.json()
 
         content = base64.b64decode(data["content"]).decode("utf-8")
         logger.info("README 조회 완료 repo=%s/%s", owner, repo)
-        return content[:2000]
+        return content[: settings.readme_max_length_github]
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 404:
             logger.info("README 없음 repo=%s/%s", owner, repo)
@@ -318,27 +330,22 @@ async def get_repo_tree(repo_url: str, token: str | None = None) -> list[str]:
 
     Returns:
         파일 경로 리스트
+
+    Raises:
+        httpx.HTTPStatusError: GitHub API 호출 실패 시
     """
     owner, repo = parse_repo_url(repo_url)
     url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/git/trees/HEAD"
 
-    headers = {"Accept": "application/vnd.github.v3+json"}
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-
     params = {"recursive": "1"}
 
-    try:
-        response = await _client.get(url, headers=headers, params=params)
-        response.raise_for_status()
-        data = response.json()
+    response = await _client.get(url, headers=_get_headers(token), params=params)
+    response.raise_for_status()
+    data = response.json()
 
-        files = [item["path"] for item in data.get("tree", []) if item["type"] == "blob"]
-        logger.info("파일 트리 조회 완료 repo=%s/%s files=%d", owner, repo, len(files))
-        return files
-    except httpx.HTTPStatusError as e:
-        logger.warning("파일 트리 조회 실패 repo=%s/%s error=%s", owner, repo, type(e).__name__)
-        return []
+    files = [item["path"] for item in data.get("tree", []) if item["type"] == "blob"]
+    logger.info("파일 트리 조회 완료 repo=%s/%s files=%d", owner, repo, len(files))
+    return files
 
 
 async def get_file_content(repo_url: str, path: str, token: str | None = None) -> str | None:
@@ -355,12 +362,8 @@ async def get_file_content(repo_url: str, path: str, token: str | None = None) -
     owner, repo = parse_repo_url(repo_url)
     url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/contents/{path}"
 
-    headers = {"Accept": "application/vnd.github.v3+json"}
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-
     try:
-        response = await _client.get(url, headers=headers)
+        response = await _client.get(url, headers=_get_headers(token))
         response.raise_for_status()
         data = response.json()
 
@@ -410,7 +413,9 @@ async def _graphql_query(query: str, variables: dict, token: str) -> dict:
     data = response.json()
 
     if "errors" in data:
-        raise ValueError(f"GraphQL 에러: {data['errors']}")
+        error_count = len(data["errors"])
+        logger.warning("GraphQL 에러 발생 count=%d", error_count)
+        raise ValueError(f"GraphQL 요청 실패: {error_count}개의 에러 발생")
 
     return data["data"]
 
@@ -457,7 +462,11 @@ async def get_repo_context_graphql(repo_url: str, token: str) -> dict:
             topics.append(node["topic"]["name"])
 
     readme_obj = repository.get("object")
-    readme = readme_obj.get("text")[:2000] if readme_obj and readme_obj.get("text") else None
+    readme = (
+        readme_obj.get("text")[: settings.readme_max_length_github]
+        if readme_obj and readme_obj.get("text")
+        else None
+    )
 
     logger.info("GraphQL 컨텍스트 조회 완료 repo=%s/%s", owner, repo)
     return {
@@ -651,20 +660,32 @@ async def get_files_content(
     if not paths:
         return {}
 
+    async def fetch_with_limit(path: str) -> tuple[str, str | None]:
+        async with _request_semaphore:
+            content = await get_file_content(repo_url, path, token)
+            return path, content
+
+    result: dict[str, str | None] = {}
+    paths_to_fetch: list[str] = paths
+
     if token:
         try:
-            return await get_files_content_graphql(repo_url, paths, token)
+            graphql_result = await get_files_content_graphql(repo_url, paths, token)
+            result.update(graphql_result)
+            paths_to_fetch = [p for p, content in graphql_result.items() if content is None]
+
+            if paths_to_fetch:
+                logger.info("GraphQL 부분 실패, REST 재시도 count=%d", len(paths_to_fetch))
         except Exception as e:
             logger.warning("GraphQL 파일 조회 실패, REST 폴백: %s", type(e).__name__)
 
-    async def fetch_with_limit(path: str) -> str | None:
-        async with _request_semaphore:
-            return await get_file_content(repo_url, path, token)
+    if paths_to_fetch:
+        tasks = [fetch_with_limit(path) for path in paths_to_fetch]
+        rest_results = await asyncio.gather(*tasks)
+        for path, content in rest_results:
+            result[path] = content
 
-    tasks = [fetch_with_limit(path) for path in paths]
-    contents = await asyncio.gather(*tasks)
-
-    return dict(zip(paths, contents, strict=True))
+    return result
 
 
 async def get_project_info(
@@ -792,13 +813,9 @@ async def get_pulls_extended(
     owner, repo = parse_repo_url(repo_url)
     url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/pulls"
 
-    headers = {"Accept": "application/vnd.github.v3+json"}
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-
     params = {"state": "closed", "per_page": min(per_page, 100)}
 
-    response = await _client.get(url, headers=headers, params=params)
+    response = await _client.get(url, headers=_get_headers(token), params=params)
     response.raise_for_status()
     data = response.json()
 
@@ -811,7 +828,7 @@ async def get_pulls_extended(
 
     async def fetch_detail_with_limit(pr_number: int) -> dict:
         async with _request_semaphore:
-            return await _get_pull_detail(owner, repo, pr_number, headers)
+            return await _get_pull_detail(owner, repo, pr_number, token)
 
     tasks = [fetch_detail_with_limit(pr["number"]) for pr in merged_prs]
     details = await asyncio.gather(*tasks)
@@ -835,20 +852,22 @@ async def get_pulls_extended(
     return prs
 
 
-async def _get_pull_detail(owner: str, repo: str, pull_number: int, headers: dict) -> dict:
+async def _get_pull_detail(
+    owner: str, repo: str, pull_number: int, token: str | None = None
+) -> dict:
     """개별 PR 상세 정보 조회
 
     Args:
         owner: 레포지토리 소유자
         repo: 레포지토리 이름
         pull_number: PR 번호
-        headers: HTTP 헤더
+        token: GitHub OAuth 토큰
 
     Returns:
         commits, additions, deletions 포함 딕셔너리
     """
     url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/pulls/{pull_number}"
-    response = await _client.get(url, headers=headers)
+    response = await _client.get(url, headers=_get_headers(token))
     response.raise_for_status()
     data = response.json()
 

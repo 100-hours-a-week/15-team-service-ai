@@ -42,7 +42,6 @@ def test_project_info():
 def test_resume_data():
     """ResumeData 모델 생성."""
     resume = ResumeData(
-        tech_stack=["Python", "FastAPI"],
         projects=[
             ProjectInfo(
                 name="my-project",
@@ -52,8 +51,8 @@ def test_resume_data():
             )
         ],
     )
-    assert len(resume.tech_stack) == 2
     assert len(resume.projects) == 1
+    assert resume.projects[0].tech_stack == ["Python", "FastAPI"]
 
 
 def test_resume_request():

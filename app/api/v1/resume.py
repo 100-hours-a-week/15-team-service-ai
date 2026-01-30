@@ -31,7 +31,8 @@ async def _send_callback_with_retry(
 
     for attempt in range(max_retries):
         try:
-            response = await client.post(url, json=payload)
+            headers = {"X-AI-Callback-Secret": settings.ai_callback_secret}
+            response = await client.post(url, json=payload, headers=headers)
 
             if 200 <= response.status_code < 300:
                 logger.info(

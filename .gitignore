@@ -215,7 +215,7 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 docs
-api_test
 .agent
-verify_*.json
 CLAUDE.md
+.serena
+15-*

@@ -11,19 +11,22 @@ from app.domain.resume.service import (
 class TestFilterAndSortDependencies:
     """_filter_and_sort_dependencies 함수 테스트."""
 
-    @pytest.mark.parametrize("excluded_dep", [
-        "pytest",
-        "jest",
-        "mocha",
-        "eslint",
-        "prettier",
-        "ruff",
-        "black",
-        "@types/node",
-        "types-requests",
-        "pre-commit",
-        "husky",
-    ])
+    @pytest.mark.parametrize(
+        "excluded_dep",
+        [
+            "pytest",
+            "jest",
+            "mocha",
+            "eslint",
+            "prettier",
+            "ruff",
+            "black",
+            "@types/node",
+            "types-requests",
+            "pre-commit",
+            "husky",
+        ],
+    )
     def test_excludes_dev_tools(self, excluded_dep):
         """테스트/린트/타입 도구는 제외."""
         deps = ["fastapi", excluded_dep]
@@ -32,20 +35,26 @@ class TestFilterAndSortDependencies:
         assert excluded_dep not in result
         assert "fastapi" in result
 
-    @pytest.mark.parametrize("deps, expected_order", [
-        (["redis", "fastapi", "some-lib"], ["fastapi", "redis", "some-lib"]),
-        (["express", "react", "prisma"], ["react", "express", "prisma"]),
-        (["kafka", "django", "celery"], ["django", "celery", "kafka"]),
-    ])
+    @pytest.mark.parametrize(
+        "deps, expected_order",
+        [
+            (["redis", "fastapi", "some-lib"], ["fastapi", "redis", "some-lib"]),
+            (["express", "react", "prisma"], ["react", "express", "prisma"]),
+            (["kafka", "django", "celery"], ["django", "celery", "kafka"]),
+        ],
+    )
     def test_priority_sorting(self, deps, expected_order):
         """우선순위에 따라 정렬."""
         result = _filter_and_sort_dependencies(deps)
         assert result == expected_order
 
-    @pytest.mark.parametrize("deps, expected", [
-        ([], []),
-        (["pytest", "jest", "eslint"], []),
-    ])
+    @pytest.mark.parametrize(
+        "deps, expected",
+        [
+            ([], []),
+            (["pytest", "jest", "eslint"], []),
+        ],
+    )
     def test_edge_cases(self, deps, expected):
         """빈 리스트와 모두 제외되는 경우."""
         result = _filter_and_sort_dependencies(deps)
@@ -80,11 +89,14 @@ class TestSummarizeFileTree:
         assert "app/api" in result
         assert "app/domain" in result
 
-    @pytest.mark.parametrize("extensions", [
-        ["py", "ts", "css", "json"],
-        ["java", "xml", "kt"],
-        ["go", "mod", "sum"],
-    ])
+    @pytest.mark.parametrize(
+        "extensions",
+        [
+            ["py", "ts", "css", "json"],
+            ["java", "xml", "kt"],
+            ["go", "mod", "sum"],
+        ],
+    )
     def test_extracts_extensions(self, extensions):
         """파일 확장자 추출."""
         file_tree = [f"file.{ext}" for ext in extensions]

@@ -2,7 +2,7 @@ name: CD (FastAPI deploy via SSH)
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "cicd/ai1" ]
     
 concurrency:
   group: cd-${{ github.ref }}
@@ -70,6 +70,9 @@ jobs:
             cd "$REPO_DIR"
             uv sync --frozen
 
+            echo "[4.5/5] SSM Parameter Store -> .env 생성..."
+            sudo /usr/local/bin/render-env.sh
+
             echo "[5/5] restart service"
             sudo systemctl daemon-reload
             sudo systemctl restart "$SERVICE_NAME"
@@ -79,7 +82,7 @@ jobs:
               exit 1
             }
 
-            sleep 2
+            sleep 5
             
             echo "[6/6] health check"
             elapsed=0
