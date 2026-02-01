@@ -4,6 +4,7 @@ from app.core.config import settings
 from app.core.logging import get_logger
 from app.domain.resume.schemas import ResumeData, ResumeRequest, ResumeState
 from app.domain.resume.workflow import create_resume_workflow
+from app.infra.llm.client import get_langfuse_handler
 
 logger = get_logger(__name__)
 
@@ -36,8 +37,11 @@ async def run_resume_agent(
             "session_id": session_id,
         }
 
+        langfuse_handler = get_langfuse_handler()
+        config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+
         final_state = await asyncio.wait_for(
-            workflow.ainvoke(initial_state),
+            workflow.ainvoke(initial_state, config=config),
             timeout=settings.workflow_timeout,
         )
 

@@ -13,6 +13,7 @@ dependencies = [
     "httpx>=0.28.1",
     "langchain>=0.3.0",
     "langchain-openai>=1.1.7",
+    "langchain-google-genai>=2.0.0",
     "langgraph>=1.0.6",
     "boto3>=1.42.30",
     "mcp>=1.25.0",

@@ -7,12 +7,24 @@ class Settings(BaseSettings):
 
     environment: str = "development"
 
-    # LLM 설정
-    llm_generator_model: str = "gpt-5.2"
-    llm_evaluator_model: str = "gpt-4o"
+    # LLM 프로바이더 선택: "openai" 또는 "vllm"
+    llm_provider: str = "vllm"
 
-    # OpenAI
+    # OpenAI 설정 - 개발/테스트용
     openai_api_key: str = ""
+    openai_model: str = "gpt-4o-mini"
+    openai_timeout: float = 120.0
+
+    # vLLM/RunPod 설정 - 운영용
+    vllm_api_url: str = ""
+    vllm_api_key: str = ""
+    vllm_model: str = ""
+    vllm_timeout: float = 180.0
+
+    # Gemini 설정 - 이력서 평가용
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-3-pro-preview"
+    gemini_timeout: float = 120.0
 
     # GitHub
     github_token: str = ""
@@ -23,7 +35,6 @@ class Settings(BaseSettings):
 
     # Timeout 설정
     github_timeout: float = 60.0
-    openai_timeout: float = 120.0
     callback_timeout: float = 120.0
     workflow_timeout: float = 300.0
 
@@ -45,6 +56,9 @@ class Settings(BaseSettings):
     # 로깅 설정
     log_level: str = "INFO"
 
+    # CORS 설정
+    cors_allowed_origins: str = ""
+
     # Langfuse 설정
     langfuse_public_key: str = ""
     langfuse_secret_key: str = ""
@@ -59,8 +73,10 @@ class Settings(BaseSettings):
     def validate_for_production(self) -> list[str]:
         """프로덕션 환경에서 필수 설정 검증 후 누락된 항목 반환"""
         errors = []
-        if not self.openai_api_key:
-            errors.append("OPENAI_API_KEY")
+        if not self.vllm_api_url:
+            errors.append("VLLM_API_URL")
+        if not self.gemini_api_key:
+            errors.append("GEMINI_API_KEY")
         if not self.backend_callback_url:
             errors.append("BACKEND_CALLBACK_URL")
         return errors
@@ -70,8 +86,10 @@ class Settings(BaseSettings):
         """프로덕션 환경에서 필수 설정 검증"""
         if self.is_production:
             missing = []
-            if not self.openai_api_key:
-                missing.append("OPENAI_API_KEY")
+            if not self.vllm_api_url:
+                missing.append("VLLM_API_URL")
+            if not self.gemini_api_key:
+                missing.append("GEMINI_API_KEY")
             if not self.backend_callback_url:
                 missing.append("BACKEND_CALLBACK_URL")
 

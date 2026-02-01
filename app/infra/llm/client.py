@@ -2,7 +2,6 @@ import json
 import os
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_openai import ChatOpenAI
 from langfuse.langchain import CallbackHandler
 
 from app.core.config import settings
@@ -20,6 +19,7 @@ from app.domain.resume.schemas import (
     ResumeData,
     UserStats,
 )
+from app.infra.llm.factory import get_evaluator_client, get_generator_client
 
 logger = get_logger(__name__)
 
@@ -37,16 +37,6 @@ def get_langfuse_handler() -> CallbackHandler | None:
         return None
 
     return CallbackHandler()
-
-
-def get_llm(model: str) -> ChatOpenAI:
-    """OpenAI LLM 클라이언트 반환"""
-    return ChatOpenAI(
-        model=model,
-        api_key=settings.openai_api_key,
-        timeout=settings.openai_timeout,
-        # temperature=0.2,
-    )
 
 
 def format_project_info(project_info: list[dict]) -> str:
@@ -172,7 +162,7 @@ async def generate_resume(
         },
     }
 
-    llm = get_llm(settings.llm_generator_model).with_structured_output(ResumeData)
+    llm = get_generator_client().with_structured_output(ResumeData)
     messages = [
         SystemMessage(content=RESUME_GENERATOR_SYSTEM.format(position=position)),
         HumanMessage(content=human_content),
@@ -216,7 +206,7 @@ async def evaluate_resume(
         },
     }
 
-    llm = get_llm(settings.llm_evaluator_model).with_structured_output(EvaluationOutput)
+    llm = get_evaluator_client().with_structured_output(EvaluationOutput)
     messages = [
         SystemMessage(content=RESUME_EVALUATOR_SYSTEM.format(position=position)),
         HumanMessage(content=human_content),

@@ -4,7 +4,7 @@ import re
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-GITHUB_REPO_PATTERN = re.compile(r"^https://github\.com/[^/]+/[^/]+$")
+GITHUB_REPO_PATTERN = re.compile(r"^https://github\.com/[a-zA-Z0-9_-]+/[a-zA-Z0-9_.-]+$")
 
 
 class GenerateRequest(BaseModel):
