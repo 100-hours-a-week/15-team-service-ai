@@ -137,20 +137,20 @@ def async_client():
 
 @pytest.fixture
 def mock_vllm_client():
-    """vLLM 클라이언트 mock - 이력서 생성용"""
-    with patch("app.infra.llm.client.get_vllm_client") as mock_get:
-        mock_llm = MagicMock()
-        mock_get.return_value = mock_llm
-        yield mock_llm
+    """이력서 생성용 LLM 클라이언트 mock"""
+    with patch("app.infra.llm.client.get_generator_client") as mock_get:
+        mock_client = MagicMock()
+        mock_get.return_value = mock_client
+        yield mock_client
 
 
 @pytest.fixture
 def mock_gemini_client():
-    """Gemini 클라이언트 mock - 이력서 평가용"""
-    with patch("app.infra.llm.client.get_gemini_client") as mock_get:
-        mock_llm = MagicMock()
-        mock_get.return_value = mock_llm
-        yield mock_llm
+    """이력서 평가용 LLM 클라이언트 mock"""
+    with patch("app.infra.llm.client.get_evaluator_client") as mock_get:
+        mock_client = MagicMock()
+        mock_get.return_value = mock_client
+        yield mock_client
 
 
 @pytest.fixture
