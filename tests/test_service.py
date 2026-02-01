@@ -1,10 +1,16 @@
+from unittest.mock import AsyncMock, patch
+
 import pytest
 
-from app.domain.resume.schemas import CommitInfo, PRInfoExtended
+from app.domain.resume.schemas import PRInfoExtended, RepoContext, ResumeRequest, UserStats
 from app.domain.resume.service import (
     _filter_and_sort_dependencies,
     _format_messages,
+    _parse_dependencies,
     _summarize_file_tree,
+    collect_project_info,
+    collect_repo_contexts,
+    collect_user_stats,
 )
 
 
@@ -125,29 +131,6 @@ class TestSummarizeFileTree:
 class TestFormatMessages:
     """_format_messages 함수 테스트."""
 
-    @pytest.fixture
-    def sample_pr(self):
-        """테스트용 PR 데이터."""
-        return PRInfoExtended(
-            number=1,
-            title="Add feature",
-            body="This PR adds a new feature",
-            author="user1",
-            merged_at="2024-01-01",
-            repo_url="https://github.com/user/repo",
-            commits_count=3,
-            additions=100,
-            deletions=20,
-        )
-
-    @pytest.fixture
-    def sample_commits(self):
-        """테스트용 커밋 데이터."""
-        return [
-            CommitInfo(sha="abc123", message="Fix bug\n\nDetailed description", author="user1"),
-            CommitInfo(sha="def456", message="Add test", author="user2"),
-        ]
-
     def test_formats_pull_requests(self, sample_pr):
         """PR 정보 포맷팅."""
         result = _format_messages([], [sample_pr])
@@ -206,3 +189,197 @@ class TestFormatMessages:
 
         assert len(result) == 1
         assert "PR #1: Quick fix" in result[0]
+
+
+class TestCollectProjectInfo:
+    """collect_project_info 함수 테스트"""
+
+    @pytest.mark.asyncio
+    async def test_success(self, sample_resume_request):
+        """정상 수집"""
+        mock_project_info = {
+            "file_tree": ["src/main.py"],
+            "commits": [],
+            "pulls": [],
+        }
+
+        with (
+            patch(
+                "app.domain.resume.service.get_project_info",
+                new_callable=AsyncMock,
+                return_value=mock_project_info,
+            ),
+            patch(
+                "app.domain.resume.service._parse_dependencies",
+                new_callable=AsyncMock,
+                return_value=["fastapi"],
+            ),
+        ):
+            result = await collect_project_info(sample_resume_request)
+
+        assert len(result) == 1
+        assert result[0]["repo_name"] == "testrepo"
+        assert "fastapi" in result[0]["dependencies"]
+
+    @pytest.mark.asyncio
+    async def test_handles_exception(self, sample_resume_request):
+        """예외 발생 시 빈 정보 반환"""
+        with patch(
+            "app.domain.resume.service.get_project_info",
+            new_callable=AsyncMock,
+            side_effect=Exception("API Error"),
+        ):
+            result = await collect_project_info(sample_resume_request)
+
+        assert len(result) == 1
+        assert result[0]["repo_name"] == "testrepo"
+        assert result[0]["dependencies"] == []
+
+    @pytest.mark.asyncio
+    async def test_removes_duplicate_urls(self):
+        """중복 URL 제거"""
+        request = ResumeRequest(
+            repo_urls=[
+                "https://github.com/user/repo",
+                "https://github.com/user/repo",
+            ],
+            position="백엔드",
+            github_token="token",
+        )
+
+        mock_project_info = {
+            "file_tree": [],
+            "commits": [],
+            "pulls": [],
+        }
+
+        with (
+            patch(
+                "app.domain.resume.service.get_project_info",
+                new_callable=AsyncMock,
+                return_value=mock_project_info,
+            ),
+            patch(
+                "app.domain.resume.service._parse_dependencies",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
+        ):
+            result = await collect_project_info(request)
+
+        assert len(result) == 1
+
+
+class TestCollectRepoContexts:
+    """collect_repo_contexts 함수 테스트"""
+
+    @pytest.mark.asyncio
+    async def test_success(self, sample_resume_request):
+        """정상 수집"""
+        mock_context = {
+            "languages": {"Python": 10000},
+            "description": "Test repo",
+            "topics": ["python"],
+            "readme": "README content",
+        }
+
+        with patch(
+            "app.domain.resume.service.get_repo_context",
+            new_callable=AsyncMock,
+            return_value=mock_context,
+        ):
+            result = await collect_repo_contexts(sample_resume_request)
+
+        assert "testrepo" in result
+        assert result["testrepo"].languages == {"Python": 10000}
+
+    @pytest.mark.asyncio
+    async def test_handles_exception(self, sample_resume_request):
+        """예외 발생 시 빈 컨텍스트 반환"""
+        with patch(
+            "app.domain.resume.service.get_repo_context",
+            new_callable=AsyncMock,
+            side_effect=Exception("API Error"),
+        ):
+            result = await collect_repo_contexts(sample_resume_request)
+
+        assert "testrepo" in result
+        assert result["testrepo"].languages == {}
+
+
+class TestCollectUserStats:
+    """collect_user_stats 함수 테스트"""
+
+    @pytest.mark.asyncio
+    async def test_success(self):
+        """정상 수집"""
+        mock_stats = UserStats(total_commits=100, total_prs=20, total_issues=10)
+
+        with patch(
+            "app.domain.resume.service.get_user_stats",
+            new_callable=AsyncMock,
+            return_value=mock_stats,
+        ):
+            result = await collect_user_stats("testuser", "token")
+
+        assert result is not None
+        assert result.total_commits == 100
+        assert result.total_prs == 20
+
+    @pytest.mark.asyncio
+    async def test_handles_exception(self):
+        """예외 발생 시 None 반환"""
+        with patch(
+            "app.domain.resume.service.get_user_stats",
+            new_callable=AsyncMock,
+            side_effect=Exception("API Error"),
+        ):
+            result = await collect_user_stats("testuser", "token")
+
+        assert result is None
+
+
+class TestParseDependencies:
+    """_parse_dependencies 함수 테스트"""
+
+    @pytest.mark.asyncio
+    async def test_parses_dependency_files(self):
+        """의존성 파일 파싱"""
+        file_tree = ["requirements.txt", "src/main.py"]
+
+        with patch(
+            "app.domain.resume.service.get_files_content",
+            new_callable=AsyncMock,
+            return_value={"requirements.txt": "fastapi==0.100.0\nuvicorn>=0.20.0"},
+        ):
+            result = await _parse_dependencies(
+                "https://github.com/user/repo", file_tree, "token"
+            )
+
+        assert "fastapi" in result
+        assert "uvicorn" in result
+
+    @pytest.mark.asyncio
+    async def test_no_dependency_files(self):
+        """의존성 파일 없음"""
+        file_tree = ["src/main.py", "README.md"]
+
+        result = await _parse_dependencies(
+            "https://github.com/user/repo", file_tree, "token"
+        )
+
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_empty_content(self):
+        """빈 콘텐츠 처리"""
+        file_tree = ["requirements.txt"]
+
+        with patch(
+            "app.domain.resume.service.get_files_content",
+            new_callable=AsyncMock,
+            return_value={"requirements.txt": ""},
+        ):
+            result = await _parse_dependencies(
+                "https://github.com/user/repo", file_tree, "token"
+            )

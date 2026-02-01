@@ -1,6 +1,6 @@
 """LLM 클라이언트 테스트"""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -176,8 +176,8 @@ class TestGenerateResume:
     """generate_resume 함수 테스트"""
 
     @pytest.fixture
-    def sample_project_info(self) -> list[dict]:
-        """테스트용 프로젝트 정보"""
+    def base_project_info(self) -> list[dict]:
+        """테스트용 기본 프로젝트 정보"""
         return [
             {
                 "repo_name": "test-repo",
@@ -187,10 +187,10 @@ class TestGenerateResume:
             }
         ]
 
-    @pytest.mark.asyncio
-    async def test_generate_resume_success(self, sample_project_info):
-        """정상 이력서 생성"""
-        expected_result = ResumeData(
+    @pytest.fixture
+    def expected_resume(self) -> ResumeData:
+        """기대하는 이력서 결과"""
+        return ResumeData(
             projects=[
                 ProjectInfo(
                     name="Test Project",
@@ -201,125 +201,68 @@ class TestGenerateResume:
             ]
         )
 
-        mock_llm = MagicMock()
-        mock_llm.with_structured_output.return_value.ainvoke = AsyncMock(
-            return_value=expected_result
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "feedback,repo_contexts,user_stats,test_id",
+        [
+            (None, None, None, "기본 생성"),
+            ("기술 스택을 더 추가해주세요", None, None, "피드백 포함"),
+            (
+                None,
+                {
+                    "test-repo": RepoContext(
+                        name="test-repo",
+                        languages={"Python": 10000},
+                        description="테스트",
+                        topics=["python"],
+                        readme_summary="README",
+                    )
+                },
+                None,
+                "컨텍스트 포함",
+            ),
+            (
+                None,
+                None,
+                UserStats(total_commits=100, total_prs=20, total_issues=10),
+                "통계 포함",
+            ),
+        ],
+        ids=["basic", "with_feedback", "with_contexts", "with_stats"],
+    )
+    async def test_generate_resume(
+        self,
+        mock_vllm_client,
+        base_project_info,
+        expected_resume,
+        feedback,
+        repo_contexts,
+        user_stats,
+        test_id,
+    ):
+        """이력서 생성 테스트 - 다양한 옵션 조합"""
+        mock_vllm_client.with_structured_output.return_value.ainvoke = AsyncMock(
+            return_value=expected_resume
         )
 
-        with patch("app.infra.llm.client.get_llm", return_value=mock_llm):
-            result = await generate_resume(
-                project_info=sample_project_info,
-                position="백엔드 개발자",
-                repo_urls=["https://github.com/user/test-repo"],
-            )
+        result = await generate_resume(
+            project_info=base_project_info,
+            position="백엔드 개발자",
+            repo_urls=["https://github.com/user/test-repo"],
+            feedback=feedback,
+            repo_contexts=repo_contexts,
+            user_stats=user_stats,
+        )
 
-        assert result == expected_result
+        assert result == expected_resume
         assert len(result.projects) == 1
-        assert result.projects[0].name == "Test Project"
-
-    @pytest.mark.asyncio
-    async def test_generate_resume_with_feedback(self, sample_project_info):
-        """피드백 포함 재시도 생성"""
-        expected_result = ResumeData(
-            projects=[
-                ProjectInfo(
-                    name="Improved Project",
-                    repo_url="https://github.com/user/test-repo",
-                    description="개선된 설명",
-                    tech_stack=["Python", "FastAPI", "PostgreSQL"],
-                )
-            ]
-        )
-
-        mock_llm = MagicMock()
-        mock_llm.with_structured_output.return_value.ainvoke = AsyncMock(
-            return_value=expected_result
-        )
-
-        with patch("app.infra.llm.client.get_llm", return_value=mock_llm):
-            result = await generate_resume(
-                project_info=sample_project_info,
-                position="백엔드 개발자",
-                repo_urls=["https://github.com/user/test-repo"],
-                feedback="기술 스택을 더 추가해주세요",
-            )
-
-        assert result == expected_result
-
-    @pytest.mark.asyncio
-    async def test_generate_resume_with_repo_contexts(self, sample_project_info):
-        """레포지토리 컨텍스트 포함 생성"""
-        repo_contexts = {
-            "test-repo": RepoContext(
-                name="test-repo",
-                languages={"Python": 10000},
-                description="테스트",
-                topics=["python"],
-                readme_summary="README",
-            )
-        }
-        expected_result = ResumeData(
-            projects=[
-                ProjectInfo(
-                    name="Test",
-                    repo_url="https://github.com/user/test-repo",
-                    description="Test",
-                    tech_stack=["Python"],
-                )
-            ]
-        )
-
-        mock_llm = MagicMock()
-        mock_llm.with_structured_output.return_value.ainvoke = AsyncMock(
-            return_value=expected_result
-        )
-
-        with patch("app.infra.llm.client.get_llm", return_value=mock_llm):
-            result = await generate_resume(
-                project_info=sample_project_info,
-                position="백엔드 개발자",
-                repo_urls=["https://github.com/user/test-repo"],
-                repo_contexts=repo_contexts,
-            )
-
-        assert result == expected_result
-
-    @pytest.mark.asyncio
-    async def test_generate_resume_with_user_stats(self, sample_project_info):
-        """사용자 통계 포함 생성"""
-        user_stats = UserStats(total_commits=100, total_prs=20, total_issues=10)
-        expected_result = ResumeData(
-            projects=[
-                ProjectInfo(
-                    name="Test",
-                    repo_url="https://github.com/user/test-repo",
-                    description="Test",
-                    tech_stack=["Python"],
-                )
-            ]
-        )
-
-        mock_llm = MagicMock()
-        mock_llm.with_structured_output.return_value.ainvoke = AsyncMock(
-            return_value=expected_result
-        )
-
-        with patch("app.infra.llm.client.get_llm", return_value=mock_llm):
-            result = await generate_resume(
-                project_info=sample_project_info,
-                position="백엔드 개발자",
-                repo_urls=["https://github.com/user/test-repo"],
-                user_stats=user_stats,
-            )
-
-        assert result == expected_result
 
 
 class TestEvaluateResume:
     """evaluate_resume 함수 테스트"""
 
     @pytest.fixture
-    def sample_resume_data(self) -> ResumeData:
+    def base_resume_data(self) -> ResumeData:
         """테스트용 이력서 데이터"""
         return ResumeData(
             projects=[
@@ -333,76 +276,43 @@ class TestEvaluateResume:
         )
 
     @pytest.mark.asyncio
-    async def test_evaluate_resume_pass(self, sample_resume_data):
-        """평가 통과 결과 파싱"""
-        expected_result = EvaluationOutput(
-            result="pass",
-            violated_rule=None,
-            violated_item=None,
-            feedback="모든 기준을 충족합니다",
+    @pytest.mark.parametrize(
+        "eval_result,violated_rule,violated_item,feedback,session_id",
+        [
+            ("pass", None, None, "모든 기준을 충족합니다", None),
+            ("fail", 2, "description", "설명이 너무 짧습니다", None),
+            ("pass", None, None, "좋습니다", "test-session-123"),
+        ],
+        ids=["pass", "fail", "with_session"],
+    )
+    async def test_evaluate_resume(
+        self,
+        mock_gemini_client,
+        base_resume_data,
+        eval_result,
+        violated_rule,
+        violated_item,
+        feedback,
+        session_id,
+    ):
+        """이력서 평가 테스트 - 다양한 결과"""
+        expected = EvaluationOutput(
+            result=eval_result,
+            violated_rule=violated_rule,
+            violated_item=violated_item,
+            feedback=feedback,
         )
 
-        mock_llm = MagicMock()
-        mock_llm.with_structured_output.return_value.ainvoke = AsyncMock(
-            return_value=expected_result
+        mock_gemini_client.with_structured_output.return_value.ainvoke = AsyncMock(
+            return_value=expected
         )
 
-        with patch("app.infra.llm.client.get_llm", return_value=mock_llm):
-            result = await evaluate_resume(
-                resume_data=sample_resume_data,
-                position="백엔드 개발자",
-            )
-
-        assert result.result == "pass"
-        assert result.violated_rule is None
-        assert result.feedback == "모든 기준을 충족합니다"
-
-    @pytest.mark.asyncio
-    async def test_evaluate_resume_fail(self, sample_resume_data):
-        """평가 실패 결과 및 피드백 파싱"""
-        expected_result = EvaluationOutput(
-            result="fail",
-            violated_rule=2,
-            violated_item="description",
-            feedback="설명이 너무 짧습니다",
+        result = await evaluate_resume(
+            resume_data=base_resume_data,
+            position="백엔드 개발자",
+            session_id=session_id,
         )
 
-        mock_llm = MagicMock()
-        mock_llm.with_structured_output.return_value.ainvoke = AsyncMock(
-            return_value=expected_result
-        )
-
-        with patch("app.infra.llm.client.get_llm", return_value=mock_llm):
-            result = await evaluate_resume(
-                resume_data=sample_resume_data,
-                position="백엔드 개발자",
-            )
-
-        assert result.result == "fail"
-        assert result.violated_rule == 2
-        assert result.violated_item == "description"
-        assert result.feedback == "설명이 너무 짧습니다"
-
-    @pytest.mark.asyncio
-    async def test_evaluate_resume_with_session_id(self, sample_resume_data):
-        """세션 ID 포함 평가"""
-        expected_result = EvaluationOutput(
-            result="pass",
-            violated_rule=None,
-            violated_item=None,
-            feedback="좋습니다",
-        )
-
-        mock_llm = MagicMock()
-        mock_llm.with_structured_output.return_value.ainvoke = AsyncMock(
-            return_value=expected_result
-        )
-
-        with patch("app.infra.llm.client.get_llm", return_value=mock_llm):
-            result = await evaluate_resume(
-                resume_data=sample_resume_data,
-                position="백엔드 개발자",
-                session_id="test-session-123",
-            )
-
-        assert result.result == "pass"
+        assert result.result == eval_result
+        assert result.violated_rule == violated_rule
+        assert result.feedback == feedback

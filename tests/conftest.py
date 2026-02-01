@@ -1,10 +1,15 @@
 """테스트 공통 fixture"""
 
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import httpx
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.domain.resume.schemas import (
+    CommitInfo,
     EvaluationOutput,
+    PRInfoExtended,
     ProjectInfo,
     RepoContext,
     ResumeData,
@@ -128,3 +133,86 @@ def async_client():
     """비동기 HTTP 클라이언트"""
     transport = ASGITransport(app=app)
     return AsyncClient(transport=transport, base_url="http://test")
+
+
+@pytest.fixture
+def mock_vllm_client():
+    """vLLM 클라이언트 mock - 이력서 생성용"""
+    with patch("app.infra.llm.client.get_vllm_client") as mock_get:
+        mock_llm = MagicMock()
+        mock_get.return_value = mock_llm
+        yield mock_llm
+
+
+@pytest.fixture
+def mock_gemini_client():
+    """Gemini 클라이언트 mock - 이력서 평가용"""
+    with patch("app.infra.llm.client.get_gemini_client") as mock_get:
+        mock_llm = MagicMock()
+        mock_get.return_value = mock_llm
+        yield mock_llm
+
+
+@pytest.fixture
+def mock_github_response():
+    """GitHub API 응답 mock 생성"""
+    mock = MagicMock()
+    mock.raise_for_status = MagicMock()
+    return mock
+
+
+@pytest.fixture
+def create_http_error():
+    """HTTPStatusError 생성 helper"""
+
+    def _create(status_code: int, message: str = "Error"):
+        return httpx.HTTPStatusError(
+            message,
+            request=httpx.Request("GET", "https://test.com"),
+            response=httpx.Response(status_code),
+        )
+
+    return _create
+
+
+@pytest.fixture
+def mock_workflow():
+    """LangGraph 워크플로우 mock"""
+    workflow = MagicMock()
+    workflow.ainvoke = AsyncMock()
+    return workflow
+
+
+@pytest.fixture
+def sample_pr() -> PRInfoExtended:
+    """테스트용 PR 데이터"""
+    return PRInfoExtended(
+        number=1,
+        title="Add feature",
+        body="This PR adds a new feature",
+        author="user1",
+        merged_at="2024-01-01",
+        repo_url="https://github.com/user/repo",
+        commits_count=3,
+        additions=100,
+        deletions=20,
+    )
+
+
+@pytest.fixture
+def sample_commits() -> list[CommitInfo]:
+    """테스트용 커밋 리스트"""
+    return [
+        CommitInfo(sha="abc123", message="Fix bug\n\nDetailed description", author="user1"),
+        CommitInfo(sha="def456", message="Add test", author="user2"),
+    ]
+
+
+@pytest.fixture
+def mock_callback_settings():
+    """콜백 설정 mock"""
+    with patch("app.api.v1.resume.settings") as mock:
+        mock.callback_max_retries = 3
+        mock.callback_retry_base_delay = 0.01
+        mock.ai_callback_secret = "secret"
+        yield mock
