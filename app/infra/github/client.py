@@ -446,7 +446,18 @@ async def _graphql_query(query: str, variables: dict, token: str) -> dict:
 
     if "errors" in data:
         error_count = len(data["errors"])
-        logger.warning("GraphQL 에러 발생 count=%d", error_count)
+        for i, error in enumerate(data["errors"], 1):
+            error_message = error.get("message", "알 수 없는 에러")
+            error_type = error.get("type", "UNKNOWN")
+            error_path = error.get("path", [])
+            logger.warning(
+                "GraphQL 에러 [%d/%d] type=%s message=%s path=%s",
+                i,
+                error_count,
+                error_type,
+                error_message,
+                error_path,
+            )
         raise ValueError(f"GraphQL 요청 실패: {error_count}개의 에러 발생")
 
     return data["data"]
@@ -514,8 +525,8 @@ async def get_project_info_graphql(
     token: str,
     author: str | None = None,
     author_name: str | None = None,
-    commits_count: int = 30,
-    prs_count: int = 30,
+    commits_count: int = 50,
+    prs_count: int = 50,
 ) -> dict:
     """GraphQL로 커밋과 PR 목록 조회
 
@@ -730,8 +741,8 @@ async def get_project_info(
     token: str | None = None,
     author: str | None = None,
     author_name: str | None = None,
-    commits_count: int = 30,
-    prs_count: int = 30,
+    commits_count: int = 50,
+    prs_count: int = 50,
 ) -> dict:
     """프로젝트 정보 조회
 

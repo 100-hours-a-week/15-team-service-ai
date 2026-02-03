@@ -141,6 +141,15 @@ async def generate_node(state: ResumeState) -> ResumeState:
         }
 
     except ValueError as e:
+        error_str = str(e)
+        if "POSITION_MISMATCH" in error_str:
+            logger.warning("generate_node 포지션 불일치 error=%s", e)
+            return {
+                **state,
+                "retry_count": retry_count,
+                "error_code": ErrorCode.POSITION_MISMATCH,
+                "error_message": error_str.replace("POSITION_MISMATCH: ", ""),
+            }
         logger.error("generate_node 생성 오류 error=%s", e)
         return {
             **state,

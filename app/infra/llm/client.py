@@ -187,21 +187,43 @@ async def generate_resume(
             output_count,
         )
 
+    MIN_TECH_STACK_COUNT = 3
+    valid_projects = []
+
     for project in result.projects:
         original_count = len(project.tech_stack)
         project.tech_stack = filter_tech_stack_by_position(
             project.tech_stack,
             position,
         )
-        if len(project.tech_stack) < original_count:
+        filtered_count = len(project.tech_stack)
+
+        if filtered_count < original_count:
             logger.debug(
                 "tech_stack 필터링 project=%s original=%d filtered=%d",
                 project.name,
                 original_count,
-                len(project.tech_stack),
+                filtered_count,
             )
 
-    logger.debug("이력서 생성 완료 position=%s", position)
+        if filtered_count < MIN_TECH_STACK_COUNT:
+            logger.warning(
+                "tech_stack 부족으로 프로젝트 제외 project=%s count=%d min=%d",
+                project.name,
+                filtered_count,
+                MIN_TECH_STACK_COUNT,
+            )
+            continue
+
+        valid_projects.append(project)
+
+    if not valid_projects:
+        raise ValueError(
+            f"POSITION_MISMATCH: {position} 포지션에 맞는 기술 스택이 충분한 프로젝트가 없습니다"
+        )
+
+    result.projects = valid_projects
+    logger.debug("이력서 생성 완료 position=%s projects=%d", position, len(valid_projects))
     return result
 
 
