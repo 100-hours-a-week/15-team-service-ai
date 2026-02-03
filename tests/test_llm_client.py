@@ -196,7 +196,7 @@ class TestGenerateResume:
                     name="Test Project",
                     repo_url="https://github.com/user/test-repo",
                     description="테스트 프로젝트",
-                    tech_stack=["Python", "FastAPI"],
+                    tech_stack=["Python", "FastAPI", "PostgreSQL"],
                 )
             ]
         )
@@ -264,7 +264,7 @@ class TestGenerateResume:
                     name="Test",
                     repo_url="https://github.com/user/test-repo",
                     description="Test",
-                    tech_stack=["Python"],
+                    tech_stack=["Python", "FastAPI", "PostgreSQL"],
                 )
             ]
         )
@@ -294,7 +294,7 @@ class TestGenerateResume:
                     name="Test",
                     repo_url="https://github.com/user/test-repo",
                     description="Test",
-                    tech_stack=["Python"],
+                    tech_stack=["Python", "FastAPI", "PostgreSQL"],
                 )
             ]
         )
