@@ -3,11 +3,12 @@ import uuid
 from asyncio import Semaphore, create_task
 
 import httpx
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 
 from app.api.v1.schemas import GenerateRequest, GenerateResponse
 from app.core.config import settings
 from app.core.exceptions import ErrorCode
+from app.core.limiter import limiter
 from app.core.logging import get_logger
 from app.domain.resume.agent import run_resume_agent
 from app.domain.resume.schemas import ResumeData, ResumeRequest
@@ -129,15 +130,23 @@ def _build_callback_payload(
 
 
 @router.post("/generate", response_model=GenerateResponse)
-async def generate_resume(request: GenerateRequest) -> GenerateResponse:
+@limiter.limit("5/minute")
+async def generate_resume(
+    request: Request,
+    body: GenerateRequest,
+) -> GenerateResponse:
+    """이력서 생성 요청
+
+    분당 5회 요청 제한이 적용됩니다
+    """
     job_id = str(uuid.uuid4())
     callback_url = settings.backend_callback_url
 
     resume_request = ResumeRequest(
-        repo_urls=request.repo_urls,
-        position=request.position,
-        company=request.company,
-        github_token=request.github_token,
+        repo_urls=body.repo_urls,
+        position=body.position,
+        company=body.company,
+        github_token=body.github_token,
         callback_url=callback_url,
     )
 

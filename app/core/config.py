@@ -7,12 +7,11 @@ class Settings(BaseSettings):
 
     environment: str = "development"
 
-    # LLM 설정
-    llm_generator_model: str = "gpt-5.2"
-    llm_evaluator_model: str = "gpt-4o"
-
-    # OpenAI
-    openai_api_key: str = ""
+    # Gemini 설정
+    gemini_api_key: str = ""
+    gemini_generator_model: str = "gemini-2.0-flash"
+    gemini_evaluator_model: str = "gemini-2.0-flash"
+    gemini_timeout: float = 120.0
 
     # GitHub
     github_token: str = ""
@@ -23,7 +22,6 @@ class Settings(BaseSettings):
 
     # Timeout 설정
     github_timeout: float = 60.0
-    openai_timeout: float = 120.0
     callback_timeout: float = 120.0
     workflow_timeout: float = 300.0
 
@@ -50,7 +48,11 @@ class Settings(BaseSettings):
     langfuse_secret_key: str = ""
     langfuse_base_url: str = "https://cloud.langfuse.com"
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
     @property
     def is_production(self) -> bool:
@@ -59,8 +61,8 @@ class Settings(BaseSettings):
     def validate_for_production(self) -> list[str]:
         """프로덕션 환경에서 필수 설정 검증 후 누락된 항목 반환"""
         errors = []
-        if not self.openai_api_key:
-            errors.append("OPENAI_API_KEY")
+        if not self.gemini_api_key:
+            errors.append("GEMINI_API_KEY")
         if not self.backend_callback_url:
             errors.append("BACKEND_CALLBACK_URL")
         return errors
@@ -70,8 +72,8 @@ class Settings(BaseSettings):
         """프로덕션 환경에서 필수 설정 검증"""
         if self.is_production:
             missing = []
-            if not self.openai_api_key:
-                missing.append("OPENAI_API_KEY")
+            if not self.gemini_api_key:
+                missing.append("GEMINI_API_KEY")
             if not self.backend_callback_url:
                 missing.append("BACKEND_CALLBACK_URL")
 
