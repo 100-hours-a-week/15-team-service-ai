@@ -59,6 +59,35 @@ async def close_client():
     await _client.aclose()
 
 
+async def get_authenticated_user(token: str) -> tuple[str | None, str | None]:
+    """토큰으로 인증된 사용자의 username과 name 조회
+
+    GitHub API: GET /user 엔드포인트 사용
+
+    Args:
+        token: GitHub OAuth 토큰
+
+    Returns:
+        username, name 튜플. 실패 시 None, None
+    """
+    url = f"{GITHUB_API_BASE}/user"
+
+    try:
+        response = await _client.get(url, headers=_get_headers(token))
+        response.raise_for_status()
+        data = response.json()
+        username = data.get("login")
+        name = data.get("name")
+        logger.info("인증된 사용자 조회 완료 username=%s name=%s", username, name)
+        return username, name
+    except httpx.HTTPStatusError as e:
+        logger.warning("인증된 사용자 조회 실패 status=%d", e.response.status_code)
+        return None, None
+    except Exception as e:
+        logger.warning("인증된 사용자 조회 실패 error=%s", type(e).__name__)
+        return None, None
+
+
 def parse_repo_url(repo_url: str) -> tuple[str, str]:
     """GitHub URL에서 owner와 repo 추출
 
@@ -111,7 +140,7 @@ def _sanitize_file_path(path: str) -> str:
 async def get_commits(
     repo_url: str,
     token: str | None = None,
-    author: str | None = None,
+    author_name: str | None = None,
     per_page: int = 100,
 ) -> list[CommitInfo]:
     """레포지토리 커밋 목록 조회
@@ -119,7 +148,7 @@ async def get_commits(
     Args:
         repo_url: GitHub 레포지토리 URL
         token: GitHub OAuth 토큰
-        author: GitHub 유저네임
+        author_name: Git author name, 커밋 필터링에 사용
         per_page: 가져올 커밋 개수
 
     Returns:
@@ -129,22 +158,25 @@ async def get_commits(
     url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/commits"
 
     params = {"per_page": min(per_page, 100)}
-    if author:
-        params["author"] = author
 
     response = await _client.get(url, headers=_get_headers(token), params=params)
     response.raise_for_status()
     data = response.json()
 
-    commits = [
-        CommitInfo(
-            sha=commit["sha"],
-            message=commit["commit"]["message"],
-            author=commit["commit"]["author"]["name"],
+    commits = []
+    for commit in data:
+        if len(commit.get("parents", [])) >= 2:
+            continue
+        commit_author = commit["commit"]["author"]["name"]
+        if author_name and author_name.lower() not in commit_author.lower():
+            continue
+        commits.append(
+            CommitInfo(
+                sha=commit["sha"],
+                message=commit["commit"]["message"],
+                author=commit_author,
+            )
         )
-        for commit in data
-        if len(commit.get("parents", [])) < 2
-    ]
 
     logger.info("커밋 조회 완료 repo=%s/%s count=%d", owner, repo, len(commits))
     return commits
@@ -481,6 +513,7 @@ async def get_project_info_graphql(
     repo_url: str,
     token: str,
     author: str | None = None,
+    author_name: str | None = None,
     commits_count: int = 30,
     prs_count: int = 30,
 ) -> dict:
@@ -489,7 +522,8 @@ async def get_project_info_graphql(
     Args:
         repo_url: GitHub 레포지토리 URL
         token: GitHub OAuth 토큰
-        author: GitHub 유저네임
+        author: GitHub 유저네임, PR 필터링에 사용
+        author_name: Git author name, 커밋 필터링에 사용
         commits_count: 가져올 커밋 개수
         prs_count: 가져올 PR 개수
 
@@ -551,11 +585,14 @@ async def get_project_info_graphql(
         history = branch_ref["target"].get("history", {})
         for node in history.get("nodes", []):
             if node.get("parents", {}).get("totalCount", 0) < 2:
+                commit_author = node["author"]["name"] if node.get("author") else "Unknown"
+                if author_name and author_name.lower() not in commit_author.lower():
+                    continue
                 commits.append(
                     CommitInfo(
                         sha=node["oid"],
                         message=node["message"],
-                        author=node["author"]["name"] if node.get("author") else "Unknown",
+                        author=commit_author,
                     )
                 )
 
@@ -692,6 +729,7 @@ async def get_project_info(
     repo_url: str,
     token: str | None = None,
     author: str | None = None,
+    author_name: str | None = None,
     commits_count: int = 30,
     prs_count: int = 30,
 ) -> dict:
@@ -700,7 +738,8 @@ async def get_project_info(
     Args:
         repo_url: GitHub 레포지토리 URL
         token: GitHub OAuth 토큰
-        author: GitHub 유저네임
+        author: GitHub 유저네임, PR 필터링에 사용
+        author_name: Git author name, 커밋 필터링에 사용
         commits_count: 가져올 커밋 개수
         prs_count: 가져올 PR 개수
 
@@ -712,7 +751,7 @@ async def get_project_info(
     if token:
         try:
             graphql_data = await get_project_info_graphql(
-                repo_url, token, author, commits_count, prs_count
+                repo_url, token, author, author_name, commits_count, prs_count
             )
             return {
                 "file_tree": file_tree,
@@ -722,7 +761,7 @@ async def get_project_info(
         except Exception as e:
             logger.warning("GraphQL 프로젝트 정보 조회 실패, REST 폴백: %s", type(e).__name__)
 
-    commits = await get_commits(repo_url, token, author, commits_count)
+    commits = await get_commits(repo_url, token, author_name, commits_count)
     pulls = await get_pulls_extended(repo_url, token, author, prs_count)
 
     return {

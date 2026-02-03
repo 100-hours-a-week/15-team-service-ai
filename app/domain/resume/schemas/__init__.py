@@ -4,6 +4,7 @@ from app.domain.resume.schemas.base import (
     ResumeData,
     ResumeRequest,
     ResumeState,
+    SkippedRepo,
 )
 from app.domain.resume.schemas.github import (
     CommitDetail,
@@ -32,6 +33,7 @@ __all__ = [
     "ResumeData",
     "EvaluationOutput",
     "ResumeState",
+    "SkippedRepo",
     "CollectProjectInfoInput",
     "CollectRepoContextInput",
     "GenerateResumeInput",

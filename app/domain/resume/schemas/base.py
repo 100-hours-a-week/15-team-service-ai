@@ -15,6 +15,13 @@ class ResumeRequest(BaseModel):
     callback_url: str | None = None
 
 
+class SkippedRepo(BaseModel):
+    """스킵된 레포지토리 정보"""
+
+    name: str
+    reason: Literal["empty", "no_contribution", "error"]
+
+
 class ProjectInfo(BaseModel):
     """프로젝트 정보"""
 
