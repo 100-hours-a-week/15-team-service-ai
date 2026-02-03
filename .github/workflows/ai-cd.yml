@@ -82,7 +82,7 @@ jobs:
               exit 1
             }
 
-            sleep 5
+            sleep 20
             
             echo "[6/6] health check"
             elapsed=0
