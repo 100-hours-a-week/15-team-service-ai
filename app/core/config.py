@@ -9,8 +9,8 @@ class Settings(BaseSettings):
 
     # Gemini 설정
     gemini_api_key: str = ""
-    gemini_generator_model: str = "gemini-2.0-flash"
-    gemini_evaluator_model: str = "gemini-2.0-flash"
+    gemini_generator_model: str
+    gemini_evaluator_model: str
     gemini_timeout: float = 120.0
 
     # GitHub

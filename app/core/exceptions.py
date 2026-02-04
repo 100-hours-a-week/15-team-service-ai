@@ -106,7 +106,7 @@ def register_exception_handlers(app):
 
     @app.exception_handler(Exception)
     async def general_exception_handler(request: Request, exc: Exception):
-        logger.error("Unhandled exception: %s", exc, exc_info=True)
+        logger.error("Unhandled exception", error=str(exc), exc_info=True)
         return JSONResponse(
             status_code=500,
             content={

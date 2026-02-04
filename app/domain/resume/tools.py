@@ -37,7 +37,7 @@ async def collect_project_info(
     Gathers file structure, dependencies, and PR/commit messages.
     This replaces the old diff-based collection approach.
     """
-    logger.info("Tool: collect_project_info repo_count=%d", len(repo_urls))
+    logger.info("Tool: collect_project_info", repo_count=len(repo_urls))
 
     request = ResumeRequest(
         repo_urls=repo_urls,
@@ -62,7 +62,7 @@ async def collect_repo_context(
     Gathers languages, description, topics, and README summary for each repository.
     This context helps generate more accurate resumes.
     """
-    logger.info("Tool: collect_repo_context repo_count=%d", len(repo_urls))
+    logger.info("Tool: collect_repo_context", repo_count=len(repo_urls))
 
     request = ResumeRequest(
         repo_urls=repo_urls,
@@ -92,7 +92,7 @@ async def generate_resume(
     Uses file structure, dependencies, and PR/commit messages to understand
     what technologies were used and what was implemented.
     """
-    logger.info("Tool: generate_resume position=%s projects=%d", position, len(project_info))
+    logger.info("Tool: generate_resume", position=position, projects=len(project_info))
 
     ctx_objects = None
     if repo_contexts:
@@ -126,7 +126,7 @@ async def evaluate_resume(
     - result: "pass" or "fail"
     - feedback: Explanation of issues
     """
-    logger.info("Tool: evaluate_resume position=%s", position)
+    logger.info("Tool: evaluate_resume", position=position)
 
     resume = ResumeData(**resume_data)
     evaluation = await evaluate_resume_llm(

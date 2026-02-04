@@ -10,6 +10,7 @@ from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
 from app.core.limiter import limiter
 from app.core.logging import setup_logging
+from app.core.middleware import RequestLoggingMiddleware
 from app.infra.github.client import close_client as close_github_client
 
 setup_logging()
@@ -39,6 +40,7 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
+app.add_middleware(RequestLoggingMiddleware)
 
 register_exception_handlers(app)
 app.include_router(api_router)

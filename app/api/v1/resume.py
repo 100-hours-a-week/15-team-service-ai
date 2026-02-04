@@ -7,6 +7,7 @@ from fastapi import APIRouter, Request
 
 from app.api.v1.schemas import GenerateRequest, GenerateResponse
 from app.core.config import settings
+from app.core.context import set_job_id
 from app.core.exceptions import ErrorCode
 from app.core.limiter import limiter
 from app.core.logging import get_logger
@@ -37,38 +38,31 @@ async def _send_callback_with_retry(
 
             if 200 <= response.status_code < 300:
                 logger.info(
-                    "콜백 전송 성공 job_id=%s status_code=%d attempt=%d",
-                    job_id,
-                    response.status_code,
-                    attempt + 1,
+                    "콜백 전송 성공",
+                    status_code=response.status_code,
+                    attempt=attempt + 1,
                 )
                 return True
 
             logger.warning(
-                "콜백 응답 오류 job_id=%s status_code=%d attempt=%d",
-                job_id,
-                response.status_code,
-                attempt + 1,
+                "콜백 응답 오류",
+                status_code=response.status_code,
+                attempt=attempt + 1,
             )
 
         except httpx.RequestError as e:
             logger.warning(
-                "콜백 요청 실패 job_id=%s error=%s attempt=%d",
-                job_id,
-                type(e).__name__,
-                attempt + 1,
+                "콜백 요청 실패",
+                error=type(e).__name__,
+                attempt=attempt + 1,
             )
 
         if attempt < max_retries - 1:
             delay = base_delay * (2**attempt)
-            logger.info("콜백 재시도 대기 job_id=%s delay=%.1f초", job_id, delay)
+            logger.info("콜백 재시도 대기", delay_seconds=delay)
             await asyncio.sleep(delay)
 
-    logger.error(
-        "콜백 전송 최종 실패 job_id=%s max_retries=%d",
-        job_id,
-        max_retries,
-    )
+    logger.error("콜백 전송 최종 실패", max_retries=max_retries)
     return False
 
 
@@ -78,8 +72,9 @@ async def _run_agent_and_callback(
     callback_url: str,
 ) -> None:
     """에이전트 실행 후 콜백 전송"""
+    set_job_id(job_id)
     async with _job_semaphore:
-        logger.info("작업 시작 job_id=%s 동시작업제한=%d", job_id, MAX_CONCURRENT_JOBS)
+        logger.info("작업 시작", concurrent_limit=MAX_CONCURRENT_JOBS)
         try:
             resume_data, error_message = await run_resume_agent(
                 request=request,
@@ -87,13 +82,13 @@ async def _run_agent_and_callback(
             )
 
             payload = _build_callback_payload(job_id, resume_data, error_message)
-            logger.info("콜백 전송 시작 job_id=%s", job_id)
+            logger.info("콜백 전송 시작")
 
             async with httpx.AsyncClient(timeout=settings.callback_timeout) as client:
                 await _send_callback_with_retry(client, callback_url, payload, job_id)
 
         except Exception as e:
-            logger.error("작업 처리 실패 job_id=%s error=%s", job_id, e)
+            logger.error("작업 처리 실패", error=str(e))
 
 
 def _build_callback_payload(

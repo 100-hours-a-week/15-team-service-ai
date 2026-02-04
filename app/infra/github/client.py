@@ -7,9 +7,7 @@ import httpx
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.domain.resume.schemas import (
-    CommitDetail,
     CommitInfo,
-    PRInfo,
     PRInfoExtended,
     UserStats,
 )
@@ -68,7 +66,7 @@ async def get_authenticated_user(token: str) -> tuple[str | None, str | None]:
         token: GitHub OAuth 토큰
 
     Returns:
-        username, name 튜플. 실패 시 None, None
+        username, name 튜플, 실패 시 None, None
     """
     url = f"{GITHUB_API_BASE}/user"
 
@@ -78,13 +76,13 @@ async def get_authenticated_user(token: str) -> tuple[str | None, str | None]:
         data = response.json()
         username = data.get("login")
         name = data.get("name")
-        logger.info("인증된 사용자 조회 완료 username=%s name=%s", username, name)
+        logger.info("인증된 사용자 조회 완료", username=username, name=name)
         return username, name
     except httpx.HTTPStatusError as e:
-        logger.warning("인증된 사용자 조회 실패 status=%d", e.response.status_code)
+        logger.warning("인증된 사용자 조회 실패", status=e.response.status_code)
         return None, None
     except Exception as e:
-        logger.warning("인증된 사용자 조회 실패 error=%s", type(e).__name__)
+        logger.warning("인증된 사용자 조회 실패", error=type(e).__name__)
         return None, None
 
 
@@ -178,107 +176,8 @@ async def get_commits(
             )
         )
 
-    logger.info("커밋 조회 완료 repo=%s/%s count=%d", owner, repo, len(commits))
+    logger.info("커밋 조회 완료", repo=f"{owner}/{repo}", count=len(commits))
     return commits
-
-
-async def get_commit_detail(repo_url: str, sha: str, token: str | None = None) -> CommitDetail:
-    """개별 커밋 상세 정보 조회
-
-    Args:
-        repo_url: GitHub 레포지토리 URL
-        sha: 커밋 SHA
-        token: GitHub OAuth 토큰
-
-    Returns:
-        커밋 상세 정보
-    """
-    owner, repo = parse_repo_url(repo_url)
-    url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/commits/{sha}"
-
-    response = await _client.get(url, headers=_get_headers(token))
-    response.raise_for_status()
-    data = response.json()
-
-    logger.info("커밋 상세 조회 완료 repo=%s/%s sha=%s", owner, repo, sha[:7])
-    return CommitDetail(
-        sha=data["sha"],
-        message=data["commit"]["message"],
-        author=data["commit"]["author"]["name"],
-        files=data.get("files", []),
-    )
-
-
-async def get_pulls(
-    repo_url: str,
-    token: str | None = None,
-    author: str | None = None,
-    per_page: int = 30,
-) -> list[PRInfo]:
-    """레포지토리 Merged PR 목록 조회
-
-    Args:
-        repo_url: GitHub 레포지토리 URL
-        token: GitHub OAuth 토큰
-        author: GitHub 유저네임
-        per_page: 가져올 PR 개수
-
-    Returns:
-        Merged PR 목록
-    """
-    owner, repo = parse_repo_url(repo_url)
-    url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/pulls"
-
-    params = {"state": "closed", "per_page": min(per_page, 100)}
-
-    response = await _client.get(url, headers=_get_headers(token), params=params)
-    response.raise_for_status()
-    data = response.json()
-
-    prs = []
-    for pr in data:
-        if pr.get("merged_at") is None:
-            continue
-        if author and pr["user"]["login"].lower() != author.lower():
-            continue
-        prs.append(
-            PRInfo(
-                number=pr["number"],
-                title=pr["title"],
-                body=pr.get("body"),
-                author=pr["user"]["login"],
-                merged_at=pr["merged_at"],
-                repo_url=repo_url,
-            )
-        )
-
-    logger.info("PR 조회 완료 repo=%s/%s count=%d", owner, repo, len(prs))
-    return prs
-
-
-async def get_pull_files(
-    repo_url: str,
-    pull_number: int,
-    token: str | None = None,
-) -> list[dict]:
-    """PR에서 변경된 파일 목록 조회
-
-    Args:
-        repo_url: GitHub 레포지토리 URL
-        pull_number: PR 번호
-        token: GitHub OAuth 토큰
-
-    Returns:
-        변경된 파일 목록
-    """
-    owner, repo = parse_repo_url(repo_url)
-    url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/pulls/{pull_number}/files"
-
-    response = await _client.get(url, headers=_get_headers(token))
-    response.raise_for_status()
-
-    logger.info("PR 파일 조회 완료 repo=%s/%s pr=%d", owner, repo, pull_number)
-    return response.json()
 
 
 async def get_repo_languages(repo_url: str, token: str | None = None) -> dict[str, int]:
@@ -297,7 +196,7 @@ async def get_repo_languages(repo_url: str, token: str | None = None) -> dict[st
     response = await _client.get(url, headers=_get_headers(token))
     response.raise_for_status()
 
-    logger.info("언어 조회 완료 repo=%s/%s", owner, repo)
+    logger.info("언어 조회 완료", repo=f"{owner}/{repo}")
     return response.json()
 
 
@@ -318,7 +217,7 @@ async def get_repo_info(repo_url: str, token: str | None = None) -> dict:
     response.raise_for_status()
     data = response.json()
 
-    logger.info("레포 정보 조회 완료 repo=%s/%s", owner, repo)
+    logger.info("레포 정보 조회 완료", repo=f"{owner}/{repo}")
     return {
         "description": data.get("description"),
         "topics": data.get("topics", []),
@@ -344,11 +243,11 @@ async def get_repo_readme(repo_url: str, token: str | None = None) -> str | None
         data = response.json()
 
         content = base64.b64decode(data["content"]).decode("utf-8")
-        logger.info("README 조회 완료 repo=%s/%s", owner, repo)
+        logger.info("README 조회 완료", repo=f"{owner}/{repo}")
         return content[: settings.readme_max_length_github]
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 404:
-            logger.info("README 없음 repo=%s/%s", owner, repo)
+            logger.info("README 없음", repo=f"{owner}/{repo}")
             return None
         raise
 
@@ -376,7 +275,7 @@ async def get_repo_tree(repo_url: str, token: str | None = None) -> list[str]:
     data = response.json()
 
     files = [item["path"] for item in data.get("tree", []) if item["type"] == "blob"]
-    logger.info("파일 트리 조회 완료 repo=%s/%s files=%d", owner, repo, len(files))
+    logger.info("파일 트리 조회 완료", repo=f"{owner}/{repo}", files=len(files))
     return files
 
 
@@ -403,18 +302,16 @@ async def get_file_content(repo_url: str, path: str, token: str | None = None) -
             return None
 
         content = base64.b64decode(data["content"]).decode("utf-8")
-        logger.info("파일 조회 완료 repo=%s/%s path=%s", owner, repo, path)
+        logger.info("파일 조회 완료", repo=f"{owner}/{repo}", path=path)
         return content
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 404:
-            logger.info("파일 없음 repo=%s/%s path=%s", owner, repo, path)
+            logger.info("파일 없음", repo=f"{owner}/{repo}", path=path)
             return None
-        logger.warning(
-            "파일 조회 실패 repo=%s/%s path=%s error=%s", owner, repo, path, type(e).__name__
-        )
+        logger.warning("파일 조회 실패", repo=f"{owner}/{repo}", path=path, error=type(e).__name__)
         return None
     except UnicodeDecodeError:
-        logger.info("바이너리 파일 스킵 repo=%s/%s path=%s", owner, repo, path)
+        logger.info("바이너리 파일 스킵", repo=f"{owner}/{repo}", path=path)
         return None
 
 
@@ -451,12 +348,11 @@ async def _graphql_query(query: str, variables: dict, token: str) -> dict:
             error_type = error.get("type", "UNKNOWN")
             error_path = error.get("path", [])
             logger.warning(
-                "GraphQL 에러 [%d/%d] type=%s message=%s path=%s",
-                i,
-                error_count,
-                error_type,
-                error_message,
-                error_path,
+                "GraphQL 에러",
+                index=f"{i}/{error_count}",
+                type=error_type,
+                message=error_message,
+                path=error_path,
             )
         raise ValueError(f"GraphQL 요청 실패: {error_count}개의 에러 발생")
 
@@ -511,7 +407,7 @@ async def get_repo_context_graphql(repo_url: str, token: str) -> dict:
         else None
     )
 
-    logger.info("GraphQL 컨텍스트 조회 완료 repo=%s/%s", owner, repo)
+    logger.info("GraphQL 컨텍스트 조회 완료", repo=f"{owner}/{repo}")
     return {
         "languages": languages,
         "description": repository.get("description"),
@@ -629,11 +525,10 @@ async def get_project_info_graphql(
         )
 
     logger.info(
-        "GraphQL 프로젝트 정보 조회 완료 repo=%s/%s commits=%d prs=%d",
-        owner,
-        repo,
-        len(commits),
-        len(pulls),
+        "GraphQL 프로젝트 정보 조회 완료",
+        repo=f"{owner}/{repo}",
+        commits=len(commits),
+        prs=len(pulls),
     )
     return {
         "commits": commits,
@@ -686,7 +581,7 @@ async def get_files_content_graphql(
         else:
             result[path] = None
 
-    logger.info("GraphQL 파일 조회 완료 repo=%s/%s files=%d", owner, repo, len(paths))
+    logger.info("GraphQL 파일 조회 완료", repo=f"{owner}/{repo}", files=len(paths))
     return result
 
 
@@ -723,9 +618,9 @@ async def get_files_content(
             paths_to_fetch = [p for p, content in graphql_result.items() if content is None]
 
             if paths_to_fetch:
-                logger.info("GraphQL 부분 실패, REST 재시도 count=%d", len(paths_to_fetch))
+                logger.info("GraphQL 부분 실패, REST 재시도", count=len(paths_to_fetch))
         except Exception as e:
-            logger.warning("GraphQL 파일 조회 실패, REST 폴백: %s", type(e).__name__)
+            logger.warning("GraphQL 파일 조회 실패, REST 폴백", error=type(e).__name__)
 
     if paths_to_fetch:
         tasks = [fetch_with_limit(path) for path in paths_to_fetch]
@@ -770,7 +665,7 @@ async def get_project_info(
                 "pulls": graphql_data["pulls"],
             }
         except Exception as e:
-            logger.warning("GraphQL 프로젝트 정보 조회 실패, REST 폴백: %s", type(e).__name__)
+            logger.warning("GraphQL 프로젝트 정보 조회 실패, REST 폴백", error=type(e).__name__)
 
     commits = await get_commits(repo_url, token, author_name, commits_count)
     pulls = await get_pulls_extended(repo_url, token, author, prs_count)
@@ -796,7 +691,7 @@ async def get_repo_context(repo_url: str, token: str | None = None) -> dict:
         try:
             return await get_repo_context_graphql(repo_url, token)
         except Exception as e:
-            logger.warning("GraphQL 컨텍스트 조회 실패, REST 폴백: %s", type(e).__name__)
+            logger.warning("GraphQL 컨텍스트 조회 실패, REST 폴백", error=type(e).__name__)
 
     languages = await get_repo_languages(repo_url, token)
     info = await get_repo_info(repo_url, token)
@@ -835,7 +730,7 @@ async def get_user_stats(username: str, token: str) -> UserStats:
     user = data["user"]
     contrib = user["contributionsCollection"]
 
-    logger.info("사용자 통계 조회 완료 username=%s", username)
+    logger.info("사용자 통계 조회 완료", username=username)
     return UserStats(
         total_commits=contrib["totalCommitContributions"],
         total_prs=contrib["totalPullRequestContributions"],
@@ -898,7 +793,7 @@ async def get_pulls_extended(
         for pr, detail in zip(merged_prs, details, strict=True)
     ]
 
-    logger.info("PR 확장 조회 완료 repo=%s/%s count=%d", owner, repo, len(prs))
+    logger.info("PR 확장 조회 완료", repo=f"{owner}/{repo}", count=len(prs))
     return prs
 
 

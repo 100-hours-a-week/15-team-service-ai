@@ -122,7 +122,7 @@ async def generate_resume(
     session_id: str | None = None,
 ) -> ResumeData:
     """프로젝트 정보 기반 이력서 생성"""
-    logger.debug("이력서 생성 요청 position=%s projects=%d", position, len(project_info))
+    logger.debug("이력서 생성 요청", position=position, projects=len(project_info))
 
     project_info_text = format_project_info(project_info)
     repo_urls_text = "\n".join(repo_urls)
@@ -181,14 +181,7 @@ async def generate_resume(
 
     output_count = len(result.projects) if result.projects else 0
     if output_count < project_count:
-        logger.warning(
-            "프로젝트 누락 input=%d output=%d",
-            project_count,
-            output_count,
-        )
-
-    MIN_TECH_STACK_COUNT = 3
-    valid_projects = []
+        logger.warning("프로젝트 누락", input=project_count, output=output_count)
 
     for project in result.projects:
         original_count = len(project.tech_stack)
@@ -200,30 +193,13 @@ async def generate_resume(
 
         if filtered_count < original_count:
             logger.debug(
-                "tech_stack 필터링 project=%s original=%d filtered=%d",
-                project.name,
-                original_count,
-                filtered_count,
+                "tech_stack 필터링",
+                project=project.name,
+                original=original_count,
+                filtered=filtered_count,
             )
 
-        if filtered_count < MIN_TECH_STACK_COUNT:
-            logger.warning(
-                "tech_stack 부족으로 프로젝트 제외 project=%s count=%d min=%d",
-                project.name,
-                filtered_count,
-                MIN_TECH_STACK_COUNT,
-            )
-            continue
-
-        valid_projects.append(project)
-
-    if not valid_projects:
-        raise ValueError(
-            f"POSITION_MISMATCH: {position} 포지션에 맞는 기술 스택이 충분한 프로젝트가 없습니다"
-        )
-
-    result.projects = valid_projects
-    logger.debug("이력서 생성 완료 position=%s projects=%d", position, len(valid_projects))
+    logger.debug("이력서 생성 완료", position=position, projects=len(result.projects))
     return result
 
 
@@ -231,7 +207,7 @@ async def evaluate_resume(
     resume_data: ResumeData, position: str, session_id: str | None = None
 ) -> EvaluationOutput:
     """이력서 품질 평가"""
-    logger.debug("이력서 평가 요청 position=%s", position)
+    logger.debug("이력서 평가 요청", position=position)
 
     resume_json = resume_data.model_dump_json(indent=2)
 

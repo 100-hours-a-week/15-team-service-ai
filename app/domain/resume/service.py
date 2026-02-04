@@ -9,6 +9,7 @@ from app.domain.resume.constants import (
 from app.domain.resume.parsers import DEPENDENCY_FILE_NAMES, parse_dependency_file
 from app.domain.resume.schemas import RepoContext, ResumeRequest, UserStats
 from app.infra.github.client import (
+    get_authenticated_user,
     get_files_content,
     get_project_info,
     get_repo_context,
@@ -139,11 +140,14 @@ async def collect_project_info(request: ResumeRequest) -> list[dict]:
     """
     unique_urls = list(dict.fromkeys(request.repo_urls))
     if len(unique_urls) < len(request.repo_urls):
-        logger.warning(
-            "중복 URL 제거 original=%d unique=%d",
-            len(request.repo_urls),
-            len(unique_urls),
-        )
+        logger.warning("중복 URL 제거", original=len(request.repo_urls), unique=len(unique_urls))
+
+    username = None
+    author_name = None
+    if request.github_token:
+        username, author_name = await get_authenticated_user(request.github_token)
+        if username:
+            logger.info("인증된 사용자로 필터링", username=username, name=author_name)
 
     results = []
 
@@ -151,13 +155,18 @@ async def collect_project_info(request: ResumeRequest) -> list[dict]:
         _, repo_name = parse_repo_url(repo_url)
 
         try:
-            project_info = await get_project_info(repo_url, request.github_token)
+            project_info = await get_project_info(
+                repo_url,
+                request.github_token,
+                author=username,
+                author_name=author_name,
+            )
             file_tree = project_info["file_tree"]
             commits = project_info["commits"]
             pulls = project_info["pulls"]
 
             if _is_empty_repository(file_tree):
-                logger.info("빈 레포지토리 스킵 repo=%s", repo_name)
+                logger.info("빈 레포지토리 스킵", repo=repo_name)
                 continue
 
             dependencies = await _parse_dependencies(repo_url, file_tree, request.github_token)
@@ -174,17 +183,17 @@ async def collect_project_info(request: ResumeRequest) -> list[dict]:
             )
 
             logger.info(
-                "프로젝트 정보 수집 완료 repo=%s files=%d deps=%d messages=%d",
-                repo_name,
-                len(file_tree),
-                len(dependencies),
-                len(messages),
+                "프로젝트 정보 수집 완료",
+                repo=repo_name,
+                files=len(file_tree),
+                deps=len(dependencies),
+                messages=len(messages),
             )
 
         except Exception as e:
-            logger.error("프로젝트 정보 수집 실패 repo=%s error=%s", repo_name, e)
+            logger.error("프로젝트 정보 수집 실패", repo=repo_name, error=str(e))
 
-    logger.info("전체 프로젝트 정보 수집 완료 valid=%d", len(results))
+    logger.info("전체 프로젝트 정보 수집 완료", valid=len(results))
     return results
 
 
@@ -353,7 +362,7 @@ async def collect_repo_contexts(request: ResumeRequest) -> dict[str, RepoContext
                 readme_summary=context["readme"],
             )
         except Exception as e:
-            logger.warning("컨텍스트 수집 실패 repo=%s error=%s", repo_name, e)
+            logger.warning("컨텍스트 수집 실패", repo=repo_name, error=str(e))
             contexts[repo_name] = RepoContext(
                 name=repo_name,
                 languages={},
@@ -362,7 +371,7 @@ async def collect_repo_contexts(request: ResumeRequest) -> dict[str, RepoContext
                 readme_summary=None,
             )
 
-    logger.info("컨텍스트 수집 완료 repos=%d", len(contexts))
+    logger.info("컨텍스트 수집 완료", repos=len(contexts))
     return contexts
 
 
@@ -377,21 +386,21 @@ async def collect_user_stats(username: str, token: str | None) -> UserStats | No
         사용자 통계 정보, 토큰 없거나 실패하면 None
     """
     if not token:
-        logger.info("토큰 없음, 사용자 통계 수집 건너뜀 username=%s", username)
+        logger.info("토큰 없음, 사용자 통계 수집 건너뜀", username=username)
         return None
 
     try:
         stats = await get_user_stats(username, token)
         logger.info(
-            "사용자 통계 수집 완료 username=%s commits=%d prs=%d issues=%d",
-            username,
-            stats.total_commits,
-            stats.total_prs,
-            stats.total_issues,
+            "사용자 통계 수집 완료",
+            username=username,
+            commits=stats.total_commits,
+            prs=stats.total_prs,
+            issues=stats.total_issues,
         )
         return stats
     except Exception as e:
-        logger.warning("사용자 통계 수집 실패 username=%s error=%s", username, e)
+        logger.warning("사용자 통계 수집 실패", username=username, error=str(e))
         return None
 
 

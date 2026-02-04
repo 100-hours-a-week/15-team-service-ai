@@ -61,7 +61,7 @@ async def collect_data_node(state: ResumeState) -> ResumeState:
 
     except httpx.HTTPStatusError as e:
         status_code = e.response.status_code
-        logger.error("collect_data_node HTTP 오류 status=%d", status_code)
+        logger.error("collect_data_node HTTP 오류", status=status_code)
         return {
             **state,
             "error_code": ErrorCode.GITHUB_API_ERROR,
@@ -69,7 +69,7 @@ async def collect_data_node(state: ResumeState) -> ResumeState:
         }
 
     except ValueError as e:
-        logger.error("collect_data_node 값 오류 error=%s", e)
+        logger.error("collect_data_node 값 오류", error=str(e))
         return {
             **state,
             "error_code": ErrorCode.INVALID_INPUT,
@@ -77,7 +77,7 @@ async def collect_data_node(state: ResumeState) -> ResumeState:
         }
 
     except (KeyError, TypeError) as e:
-        logger.error("collect_data_node 데이터 오류 error=%s", e, exc_info=True)
+        logger.error("collect_data_node 데이터 오류", error=str(e), exc_info=True)
         return {
             **state,
             "error_code": ErrorCode.DATA_PARSE_ERROR,
@@ -92,9 +92,9 @@ async def generate_node(state: ResumeState) -> ResumeState:
 
     if evaluation == "fail":
         retry_count += 1
-        logger.info("generate_node 재시도 retry_count=%d", retry_count)
+        logger.info("generate_node 재시도", retry_count=retry_count)
     else:
-        logger.info("generate_node 시작 retry_count=%d", retry_count)
+        logger.info("generate_node 시작", retry_count=retry_count)
 
     project_info = state.get("project_info")
     if not project_info:
@@ -122,7 +122,7 @@ async def generate_node(state: ResumeState) -> ResumeState:
             session_id=session_id,
         )
 
-        logger.info("generate_node 완료 projects=%d", len(resume_data.projects))
+        logger.info("generate_node 완료", projects=len(resume_data.projects))
 
         return {
             **state,
@@ -132,7 +132,7 @@ async def generate_node(state: ResumeState) -> ResumeState:
 
     except httpx.HTTPStatusError as e:
         status_code = e.response.status_code
-        logger.error("generate_node LLM API 오류 status=%d", status_code)
+        logger.error("generate_node LLM API 오류", status=status_code)
         return {
             **state,
             "retry_count": retry_count,
@@ -143,14 +143,14 @@ async def generate_node(state: ResumeState) -> ResumeState:
     except ValueError as e:
         error_str = str(e)
         if "POSITION_MISMATCH" in error_str:
-            logger.warning("generate_node 포지션 불일치 error=%s", e)
+            logger.warning("generate_node 포지션 불일치", error=str(e))
             return {
                 **state,
                 "retry_count": retry_count,
                 "error_code": ErrorCode.POSITION_MISMATCH,
                 "error_message": error_str.replace("POSITION_MISMATCH: ", ""),
             }
-        logger.error("generate_node 생성 오류 error=%s", e)
+        logger.error("generate_node 생성 오류", error=str(e))
         return {
             **state,
             "retry_count": retry_count,
@@ -159,7 +159,7 @@ async def generate_node(state: ResumeState) -> ResumeState:
         }
 
     except (KeyError, TypeError) as e:
-        logger.error("generate_node 데이터 오류 error=%s", e, exc_info=True)
+        logger.error("generate_node 데이터 오류", error=str(e), exc_info=True)
         return {
             **state,
             "retry_count": retry_count,
@@ -183,7 +183,7 @@ async def evaluate_node(state: ResumeState) -> ResumeState:
             session_id=session_id,
         )
 
-        logger.info("evaluate_node 완료 result=%s", evaluation.result)
+        logger.info("evaluate_node 완료", result=evaluation.result)
 
         return {
             **state,
@@ -193,7 +193,7 @@ async def evaluate_node(state: ResumeState) -> ResumeState:
 
     except httpx.HTTPStatusError as e:
         status_code = e.response.status_code
-        logger.warning("evaluate_node LLM API 오류, 평가 건너뜀 status=%d", status_code)
+        logger.warning("evaluate_node LLM API 오류, 평가 건너뜀", status=status_code)
         return {
             **state,
             "evaluation": "pass",
@@ -201,7 +201,7 @@ async def evaluate_node(state: ResumeState) -> ResumeState:
         }
 
     except (ValueError, KeyError, TypeError) as e:
-        logger.warning("evaluate_node 데이터 오류, 평가 건너뜀 error=%s", e)
+        logger.warning("evaluate_node 데이터 오류, 평가 건너뜀", error=str(e))
         return {
             **state,
             "evaluation": "pass",
@@ -242,7 +242,7 @@ def should_retry(state: ResumeState) -> Literal["generate", "end"]:
         logger.warning("should_retry: 최대 재시도 도달, 종료")
         return "end"
 
-    logger.info("should_retry: 재시도 필요 retry_count=%d", retry_count)
+    logger.info("should_retry: 재시도 필요", retry_count=retry_count)
     return "generate"
 
 
@@ -310,7 +310,7 @@ async def _generate_in_batches(
         project_info[i : i + settings.workflow_batch_size]
         for i in range(0, len(project_info), settings.workflow_batch_size)
     ]
-    logger.info("배치 처리 시작 total=%d batches=%d", len(project_info), len(batches))
+    logger.info("배치 처리 시작", total=len(project_info), batches=len(batches))
 
     tasks = []
     for batch_idx, batch in enumerate(batches):

@@ -33,10 +33,10 @@ def parse_package_json(content: str) -> dict:
         data = json.loads(content)
         deps = list(data.get("dependencies", {}).keys())
         dev_deps = list(data.get("devDependencies", {}).keys())
-        logger.info("package.json 파싱 완료 deps=%d dev=%d", len(deps), len(dev_deps))
+        logger.info("package.json 파싱 완료", deps=len(deps), dev=len(dev_deps))
         return {"dependencies": deps, "devDependencies": dev_deps}
     except json.JSONDecodeError as e:
-        logger.warning("package.json 파싱 실패 error=%s", e)
+        logger.warning("package.json 파싱 실패", error=str(e))
         return {"dependencies": [], "devDependencies": []}
 
 
@@ -52,7 +52,7 @@ def parse_pom_xml(content: str) -> dict:
     pattern = r"<artifactId>([^<]+)</artifactId>"
     artifacts = re.findall(pattern, content)
     artifacts = [a for a in artifacts if not a.endswith("-parent")]
-    logger.info("pom.xml 파싱 완료 deps=%d", len(artifacts))
+    logger.info("pom.xml 파싱 완료", deps=len(artifacts))
     return {"dependencies": artifacts}
 
 
@@ -83,7 +83,7 @@ def parse_build_gradle(content: str) -> dict:
                 deps.append(parts[1])
 
     deps = list(set(deps))
-    logger.info("build.gradle 파싱 완료 deps=%d", len(deps))
+    logger.info("build.gradle 파싱 완료", deps=len(deps))
     return {"dependencies": deps}
 
 
@@ -105,7 +105,7 @@ def parse_requirements_txt(content: str) -> dict:
         if package:
             deps.append(package)
 
-    logger.info("requirements.txt 파싱 완료 deps=%d", len(deps))
+    logger.info("requirements.txt 파싱 완료", deps=len(deps))
     return {"dependencies": deps}
 
 
@@ -140,7 +140,7 @@ def parse_pyproject_toml(content: str) -> dict:
             if name and name not in deps:
                 deps.append(name)
 
-    logger.info("pyproject.toml 파싱 완료 deps=%d", len(deps))
+    logger.info("pyproject.toml 파싱 완료", deps=len(deps))
     return {"dependencies": deps}
 
 
@@ -170,7 +170,7 @@ def parse_pipfile(content: str) -> dict:
             if match:
                 deps.append(match.group(1))
 
-    logger.info("Pipfile 파싱 완료 deps=%d", len(deps))
+    logger.info("Pipfile 파싱 완료", deps=len(deps))
     return {"dependencies": deps}
 
 
@@ -206,7 +206,7 @@ def parse_go_mod(content: str) -> dict:
                 name = module.split("/")[-1]
                 deps.append(name)
 
-    logger.info("go.mod 파싱 완료 deps=%d", len(deps))
+    logger.info("go.mod 파싱 완료", deps=len(deps))
     return {"dependencies": deps}
 
 
@@ -233,7 +233,7 @@ def parse_cargo_toml(content: str) -> dict:
             if match:
                 deps.append(match.group(1))
 
-    logger.info("Cargo.toml 파싱 완료 deps=%d", len(deps))
+    logger.info("Cargo.toml 파싱 완료", deps=len(deps))
     return {"dependencies": deps}
 
 
