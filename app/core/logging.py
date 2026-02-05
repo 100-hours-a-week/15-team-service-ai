@@ -55,6 +55,16 @@ def mask_sensitive_processor(logger: logging.Logger, method_name: str, event_dic
     return event_dict
 
 
+def prepend_logger_name_processor(
+    logger: logging.Logger, method_name: str, event_dict: dict
+) -> dict:
+    """로거 이름을 이벤트 앞에 고정 너비로 추가"""
+    logger_name = event_dict.pop("logger", "unknown")
+    padded = f"[{logger_name:<28}]"
+    event_dict["event"] = f"{padded} {event_dict.get('event', '')}"
+    return event_dict
+
+
 def setup_logging(level: str | None = None) -> None:
     """structlog 설정 초기화"""
     if level is None:
@@ -67,6 +77,7 @@ def setup_logging(level: str | None = None) -> None:
         structlog.processors.TimeStamper(fmt="iso"),
         add_context_processor,
         mask_sensitive_processor,
+        prepend_logger_name_processor,
         structlog.processors.StackInfoRenderer(),
         structlog.processors.UnicodeDecoder(),
     ]

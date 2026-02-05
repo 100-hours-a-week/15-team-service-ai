@@ -13,6 +13,7 @@ from app.domain.resume.service import (
     collect_project_info,
     collect_repo_contexts,
     collect_user_stats,
+    validate_position_match,
 )
 from app.infra.github.client import parse_repo_url
 from app.infra.llm.client import evaluate_resume, generate_resume
@@ -20,14 +21,25 @@ from app.infra.llm.client import evaluate_resume, generate_resume
 logger = get_logger(__name__)
 
 
+def _create_error_state(
+    state: ResumeState,
+    error_code: str,
+    error_message: str,
+    **additional_fields,
+) -> ResumeState:
+    """에러 상태를 포함한 새 상태 반환"""
+    return {
+        **state,
+        "error_code": error_code,
+        "error_message": error_message,
+        **additional_fields,
+    }
+
+
 async def collect_data_node(state: ResumeState) -> ResumeState:
     """데이터 수집 노드: 프로젝트 정보, 레포 컨텍스트, 사용자 통계 수집"""
     request = state["request"]
-    logger.info(
-        "collect_data_node 시작 repos=%d position=%s",
-        len(request.repo_urls),
-        request.position,
-    )
+    logger.info("collect_data_node 시작", repos=len(request.repo_urls), position=request.position)
 
     try:
         project_info, repo_contexts = await asyncio.gather(
@@ -36,20 +48,36 @@ async def collect_data_node(state: ResumeState) -> ResumeState:
         )
 
         if not project_info:
-            return {
-                **state,
-                "error_code": ErrorCode.COLLECT_DATA_FAILED,
-                "error_message": "프로젝트 정보 수집 실패",
-            }
+            return _create_error_state(
+                state,
+                ErrorCode.COLLECT_DATA_FAILED,
+                "프로젝트 정보 수집 실패",
+            )
 
         username, _ = parse_repo_url(request.repo_urls[0])
         user_stats = await collect_user_stats(username, request.github_token)
 
         logger.info(
-            "collect_data_node 완료 projects=%d contexts=%d",
-            len(project_info),
-            len(repo_contexts),
+            "collect_data_node 완료", projects=len(project_info), contexts=len(repo_contexts)
         )
+
+        for project in project_info:
+            is_valid, error_msg = validate_position_match(
+                request.position,
+                project.get("dependencies", []),
+            )
+            if not is_valid:
+                logger.warning(
+                    "포지션 불일치",
+                    repo=project.get("repo_name"),
+                    position=request.position,
+                    error=error_msg,
+                )
+                return _create_error_state(
+                    state,
+                    ErrorCode.POSITION_MISMATCH,
+                    f"{project.get('repo_name')}: {error_msg}",
+                )
 
         return {
             **state,
@@ -62,27 +90,27 @@ async def collect_data_node(state: ResumeState) -> ResumeState:
     except httpx.HTTPStatusError as e:
         status_code = e.response.status_code
         logger.error("collect_data_node HTTP 오류", status=status_code)
-        return {
-            **state,
-            "error_code": ErrorCode.GITHUB_API_ERROR,
-            "error_message": f"GitHub API 오류: HTTP {status_code}",
-        }
+        return _create_error_state(
+            state,
+            ErrorCode.GITHUB_API_ERROR,
+            f"GitHub API 오류: HTTP {status_code}",
+        )
 
     except ValueError as e:
         logger.error("collect_data_node 값 오류", error=str(e))
-        return {
-            **state,
-            "error_code": ErrorCode.INVALID_INPUT,
-            "error_message": f"잘못된 입력값: {e}",
-        }
+        return _create_error_state(
+            state,
+            ErrorCode.INVALID_INPUT,
+            f"잘못된 입력값: {e}",
+        )
 
     except (KeyError, TypeError) as e:
         logger.error("collect_data_node 데이터 오류", error=str(e), exc_info=True)
-        return {
-            **state,
-            "error_code": ErrorCode.DATA_PARSE_ERROR,
-            "error_message": f"데이터 파싱 오류: {e}",
-        }
+        return _create_error_state(
+            state,
+            ErrorCode.DATA_PARSE_ERROR,
+            f"데이터 파싱 오류: {e}",
+        )
 
 
 async def generate_node(state: ResumeState) -> ResumeState:
@@ -99,12 +127,12 @@ async def generate_node(state: ResumeState) -> ResumeState:
     project_info = state.get("project_info")
     if not project_info:
         logger.error("generate_node: project_info 없음, 데이터 수집 실패")
-        return {
-            **state,
-            "retry_count": retry_count,
-            "error_code": ErrorCode.GENERATE_ERROR,
-            "error_message": "프로젝트 정보가 없습니다",
-        }
+        return _create_error_state(
+            state,
+            ErrorCode.GENERATE_ERROR,
+            "프로젝트 정보가 없습니다",
+            retry_count=retry_count,
+        )
 
     request = state["request"]
     repo_contexts = state.get("repo_contexts", {})
@@ -133,39 +161,39 @@ async def generate_node(state: ResumeState) -> ResumeState:
     except httpx.HTTPStatusError as e:
         status_code = e.response.status_code
         logger.error("generate_node LLM API 오류", status=status_code)
-        return {
-            **state,
-            "retry_count": retry_count,
-            "error_code": ErrorCode.LLM_API_ERROR,
-            "error_message": f"LLM API 오류: HTTP {status_code}",
-        }
+        return _create_error_state(
+            state,
+            ErrorCode.LLM_API_ERROR,
+            f"LLM API 오류: HTTP {status_code}",
+            retry_count=retry_count,
+        )
 
     except ValueError as e:
         error_str = str(e)
         if "POSITION_MISMATCH" in error_str:
             logger.warning("generate_node 포지션 불일치", error=str(e))
-            return {
-                **state,
-                "retry_count": retry_count,
-                "error_code": ErrorCode.POSITION_MISMATCH,
-                "error_message": error_str.replace("POSITION_MISMATCH: ", ""),
-            }
+            return _create_error_state(
+                state,
+                ErrorCode.POSITION_MISMATCH,
+                error_str.replace("POSITION_MISMATCH: ", ""),
+                retry_count=retry_count,
+            )
         logger.error("generate_node 생성 오류", error=str(e))
-        return {
-            **state,
-            "retry_count": retry_count,
-            "error_code": ErrorCode.GENERATE_VALIDATION_ERROR,
-            "error_message": f"이력서 생성 검증 오류: {e}",
-        }
+        return _create_error_state(
+            state,
+            ErrorCode.GENERATE_VALIDATION_ERROR,
+            f"이력서 생성 검증 오류: {e}",
+            retry_count=retry_count,
+        )
 
     except (KeyError, TypeError) as e:
         logger.error("generate_node 데이터 오류", error=str(e), exc_info=True)
-        return {
-            **state,
-            "retry_count": retry_count,
-            "error_code": ErrorCode.GENERATE_PARSE_ERROR,
-            "error_message": f"이력서 생성 중 데이터 오류: {e}",
-        }
+        return _create_error_state(
+            state,
+            ErrorCode.GENERATE_PARSE_ERROR,
+            f"이력서 생성 중 데이터 오류: {e}",
+            retry_count=retry_count,
+        )
 
 
 async def evaluate_node(state: ResumeState) -> ResumeState:
@@ -209,26 +237,27 @@ async def evaluate_node(state: ResumeState) -> ResumeState:
         }
 
 
+def _has_error(state: ResumeState, caller: str) -> bool:
+    """에러 상태 확인 공통 함수"""
+    if state.get("error_code"):
+        logger.info(f"{caller}: 에러 발생, 종료")
+        return True
+    return False
+
+
 def should_continue(state: ResumeState) -> Literal["generate", "end"]:
     """에러 상태 확인: 에러 있으면 종료, 없으면 다음 노드로"""
-    if state.get("error_code"):
-        logger.info("should_continue: 에러 발생, 종료")
-        return "end"
-    return "generate"
+    return "end" if _has_error(state, "should_continue") else "generate"
 
 
 def should_evaluate(state: ResumeState) -> Literal["evaluate", "end"]:
     """에러 상태 확인: 에러 있으면 종료, 없으면 평가 노드로"""
-    if state.get("error_code"):
-        logger.info("should_evaluate: 에러 발생, 종료")
-        return "end"
-    return "evaluate"
+    return "end" if _has_error(state, "should_evaluate") else "evaluate"
 
 
 def should_retry(state: ResumeState) -> Literal["generate", "end"]:
     """재시도 여부 결정: pass면 종료, fail이면 generate로 루프"""
-    if state.get("error_code"):
-        logger.info("should_retry: 에러 발생, 종료")
+    if _has_error(state, "should_retry"):
         return "end"
 
     evaluation = state.get("evaluation", "pass")

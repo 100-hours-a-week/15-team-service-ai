@@ -33,6 +33,9 @@ target-version = "py312"
 select = ["E", "F", "I", "W", "B", "C90"]
 ignore = []
 
+[tool.ruff.lint.per-file-ignores]
+"app/domain/resume/prompts/*.py" = ["E501"]
+
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"

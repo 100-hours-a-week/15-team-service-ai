@@ -404,6 +404,22 @@ async def collect_user_stats(username: str, token: str | None) -> UserStats | No
         return None
 
 
+def _get_allowed_techs_for_position(position: str) -> frozenset[str] | None:
+    """포지션에 허용된 기술 스택 반환
+
+    Args:
+        position: 지원 포지션
+
+    Returns:
+        허용된 기술 스택 frozenset, 매칭되지 않으면 None
+    """
+    position_lower = position.lower()
+    for key, techs in POSITION_TECH_MAP.items():
+        if key in position_lower:
+            return techs
+    return None
+
+
 def validate_position_match(
     position: str,
     dependencies: list[str],
@@ -459,14 +475,7 @@ def filter_tech_stack_by_position(
     Returns:
         필터링된 기술 스택 리스트
     """
-    position_lower = position.lower()
-
-    allowed_techs = None
-    for key, techs in POSITION_TECH_MAP.items():
-        if key in position_lower:
-            allowed_techs = techs
-            break
-
+    allowed_techs = _get_allowed_techs_for_position(position)
     if allowed_techs is None:
         allowed_techs = BACKEND_TECHS | FRONTEND_TECHS
 

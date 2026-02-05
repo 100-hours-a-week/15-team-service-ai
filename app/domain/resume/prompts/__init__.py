@@ -1,9 +1,3 @@
-from app.domain.resume.prompts.agent import (
-    AGENT_ANALYZE_INSTRUCTION,
-    AGENT_COLLECT_INSTRUCTION,
-    AGENT_GENERATE_INSTRUCTION,
-    AGENT_SYSTEM,
-)
 from app.domain.resume.prompts.evaluation import (
     RESUME_EVALUATOR_HUMAN,
     RESUME_EVALUATOR_SYSTEM,
@@ -13,6 +7,12 @@ from app.domain.resume.prompts.generation import (
     RESUME_GENERATOR_RETRY_HUMAN,
     RESUME_GENERATOR_SYSTEM,
 )
+from app.domain.resume.prompts.positions import (
+    get_position_config,
+    get_position_example,
+    get_position_rules,
+    normalize_position,
+)
 
 __all__ = [
     "RESUME_GENERATOR_SYSTEM",
@@ -20,8 +20,8 @@ __all__ = [
     "RESUME_GENERATOR_RETRY_HUMAN",
     "RESUME_EVALUATOR_SYSTEM",
     "RESUME_EVALUATOR_HUMAN",
-    "AGENT_SYSTEM",
-    "AGENT_COLLECT_INSTRUCTION",
-    "AGENT_ANALYZE_INSTRUCTION",
-    "AGENT_GENERATE_INSTRUCTION",
+    "get_position_config",
+    "get_position_rules",
+    "get_position_example",
+    "normalize_position",
 ]

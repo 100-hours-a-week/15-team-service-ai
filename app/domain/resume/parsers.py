@@ -1,9 +1,32 @@
 import json
 import re
+from functools import wraps
+from typing import Callable
 
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+def _log_parser_result(filename: str) -> Callable:
+    """파서 완료 로깅 데코레이터"""
+
+    def decorator(func: Callable[[str], dict]) -> Callable[[str], dict]:
+        @wraps(func)
+        def wrapper(content: str) -> dict:
+            result = func(content)
+            deps = result.get("dependencies", [])
+            dev_deps = result.get("devDependencies", [])
+            if dev_deps:
+                logger.info(f"{filename} 파싱 완료", deps=len(deps), dev=len(dev_deps))
+            else:
+                logger.info(f"{filename} 파싱 완료", deps=len(deps))
+            return result
+
+        return wrapper
+
+    return decorator
+
 
 DEPENDENCY_FILE_NAMES = frozenset(
     {
@@ -20,51 +43,31 @@ DEPENDENCY_FILE_NAMES = frozenset(
 )
 
 
+@_log_parser_result("package.json")
 def parse_package_json(content: str) -> dict:
-    """package.json에서 dependencies 추출.
-
-    Args:
-        content: package.json 파일 내용
-
-    Returns:
-        dependencies와 devDependencies 딕셔너리
-    """
+    """package.json에서 dependencies 추출"""
     try:
         data = json.loads(content)
         deps = list(data.get("dependencies", {}).keys())
         dev_deps = list(data.get("devDependencies", {}).keys())
-        logger.info("package.json 파싱 완료", deps=len(deps), dev=len(dev_deps))
         return {"dependencies": deps, "devDependencies": dev_deps}
     except json.JSONDecodeError as e:
         logger.warning("package.json 파싱 실패", error=str(e))
         return {"dependencies": [], "devDependencies": []}
 
 
+@_log_parser_result("pom.xml")
 def parse_pom_xml(content: str) -> dict:
-    """pom.xml에서 dependency 추출.
-
-    Args:
-        content: pom.xml 파일 내용
-
-    Returns:
-        dependencies 리스트
-    """
+    """pom.xml에서 dependency 추출"""
     pattern = r"<artifactId>([^<]+)</artifactId>"
     artifacts = re.findall(pattern, content)
     artifacts = [a for a in artifacts if not a.endswith("-parent")]
-    logger.info("pom.xml 파싱 완료", deps=len(artifacts))
     return {"dependencies": artifacts}
 
 
+@_log_parser_result("build.gradle")
 def parse_build_gradle(content: str) -> dict:
-    """build.gradle에서 dependency 추출.
-
-    Args:
-        content: build.gradle 파일 내용
-
-    Returns:
-        dependencies 리스트
-    """
+    """build.gradle에서 dependency 추출"""
     patterns = [
         r"implementation\s+['\"]([^'\"]+)['\"]",
         r"implementation\s*\(['\"]([^'\"]+)['\"]\)",
@@ -83,19 +86,12 @@ def parse_build_gradle(content: str) -> dict:
                 deps.append(parts[1])
 
     deps = list(set(deps))
-    logger.info("build.gradle 파싱 완료", deps=len(deps))
     return {"dependencies": deps}
 
 
+@_log_parser_result("requirements.txt")
 def parse_requirements_txt(content: str) -> dict:
-    """requirements.txt에서 패키지 추출.
-
-    Args:
-        content: requirements.txt 파일 내용
-
-    Returns:
-        dependencies 리스트
-    """
+    """requirements.txt에서 패키지 추출"""
     deps = []
     for line in content.strip().split("\n"):
         line = line.strip()
@@ -105,19 +101,12 @@ def parse_requirements_txt(content: str) -> dict:
         if package:
             deps.append(package)
 
-    logger.info("requirements.txt 파싱 완료", deps=len(deps))
     return {"dependencies": deps}
 
 
+@_log_parser_result("pyproject.toml")
 def parse_pyproject_toml(content: str) -> dict:
-    """pyproject.toml에서 dependencies 추출.
-
-    Args:
-        content: pyproject.toml 파일 내용
-
-    Returns:
-        dependencies 리스트
-    """
+    """pyproject.toml에서 dependencies 추출"""
     deps = []
     in_deps = False
     for line in content.split("\n"):
@@ -140,19 +129,12 @@ def parse_pyproject_toml(content: str) -> dict:
             if name and name not in deps:
                 deps.append(name)
 
-    logger.info("pyproject.toml 파싱 완료", deps=len(deps))
     return {"dependencies": deps}
 
 
+@_log_parser_result("Pipfile")
 def parse_pipfile(content: str) -> dict:
-    """Pipfile에서 packages 추출.
-
-    Args:
-        content: Pipfile 파일 내용
-
-    Returns:
-        dependencies 리스트
-    """
+    """Pipfile에서 packages 추출"""
     deps = []
     in_packages = False
     for line in content.split("\n"):
@@ -170,19 +152,12 @@ def parse_pipfile(content: str) -> dict:
             if match:
                 deps.append(match.group(1))
 
-    logger.info("Pipfile 파싱 완료", deps=len(deps))
     return {"dependencies": deps}
 
 
+@_log_parser_result("go.mod")
 def parse_go_mod(content: str) -> dict:
-    """go.mod에서 require 추출.
-
-    Args:
-        content: go.mod 파일 내용
-
-    Returns:
-        dependencies 리스트
-    """
+    """go.mod에서 require 추출"""
     deps = []
     in_require = False
     for line in content.split("\n"):
@@ -206,19 +181,12 @@ def parse_go_mod(content: str) -> dict:
                 name = module.split("/")[-1]
                 deps.append(name)
 
-    logger.info("go.mod 파싱 완료", deps=len(deps))
     return {"dependencies": deps}
 
 
+@_log_parser_result("Cargo.toml")
 def parse_cargo_toml(content: str) -> dict:
-    """Cargo.toml에서 dependencies 추출.
-
-    Args:
-        content: Cargo.toml 파일 내용
-
-    Returns:
-        dependencies 리스트
-    """
+    """Cargo.toml에서 dependencies 추출"""
     deps = []
     in_deps = False
     for line in content.split("\n"):
@@ -233,7 +201,6 @@ def parse_cargo_toml(content: str) -> dict:
             if match:
                 deps.append(match.group(1))
 
-    logger.info("Cargo.toml 파싱 완료", deps=len(deps))
     return {"dependencies": deps}
 
 

@@ -37,6 +37,47 @@ _client = httpx.AsyncClient(timeout=settings.github_timeout)
 _request_semaphore = asyncio.Semaphore(settings.github_max_concurrent_requests)
 
 
+def _matches_commit_author(
+    commit_author: str,
+    commit_user_login: str | None,
+    author: str | None,
+    author_name: str | None,
+) -> bool:
+    """커밋 작성자 매칭 여부 확인
+
+    Args:
+        commit_author: Git author name
+        commit_user_login: GitHub 유저네임, GraphQL에서만 제공
+        author: 필터링할 GitHub 유저네임
+        author_name: 필터링할 Git author name
+
+    Returns:
+        매칭되면 True, 아니면 False
+    """
+    if not (author or author_name):
+        return True
+
+    github_user_match = commit_user_login and author and commit_user_login.lower() == author.lower()
+    author_match = author_name and author_name.lower() in commit_author.lower()
+    username_match = author and author.lower() in commit_author.lower()
+
+    result = github_user_match or author_match or username_match
+
+    if not result:
+        logger.debug(
+            "커밋 작성자 매칭 실패",
+            commit_author=commit_author,
+            commit_user_login=commit_user_login,
+            filter_author=author,
+            filter_author_name=author_name,
+            github_match=github_user_match,
+            author_match=author_match,
+            username_match=username_match,
+        )
+
+    return result
+
+
 def _get_headers(token: str | None = None) -> dict[str, str]:
     """GitHub API 요청 헤더 생성
 
@@ -139,6 +180,7 @@ async def get_commits(
     repo_url: str,
     token: str | None = None,
     author_name: str | None = None,
+    author: str | None = None,
     per_page: int = 100,
 ) -> list[CommitInfo]:
     """레포지토리 커밋 목록 조회
@@ -147,6 +189,7 @@ async def get_commits(
         repo_url: GitHub 레포지토리 URL
         token: GitHub OAuth 토큰
         author_name: Git author name, 커밋 필터링에 사용
+        author: GitHub 유저네임, 커밋 필터링에 사용
         per_page: 가져올 커밋 개수
 
     Returns:
@@ -166,7 +209,7 @@ async def get_commits(
         if len(commit.get("parents", [])) >= 2:
             continue
         commit_author = commit["commit"]["author"]["name"]
-        if author_name and author_name.lower() not in commit_author.lower():
+        if not _matches_commit_author(commit_author, None, author, author_name):
             continue
         commits.append(
             CommitInfo(
@@ -329,10 +372,8 @@ async def _graphql_query(query: str, variables: dict, token: str) -> dict:
     Raises:
         ValueError: GraphQL 에러 발생 시
     """
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json",
-    }
+    headers = _get_headers(token)
+    headers["Content-Type"] = "application/json"
     response = await _client.post(
         GITHUB_GRAPHQL_URL,
         headers=headers,
@@ -449,7 +490,7 @@ async def get_project_info_graphql(
                 nodes {
                   oid
                   message
-                  author { name }
+                  author { name user { login } }
                   parents { totalCount }
                 }
               }
@@ -487,28 +528,52 @@ async def get_project_info_graphql(
     repository = data["repository"]
 
     commits = []
+    total_commits_before_filter = 0
     branch_ref = repository.get("defaultBranchRef")
     if branch_ref and branch_ref.get("target"):
         history = branch_ref["target"].get("history", {})
-        for node in history.get("nodes", []):
-            if node.get("parents", {}).get("totalCount", 0) < 2:
-                commit_author = node["author"]["name"] if node.get("author") else "Unknown"
-                if author_name and author_name.lower() not in commit_author.lower():
-                    continue
-                commits.append(
-                    CommitInfo(
-                        sha=node["oid"],
-                        message=node["message"],
-                        author=commit_author,
-                    )
+        all_commit_nodes = history.get("nodes", [])
+        total_commits_before_filter = len(all_commit_nodes)
+        for node in all_commit_nodes:
+            if node.get("parents", {}).get("totalCount", 0) >= 2:
+                continue
+            commit_author = node["author"]["name"] if node.get("author") else "Unknown"
+            commit_user_login = None
+            if node.get("author") and node["author"].get("user"):
+                commit_user_login = node["author"]["user"].get("login")
+            if not _matches_commit_author(commit_author, commit_user_login, author, author_name):
+                continue
+            commits.append(
+                CommitInfo(
+                    sha=node["oid"],
+                    message=node["message"],
+                    author=commit_author,
                 )
+            )
+
+    logger.debug(
+        "커밋 필터링 결과",
+        repo=f"{owner}/{repo}",
+        total_before_filter=total_commits_before_filter,
+        total_after_filter=len(commits),
+        filter_author=author,
+        filter_author_name=author_name,
+    )
 
     pulls = []
-    for pr_node in repository.get("pullRequests", {}).get("nodes", []):
+    all_pr_nodes = repository.get("pullRequests", {}).get("nodes", [])
+    total_prs_before_filter = len(all_pr_nodes)
+    for pr_node in all_pr_nodes:
         if not pr_node:
             continue
         pr_author = pr_node.get("author", {}).get("login", "")
         if author and pr_author.lower() != author.lower():
+            logger.debug(
+                "PR 작성자 매칭 실패",
+                pr_number=pr_node.get("number"),
+                pr_author=pr_author,
+                filter_author=author,
+            )
             continue
         pulls.append(
             PRInfoExtended(
@@ -523,6 +588,14 @@ async def get_project_info_graphql(
                 deletions=pr_node.get("deletions", 0),
             )
         )
+
+    logger.debug(
+        "PR 필터링 결과",
+        repo=f"{owner}/{repo}",
+        total_before_filter=total_prs_before_filter,
+        total_after_filter=len(pulls),
+        filter_author=author,
+    )
 
     logger.info(
         "GraphQL 프로젝트 정보 조회 완료",
@@ -667,7 +740,7 @@ async def get_project_info(
         except Exception as e:
             logger.warning("GraphQL 프로젝트 정보 조회 실패, REST 폴백", error=type(e).__name__)
 
-    commits = await get_commits(repo_url, token, author_name, commits_count)
+    commits = await get_commits(repo_url, token, author_name, author, commits_count)
     pulls = await get_pulls_extended(repo_url, token, author, prs_count)
 
     return {

@@ -1,0 +1,568 @@
+"""포지션별 tech_stack 및 description 규칙 정의"""
+
+COMMON_TECH_EXCLUDE = [
+    "OpenAI",
+    "Whisper",
+    "GPT",
+    "GPT-4",
+    "GPT-3",
+    "Claude",
+    "Gemini",
+    "Anthropic",
+    "ChatGPT",
+    "Llama",
+    "Mistral",
+    "Cohere",
+]
+
+POSITION_CONFIGS = {
+    "backend": {
+        "name_ko": "백엔드",
+        "tech_allowed": [
+            "Python",
+            "Java",
+            "Go",
+            "Kotlin",
+            "C++",
+            "Rust",
+            "Spring Boot",
+            "FastAPI",
+            "Django",
+            "Flask",
+            "Express",
+            "NestJS",
+            "Gin",
+            "PostgreSQL",
+            "MySQL",
+            "MongoDB",
+            "Redis",
+            "Elasticsearch",
+            "DynamoDB",
+            "SQLite",
+            "JPA",
+            "Hibernate",
+            "SQLAlchemy",
+            "Prisma",
+            "TypeORM",
+            "Sequelize",
+            "Mongoose",
+            "Drizzle",
+            "Kafka",
+            "RabbitMQ",
+            "gRPC",
+            "GraphQL",
+            "AWS",
+            "GCP",
+            "Azure",
+            "S3",
+            "EC2",
+            "Lambda",
+            "RDS",
+        ],
+        "tech_exclude": [
+            "React",
+            "Vue",
+            "Vue.js",
+            "Angular",
+            "Next.js",
+            "Svelte",
+            "Tailwind",
+            "Tailwind CSS",
+            "Redux",
+            "Recoil",
+            "Zustand",
+        ],
+        "bullet_keywords": [
+            "API 설계",
+            "API 구현",
+            "데이터베이스 모델링",
+            "쿼리 최적화",
+            "인증/인가 시스템",
+            "캐싱 전략",
+            "트랜잭션 처리",
+            "성능 최적화",
+            "동시성 처리",
+            "메시지 큐 연동",
+        ],
+        "bullet_examples": [
+            "RESTful API 설계 및 구현",
+            "N+1 쿼리 문제 해결",
+            "Redis 캐싱 도입으로 응답 속도 개선",
+            "JWT 기반 인증 시스템 구축",
+            "PostgreSQL 데이터 모델링",
+        ],
+    },
+    "frontend": {
+        "name_ko": "프론트엔드",
+        "tech_allowed": [
+            "TypeScript",
+            "JavaScript",
+            "React",
+            "React Native",
+            "Next.js",
+            "Vue.js",
+            "Angular",
+            "Svelte",
+            "Flutter",
+            "Tailwind CSS",
+            "styled-components",
+            "Emotion",
+            "CSS Modules",
+            "Redux",
+            "Recoil",
+            "Zustand",
+            "React Query",
+            "SWR",
+            "Recharts",
+            "D3.js",
+            "Chart.js",
+            "Webpack",
+            "Vite",
+            "esbuild",
+        ],
+        "tech_exclude": [
+            "Spring Boot",
+            "FastAPI",
+            "Django",
+            "Flask",
+            "Express",
+            "NestJS",
+            "JPA",
+            "Hibernate",
+            "SQLAlchemy",
+            "PostgreSQL",
+            "MySQL",
+            "MongoDB",
+        ],
+        "bullet_keywords": [
+            "UI/UX 컴포넌트",
+            "상태 관리",
+            "반응형 레이아웃",
+            "데이터 시각화",
+            "애니메이션",
+            "접근성",
+            "성능 최적화",
+            "번들 사이즈 개선",
+            "SEO",
+        ],
+        "bullet_examples": [
+            "재사용 가능한 UI 컴포넌트 설계",
+            "다크모드 테마 시스템 구축",
+            "이미지 레이지 로딩 적용",
+            "React Query 활용 서버 상태 관리",
+            "반응형 레이아웃 설계 및 적용",
+        ],
+    },
+    "fullstack": {
+        "name_ko": "풀스택",
+        "tech_allowed": [
+            "Python",
+            "Java",
+            "TypeScript",
+            "JavaScript",
+            "Go",
+            "Kotlin",
+            "Spring Boot",
+            "FastAPI",
+            "Django",
+            "Express",
+            "NestJS",
+            "Next.js",
+            "React",
+            "Vue.js",
+            "Angular",
+            "Svelte",
+            "PostgreSQL",
+            "MySQL",
+            "MongoDB",
+            "Redis",
+            "SQLite",
+            "JPA",
+            "SQLAlchemy",
+            "Prisma",
+            "TypeORM",
+            "Sequelize",
+            "Mongoose",
+            "Tailwind CSS",
+            "Redux",
+            "React Query",
+            "AWS",
+            "GCP",
+            "S3",
+        ],
+        "tech_exclude": [],
+        "bullet_keywords": [
+            "API 설계",
+            "UI 컴포넌트",
+            "데이터베이스 모델링",
+            "전체 기능 흐름",
+            "시스템 연동",
+            "결제 시스템",
+        ],
+        "bullet_examples": [
+            "Express 기반 API 설계 및 구현",
+            "React 쇼핑카트 UI 개발",
+            "Stripe 결제 시스템 연동",
+            "Prisma ORM 활용 데이터베이스 모델링",
+            "사용자 인증 전체 흐름 구현",
+        ],
+    },
+    "mobile": {
+        "name_ko": "모바일",
+        "tech_allowed": [
+            "Kotlin",
+            "Swift",
+            "Java",
+            "TypeScript",
+            "JavaScript",
+            "Dart",
+            "React Native",
+            "Flutter",
+            "SwiftUI",
+            "Jetpack Compose",
+            "Android",
+            "iOS",
+            "Room",
+            "CoreData",
+            "Realm",
+            "SQLite",
+            "Firebase",
+            "Push Notification",
+            "Redux",
+            "MobX",
+            "Provider",
+            "Riverpod",
+        ],
+        "tech_exclude": [
+            "Spring Boot",
+            "FastAPI",
+            "Django",
+            "Express",
+            "PostgreSQL",
+            "MySQL",
+            "Vue.js",
+            "Angular",
+            "Next.js",
+        ],
+        "bullet_keywords": [
+            "네이티브 UI",
+            "크로스 플랫폼",
+            "앱 아키텍처",
+            "상태 관리",
+            "로컬 저장소",
+            "푸시 알림",
+            "앱 성능 최적화",
+            "배터리 효율",
+        ],
+        "bullet_examples": [
+            "React Native 기반 크로스 플랫폼 앱 개발",
+            "Jetpack Compose UI 컴포넌트 설계",
+            "Room 데이터베이스 연동",
+            "Firebase 푸시 알림 구현",
+            "앱 성능 최적화 및 메모리 관리",
+        ],
+    },
+    "data": {
+        "name_ko": "데이터",
+        "tech_allowed": [
+            "Python",
+            "SQL",
+            "Scala",
+            "Java",
+            "Spark",
+            "Hadoop",
+            "Flink",
+            "Kafka",
+            "Airflow",
+            "dbt",
+            "Prefect",
+            "PostgreSQL",
+            "MySQL",
+            "BigQuery",
+            "Snowflake",
+            "Redshift",
+            "pandas",
+            "NumPy",
+            "Polars",
+            "Tableau",
+            "Looker",
+            "Superset",
+            "AWS",
+            "GCP",
+            "S3",
+            "Glue",
+        ],
+        "tech_exclude": [
+            "React",
+            "Vue.js",
+            "Angular",
+            "Next.js",
+            "Spring Boot",
+            "FastAPI",
+            "Django",
+        ],
+        "bullet_keywords": [
+            "데이터 파이프라인",
+            "ETL 프로세스",
+            "데이터 웨어하우스",
+            "배치 처리",
+            "실시간 스트리밍",
+            "데이터 모델링",
+            "쿼리 최적화",
+            "대시보드",
+            "지표 설계",
+        ],
+        "bullet_examples": [
+            "Spark 기반 ETL 파이프라인 구축",
+            "Airflow DAG 설계 및 스케줄링",
+            "BigQuery 데이터 웨어하우스 모델링",
+            "실시간 Kafka 스트리밍 처리",
+            "Tableau 대시보드 설계",
+        ],
+    },
+    "devops": {
+        "name_ko": "DevOps",
+        "tech_allowed": [
+            "Docker",
+            "Kubernetes",
+            "Helm",
+            "Terraform",
+            "Ansible",
+            "Pulumi",
+            "AWS",
+            "GCP",
+            "Azure",
+            "EC2",
+            "EKS",
+            "GKE",
+            "AKS",
+            "GitHub Actions",
+            "GitLab CI",
+            "Jenkins",
+            "ArgoCD",
+            "Prometheus",
+            "Grafana",
+            "Datadog",
+            "ELK",
+            "Nginx",
+            "HAProxy",
+            "Istio",
+            "Python",
+            "Go",
+            "Bash",
+        ],
+        "tech_exclude": [
+            "React",
+            "Vue.js",
+            "Angular",
+            "Next.js",
+            "Spring Boot",
+            "FastAPI",
+            "Django",
+        ],
+        "bullet_keywords": [
+            "CI/CD 파이프라인",
+            "컨테이너 오케스트레이션",
+            "인프라 자동화",
+            "모니터링 시스템",
+            "로그 수집",
+            "배포 전략",
+            "보안 설정",
+            "비용 최적화",
+        ],
+        "bullet_examples": [
+            "Kubernetes 클러스터 구축 및 운영",
+            "GitHub Actions CI/CD 파이프라인 설계",
+            "Terraform 인프라 코드 작성",
+            "Prometheus/Grafana 모니터링 시스템 구축",
+            "블루그린 배포 전략 도입",
+        ],
+    },
+    "security": {
+        "name_ko": "보안",
+        "tech_allowed": [
+            "Python",
+            "Go",
+            "C",
+            "C++",
+            "Rust",
+            "Burp Suite",
+            "Wireshark",
+            "Metasploit",
+            "Nmap",
+            "OWASP ZAP",
+            "Snyk",
+            "SonarQube",
+            "AWS Security Hub",
+            "CloudTrail",
+            "IAM",
+            "Vault",
+            "OpenSSL",
+            "Docker",
+            "Kubernetes",
+        ],
+        "tech_exclude": [
+            "React",
+            "Vue.js",
+            "Angular",
+            "Next.js",
+            "Spring Boot",
+            "FastAPI",
+            "Django",
+        ],
+        "bullet_keywords": [
+            "취약점 분석",
+            "보안 감사",
+            "침투 테스트",
+            "인증/인가",
+            "암호화",
+            "접근 제어",
+            "보안 정책",
+            "컴플라이언스",
+        ],
+        "bullet_examples": [
+            "OWASP Top 10 취약점 점검 및 조치",
+            "AWS IAM 정책 설계",
+            "Vault 기반 시크릿 관리 시스템 구축",
+            "보안 로깅 및 모니터링 체계 수립",
+            "SSL/TLS 인증서 관리 자동화",
+        ],
+    },
+    "ai": {
+        "name_ko": "AI",
+        "tech_allowed": [
+            "Python",
+            "TensorFlow",
+            "PyTorch",
+            "scikit-learn",
+            "Keras",
+            "LangChain",
+            "LlamaIndex",
+            "Hugging Face",
+            "ChromaDB",
+            "Pinecone",
+            "Milvus",
+            "Weaviate",
+            "FAISS",
+            "FastAPI",
+            "Flask",
+            "PostgreSQL",
+            "Redis",
+            "MongoDB",
+            "AWS SageMaker",
+            "Vertex AI",
+            "MLflow",
+            "Weights & Biases",
+            "DVC",
+        ],
+        "tech_exclude": [
+            "React",
+            "Vue.js",
+            "Angular",
+            "Next.js",
+        ],
+        "bullet_keywords": [
+            "RAG 파이프라인",
+            "벡터 데이터베이스",
+            "임베딩",
+            "모델 파인튜닝",
+            "프롬프트 엔지니어링",
+            "스트리밍",
+            "MLOps",
+            "모델 서빙",
+            "추론 최적화",
+        ],
+        "bullet_examples": [
+            "LangChain 기반 RAG 파이프라인 설계 및 구현",
+            "ChromaDB 벡터 검색 연동",
+            "프롬프트 최적화",
+            "스트리밍 응답 처리 로직 구현",
+            "MLflow 실험 추적 시스템 구축",
+        ],
+    },
+}
+
+POSITION_ALIASES = {
+    "백엔드": "backend",
+    "프론트엔드": "frontend",
+    "풀스택": "fullstack",
+    "모바일": "mobile",
+    "앱": "mobile",
+    "데이터": "data",
+    "devops": "devops",
+    "데브옵스": "devops",
+    "보안": "security",
+    "ai": "ai",
+    "인공지능": "ai",
+    "머신러닝": "ai",
+    "ml": "ai",
+}
+
+
+def normalize_position(position: str) -> str:
+    """포지션명을 영문 키로 정규화"""
+    lower = position.lower().strip()
+    if lower in POSITION_CONFIGS:
+        return lower
+    return POSITION_ALIASES.get(lower, "fullstack")
+
+
+def get_position_config(position: str) -> dict:
+    """포지션별 설정 반환 - 공통 제외 목록 포함"""
+    key = normalize_position(position)
+    config = POSITION_CONFIGS.get(key, POSITION_CONFIGS["fullstack"]).copy()
+
+    position_exclude = config.get("tech_exclude", [])
+    combined_exclude = list(set(COMMON_TECH_EXCLUDE + position_exclude))
+    config["tech_exclude"] = combined_exclude
+
+    return config
+
+
+def get_position_rules(position: str) -> str:
+    """포지션별 규칙 문자열 반환"""
+    config = get_position_config(position)
+    name_ko = config["name_ko"]
+
+    lines = [
+        f"### {name_ko} 포지션 규칙",
+        "",
+        "**tech_stack 포함 기술:**",
+    ]
+
+    allowed = config["tech_allowed"][:15]
+    lines.append(", ".join(allowed))
+
+    if config["tech_exclude"]:
+        lines.append("")
+        lines.append("**tech_stack 제외 기술:**")
+        lines.append(", ".join(config["tech_exclude"]))
+
+    lines.append("")
+    lines.append("**불릿 포인트 키워드:**")
+    lines.append(", ".join(config["bullet_keywords"]))
+
+    return "\n".join(lines)
+
+
+def get_position_example(position: str) -> str:
+    """포지션별 예시 JSON 반환"""
+    config = get_position_config(position)
+
+    tech_stack = config["tech_allowed"][:6]
+    bullet_examples = config["bullet_examples"]
+
+    description_lines = []
+    for example in bullet_examples:
+        description_lines.append(f"- {example}")
+
+    description = "\\n".join(description_lines)
+
+    return f'''```json
+{{
+  "name": "프로젝트명",
+  "repo_url": "https://github.com/user/repo",
+  "tech_stack": {tech_stack},
+  "description": "{description}"
+}}
+```'''

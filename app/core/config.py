@@ -71,12 +71,7 @@ class Settings(BaseSettings):
     def validate_production_settings(self):
         """프로덕션 환경에서 필수 설정 검증"""
         if self.is_production:
-            missing = []
-            if not self.gemini_api_key:
-                missing.append("GEMINI_API_KEY")
-            if not self.backend_callback_url:
-                missing.append("BACKEND_CALLBACK_URL")
-
+            missing = self.validate_for_production()
             if missing:
                 raise ValueError(f"프로덕션 환경에서 필수 설정 누락: {', '.join(missing)}")
         return self

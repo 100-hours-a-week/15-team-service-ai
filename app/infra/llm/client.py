@@ -1,4 +1,3 @@
-import json
 import os
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -13,6 +12,8 @@ from app.domain.resume.prompts import (
     RESUME_GENERATOR_HUMAN,
     RESUME_GENERATOR_RETRY_HUMAN,
     RESUME_GENERATOR_SYSTEM,
+    get_position_example,
+    get_position_rules,
 )
 from app.domain.resume.schemas import (
     EvaluationOutput,
@@ -46,7 +47,36 @@ def get_llm(model: str) -> ChatGoogleGenerativeAI:
         model=model,
         google_api_key=settings.gemini_api_key,
         timeout=settings.gemini_timeout,
+        temperature=0.0,
     )
+
+
+def _build_langfuse_config(session_id: str | None, tags: list[str]) -> dict:
+    """Langfuse 콜백 설정 생성"""
+    langfuse_handler = get_langfuse_handler()
+    return {
+        "callbacks": [langfuse_handler] if langfuse_handler else [],
+        "metadata": {
+            "langfuse_session_id": session_id,
+            "langfuse_tags": tags,
+        },
+    }
+
+
+async def _invoke_llm[T](
+    model: str,
+    output_type: type[T],
+    system_prompt: str,
+    human_content: str,
+    config: dict,
+) -> T:
+    """구조화된 출력으로 LLM 호출"""
+    llm = get_llm(model).with_structured_output(output_type)
+    messages = [
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=human_content),
+    ]
+    return await llm.ainvoke(messages, config=config)
 
 
 def format_project_info(project_info: list[dict]) -> str:
@@ -106,10 +136,40 @@ def format_repo_contexts(repo_contexts: dict[str, RepoContext]) -> str:
     return "\n".join(lines)
 
 
-def _get_json_schema_prompt(model_class: type) -> str:
-    """Pydantic 모델의 JSON 스키마를 프롬프트용 문자열로 변환"""
-    schema = model_class.model_json_schema()
-    return json.dumps(schema, indent=2, ensure_ascii=False)
+def _build_generator_system_prompt(position: str) -> str:
+    """포지션별 규칙을 주입한 시스템 프롬프트 생성"""
+    position_rules = get_position_rules(position)
+    position_example = get_position_example(position)
+
+    return RESUME_GENERATOR_SYSTEM.format(
+        position=position,
+        position_rules=position_rules,
+        position_example=position_example,
+    )
+
+
+def _build_evaluator_system_prompt(position: str) -> str:
+    """포지션별 규칙을 주입한 평가 시스템 프롬프트 생성"""
+    position_rules = _get_evaluator_position_rules(position)
+
+    return RESUME_EVALUATOR_SYSTEM.format(
+        position=position,
+        position_rules=position_rules,
+    )
+
+
+def _get_evaluator_position_rules(position: str) -> str:
+    """평가용 포지션별 제외 규칙 반환"""
+    from app.domain.resume.prompts.positions import get_position_config
+
+    config = get_position_config(position)
+    name_ko = config["name_ko"]
+
+    if not config["tech_exclude"]:
+        return f"- {name_ko}: 모든 기술 허용"
+
+    exclude_list = ", ".join(config["tech_exclude"])
+    return f"- {name_ko} FAIL if has: {exclude_list}"
 
 
 async def generate_resume(
@@ -160,24 +220,16 @@ async def generate_resume(
             project_count=project_count,
         )
 
-    json_schema = _get_json_schema_prompt(ResumeData)
-    human_content += f"\n\n반드시 다음 JSON 형식으로만 응답하세요:\n```json\n{json_schema}\n```"
+    config = _build_langfuse_config(session_id, ["resume", "generate", position])
+    system_prompt = _build_generator_system_prompt(position)
 
-    langfuse_handler = get_langfuse_handler()
-    config = {
-        "callbacks": [langfuse_handler] if langfuse_handler else [],
-        "metadata": {
-            "langfuse_session_id": session_id,
-            "langfuse_tags": ["resume", "generate", position],
-        },
-    }
-
-    llm = get_llm(settings.gemini_generator_model).with_structured_output(ResumeData)
-    messages = [
-        SystemMessage(content=RESUME_GENERATOR_SYSTEM.format(position=position)),
-        HumanMessage(content=human_content),
-    ]
-    result = await llm.ainvoke(messages, config=config)
+    result = await _invoke_llm(
+        model=settings.gemini_generator_model,
+        output_type=ResumeData,
+        system_prompt=system_prompt,
+        human_content=human_content,
+        config=config,
+    )
 
     output_count = len(result.projects) if result.projects else 0
     if output_count < project_count:
@@ -216,30 +268,22 @@ async def evaluate_resume(
         resume_json=resume_json,
     )
 
-    json_schema = _get_json_schema_prompt(EvaluationOutput)
-    human_content += f"\n\n반드시 다음 JSON 형식으로만 응답하세요:\n```json\n{json_schema}\n```"
+    config = _build_langfuse_config(session_id, ["resume", "evaluate", position])
+    system_prompt = _build_evaluator_system_prompt(position)
 
-    langfuse_handler = get_langfuse_handler()
-    config = {
-        "callbacks": [langfuse_handler] if langfuse_handler else [],
-        "metadata": {
-            "langfuse_session_id": session_id,
-            "langfuse_tags": ["resume", "evaluate", position],
-        },
-    }
-
-    llm = get_llm(settings.gemini_evaluator_model).with_structured_output(EvaluationOutput)
-    messages = [
-        SystemMessage(content=RESUME_EVALUATOR_SYSTEM.format(position=position)),
-        HumanMessage(content=human_content),
-    ]
-    result = await llm.ainvoke(messages, config=config)
+    result = await _invoke_llm(
+        model=settings.gemini_evaluator_model,
+        output_type=EvaluationOutput,
+        system_prompt=system_prompt,
+        human_content=human_content,
+        config=config,
+    )
 
     logger.debug(
-        "이력서 평가 완료 result=%s rule=%s item=%s feedback=%s",
-        result.result,
-        result.violated_rule,
-        result.violated_item,
-        result.feedback,
+        "이력서 평가 완료",
+        result=result.result,
+        rule=result.violated_rule,
+        item=result.violated_item,
+        feedback=result.feedback,
     )
     return result
