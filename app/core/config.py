@@ -13,9 +13,6 @@ class Settings(BaseSettings):
     gemini_evaluator_model: str
     gemini_timeout: float = 120.0
 
-    # GitHub
-    github_token: str = ""
-
     # Callback
     backend_callback_url: str = ""
     ai_callback_secret: str = ""
@@ -23,7 +20,7 @@ class Settings(BaseSettings):
     # Timeout 설정
     github_timeout: float = 60.0
     callback_timeout: float = 120.0
-    workflow_timeout: float = 300.0
+    workflow_timeout: float = 180.0
 
     # 동시 요청 제한
     github_max_concurrent_requests: int = 5
@@ -37,8 +34,13 @@ class Settings(BaseSettings):
     workflow_batch_size: int = 3
 
     # README 설정
-    readme_max_length_github: int = 2000
-    readme_max_length_prompt: int = 1500
+    readme_max_length_github: int = 4000
+    readme_max_length_prompt: int = 3000
+
+    # 프롬프트 포맷 설정
+    prompt_messages_max_count: int = 50
+    prompt_file_tree_max_count: int = 15
+    prompt_dependencies_max_count: int = 30
 
     # 로깅 설정
     log_level: str = "INFO"

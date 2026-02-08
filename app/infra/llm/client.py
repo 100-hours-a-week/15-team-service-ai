@@ -25,18 +25,18 @@ from app.domain.resume.service import filter_tech_stack_by_position
 
 logger = get_logger(__name__)
 
-if settings.langfuse_public_key:
-    os.environ["LANGFUSE_PUBLIC_KEY"] = settings.langfuse_public_key
-if settings.langfuse_secret_key:
-    os.environ["LANGFUSE_SECRET_KEY"] = settings.langfuse_secret_key
-if settings.langfuse_base_url:
-    os.environ["LANGFUSE_HOST"] = settings.langfuse_base_url
-
 
 def get_langfuse_handler() -> CallbackHandler | None:
     """Langfuse 콜백 핸들러 반환"""
     if not settings.langfuse_public_key or not settings.langfuse_secret_key:
         return None
+
+    if settings.langfuse_public_key:
+        os.environ["LANGFUSE_PUBLIC_KEY"] = settings.langfuse_public_key
+    if settings.langfuse_secret_key:
+        os.environ["LANGFUSE_SECRET_KEY"] = settings.langfuse_secret_key
+    if settings.langfuse_base_url:
+        os.environ["LANGFUSE_HOST"] = settings.langfuse_base_url
 
     return CallbackHandler()
 
@@ -94,17 +94,17 @@ def format_project_info(project_info: list[dict]) -> str:
         lines.append(f"- 레포지토리: {project['repo_url']}")
 
         if project.get("file_tree"):
-            tree_summary = ", ".join(project["file_tree"][:10])
+            tree_summary = ", ".join(project["file_tree"][: settings.prompt_file_tree_max_count])
             lines.append(f"- 파일 구조: {tree_summary}")
 
         if project.get("dependencies"):
             lines.append("- 핵심 의존성 [tech_stack에 반드시 포함]:")
-            for dep in project["dependencies"][:30]:
+            for dep in project["dependencies"][: settings.prompt_dependencies_max_count]:
                 lines.append(f"  * {dep}")
 
         if project.get("messages"):
             lines.append("- 주요 작업:")
-            for msg in project["messages"][:25]:
+            for msg in project["messages"][: settings.prompt_messages_max_count]:
                 lines.append(f"  - {msg}")
 
     return "\n".join(lines)

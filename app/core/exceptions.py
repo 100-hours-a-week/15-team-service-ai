@@ -1,12 +1,12 @@
-import logging
 from enum import Enum
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
 from app.core.config import settings
+from app.core.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class ErrorCode(str, Enum):
@@ -31,6 +31,7 @@ class ErrorCode(str, Enum):
     NO_CONTRIBUTION = "NO_CONTRIBUTION"
     POSITION_MISMATCH = "POSITION_MISMATCH"
     RATE_LIMIT_EXCEEDED = "RATE_LIMIT_EXCEEDED"
+    CALLBACK_ERROR = "CALLBACK_ERROR"
 
 
 class CustomException(Exception):
@@ -49,9 +50,9 @@ class CustomException(Exception):
 
 
 class GitHubAPIError(CustomException):
-    def __init__(self, detail: str | None = None):
+    def __init__(self, status_code: int = 502, detail: str | None = None):
         super().__init__(
-            status_code=502,
+            status_code=status_code,
             error_code=ErrorCode.GITHUB_API_ERROR,
             message="GitHub API 호출에 실패했습니다",
             detail=detail,
@@ -82,8 +83,18 @@ class CallbackError(CustomException):
     def __init__(self, detail: str | None = None):
         super().__init__(
             status_code=502,
-            error_code=ErrorCode.INTERNAL_ERROR,
+            error_code=ErrorCode.CALLBACK_ERROR,
             message="콜백 전송에 실패했습니다",
+            detail=detail,
+        )
+
+
+class PositionMismatchError(CustomException):
+    def __init__(self, detail: str | None = None):
+        super().__init__(
+            status_code=400,
+            error_code=ErrorCode.POSITION_MISMATCH,
+            message="포지션과 기술 스택이 일치하지 않습니다",
             detail=detail,
         )
 

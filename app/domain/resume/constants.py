@@ -135,19 +135,24 @@ AI_TECHS = frozenset(
         "pytorch",
         "keras",
         "scikit-learn",
+        "jax",
         "pandas",
         "numpy",
         "huggingface",
         "transformers",
         "langchain",
+        "langgraph",
+        "sentence-transformers",
         "opencv",
-        "cuda",
+        "ultralytics",
+        "yolo",
+        "detectron2",
+        "torchvision",
         "mlflow",
-        "openai",
-        "whisper",
-        "gpt",
-        "claude",
-        "gemini",
+        "wandb",
+        "ray",
+        "cuda",
+        "cudf",
     ]
 )
 
@@ -165,6 +170,7 @@ POSITION_TECH_MAP: dict[str, frozenset[str]] = {
     "data": DATA_TECHS,
     "devops": DEVOPS_TECHS,
     "데브옵스": DEVOPS_TECHS,
+    "인프라": DEVOPS_TECHS,
     "보안": SECURITY_TECHS,
     "security": SECURITY_TECHS,
     "ai": AI_TECHS,
@@ -172,6 +178,15 @@ POSITION_TECH_MAP: dict[str, frozenset[str]] = {
     "머신러닝": AI_TECHS,
     "ml": AI_TECHS,
 }
+
+POSITION_VALIDATION_RULES: list[tuple[list[str], frozenset[str], str]] = [
+    (["백엔드", "backend"], BACKEND_TECHS, "백엔드"),
+    (["프론트엔드", "frontend"], FRONTEND_TECHS, "프론트엔드"),
+    (["풀스택", "fullstack"], BACKEND_TECHS | FRONTEND_TECHS, "풀스택"),
+    (["모바일", "mobile", "앱"], MOBILE_TECHS, "모바일"),
+    (["ai", "인공지능", "머신러닝", "ml"], AI_TECHS, "AI"),
+    (["devops", "데브옵스", "인프라"], DEVOPS_TECHS, "DevOps"),
+]
 
 EXCLUDED_TECHS = frozenset(
     [

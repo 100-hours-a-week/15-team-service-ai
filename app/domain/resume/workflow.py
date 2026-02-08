@@ -6,8 +6,13 @@ from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
 from app.core.config import settings
-from app.core.exceptions import ErrorCode
+from app.core.exceptions import ErrorCode, PositionMismatchError
 from app.core.logging import get_logger
+from app.domain.resume.error_handler import (
+    create_error_state,
+    handle_data_error,
+    handle_http_error,
+)
 from app.domain.resume.schemas import RepoContext, ResumeData, ResumeRequest, ResumeState
 from app.domain.resume.service import (
     collect_project_info,
@@ -19,21 +24,6 @@ from app.infra.github.client import parse_repo_url
 from app.infra.llm.client import evaluate_resume, generate_resume
 
 logger = get_logger(__name__)
-
-
-def _create_error_state(
-    state: ResumeState,
-    error_code: str,
-    error_message: str,
-    **additional_fields,
-) -> ResumeState:
-    """에러 상태를 포함한 새 상태 반환"""
-    return {
-        **state,
-        "error_code": error_code,
-        "error_message": error_message,
-        **additional_fields,
-    }
 
 
 async def collect_data_node(state: ResumeState) -> ResumeState:
@@ -48,7 +38,7 @@ async def collect_data_node(state: ResumeState) -> ResumeState:
         )
 
         if not project_info:
-            return _create_error_state(
+            return create_error_state(
                 state,
                 ErrorCode.COLLECT_DATA_FAILED,
                 "프로젝트 정보 수집 실패",
@@ -73,7 +63,7 @@ async def collect_data_node(state: ResumeState) -> ResumeState:
                     position=request.position,
                     error=error_msg,
                 )
-                return _create_error_state(
+                return create_error_state(
                     state,
                     ErrorCode.POSITION_MISMATCH,
                     f"{project.get('repo_name')}: {error_msg}",
@@ -88,28 +78,21 @@ async def collect_data_node(state: ResumeState) -> ResumeState:
         }
 
     except httpx.HTTPStatusError as e:
-        status_code = e.response.status_code
-        logger.error("collect_data_node HTTP 오류", status=status_code)
-        return _create_error_state(
-            state,
-            ErrorCode.GITHUB_API_ERROR,
-            f"GitHub API 오류: HTTP {status_code}",
+        return handle_http_error(
+            e, state, "collect_data_node", ErrorCode.GITHUB_API_ERROR, "GitHub API 오류"
         )
 
     except ValueError as e:
         logger.error("collect_data_node 값 오류", error=str(e))
-        return _create_error_state(
+        return create_error_state(
             state,
             ErrorCode.INVALID_INPUT,
             f"잘못된 입력값: {e}",
         )
 
     except (KeyError, TypeError) as e:
-        logger.error("collect_data_node 데이터 오류", error=str(e), exc_info=True)
-        return _create_error_state(
-            state,
-            ErrorCode.DATA_PARSE_ERROR,
-            f"데이터 파싱 오류: {e}",
+        return handle_data_error(
+            e, state, "collect_data_node", ErrorCode.DATA_PARSE_ERROR, "데이터 파싱 오류"
         )
 
 
@@ -127,7 +110,7 @@ async def generate_node(state: ResumeState) -> ResumeState:
     project_info = state.get("project_info")
     if not project_info:
         logger.error("generate_node: project_info 없음, 데이터 수집 실패")
-        return _create_error_state(
+        return create_error_state(
             state,
             ErrorCode.GENERATE_ERROR,
             "프로젝트 정보가 없습니다",
@@ -159,27 +142,27 @@ async def generate_node(state: ResumeState) -> ResumeState:
         }
 
     except httpx.HTTPStatusError as e:
-        status_code = e.response.status_code
-        logger.error("generate_node LLM API 오류", status=status_code)
-        return _create_error_state(
+        return handle_http_error(
+            e,
             state,
+            "generate_node",
             ErrorCode.LLM_API_ERROR,
-            f"LLM API 오류: HTTP {status_code}",
+            "LLM API 오류",
+            retry_count=retry_count,
+        )
+
+    except PositionMismatchError as e:
+        logger.warning("generate_node 포지션 불일치", error=str(e))
+        return create_error_state(
+            state,
+            ErrorCode.POSITION_MISMATCH,
+            e.detail or e.message,
             retry_count=retry_count,
         )
 
     except ValueError as e:
-        error_str = str(e)
-        if "POSITION_MISMATCH" in error_str:
-            logger.warning("generate_node 포지션 불일치", error=str(e))
-            return _create_error_state(
-                state,
-                ErrorCode.POSITION_MISMATCH,
-                error_str.replace("POSITION_MISMATCH: ", ""),
-                retry_count=retry_count,
-            )
         logger.error("generate_node 생성 오류", error=str(e))
-        return _create_error_state(
+        return create_error_state(
             state,
             ErrorCode.GENERATE_VALIDATION_ERROR,
             f"이력서 생성 검증 오류: {e}",
@@ -187,11 +170,12 @@ async def generate_node(state: ResumeState) -> ResumeState:
         )
 
     except (KeyError, TypeError) as e:
-        logger.error("generate_node 데이터 오류", error=str(e), exc_info=True)
-        return _create_error_state(
+        return handle_data_error(
+            e,
             state,
+            "generate_node",
             ErrorCode.GENERATE_PARSE_ERROR,
-            f"이력서 생성 중 데이터 오류: {e}",
+            "이력서 생성 중 데이터 오류",
             retry_count=retry_count,
         )
 
@@ -240,7 +224,7 @@ async def evaluate_node(state: ResumeState) -> ResumeState:
 def _has_error(state: ResumeState, caller: str) -> bool:
     """에러 상태 확인 공통 함수"""
     if state.get("error_code"):
-        logger.info(f"{caller}: 에러 발생, 종료")
+        logger.info("에러 발생, 종료", caller=caller)
         return True
     return False
 

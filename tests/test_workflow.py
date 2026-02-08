@@ -122,8 +122,8 @@ class TestCollectDataNode:
         ):
             result = await collect_data_node(base_state)
 
-        assert result["error_code"] == ErrorCode.GITHUB_API_ERROR
-        assert "HTTP 401" in result["error_message"]
+        assert result["error_code"] == ErrorCode.GITHUB_UNAUTHORIZED
+        assert "인증 실패" in result["error_message"]
 
     @pytest.mark.asyncio
     async def test_collect_data_invalid_url(self, base_state):

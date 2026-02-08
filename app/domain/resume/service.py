@@ -1,10 +1,14 @@
+import re
+
+import httpx
+
 from app.core.logging import get_logger
 from app.domain.resume.constants import (
     BACKEND_TECHS,
     EXCLUDED_TECHS,
     FRONTEND_TECHS,
-    MOBILE_TECHS,
     POSITION_TECH_MAP,
+    POSITION_VALIDATION_RULES,
 )
 from app.domain.resume.parsers import DEPENDENCY_FILE_NAMES, parse_dependency_file
 from app.domain.resume.schemas import RepoContext, ResumeRequest, UserStats
@@ -102,6 +106,95 @@ PRIORITY_PATTERNS = [
 ]
 
 
+NOISE_COMMIT_PATTERNS = [
+    r"^merge\s",
+    r"^initial commit",
+    r"^first commit",
+    r"^update readme",
+    r"^update \.gitignore",
+    r"^fix typo",
+    r"^typo",
+    r"^wip$",
+    r"^wip\s",
+    r"^chore:\s*release",
+    r"^bump version",
+    r"^v\d+\.\d+",
+]
+
+_NOISE_REGEX = re.compile("|".join(NOISE_COMMIT_PATTERNS), re.IGNORECASE)
+
+
+def _filter_noise_commits(commits: list) -> list:
+    """의미없는 커밋 메시지 필터링"""
+    filtered = []
+    for commit in commits:
+        first_line = commit.message.split("\n")[0].strip()
+        if not _NOISE_REGEX.search(first_line):
+            filtered.append(commit)
+    return filtered
+
+
+def _prioritize_pulls(pulls: list) -> list:
+    """PR을 중요도 순으로 정렬"""
+
+    def score(pr) -> int:
+        title_lower = pr.title.lower()
+        s = 0
+
+        if re.search(r"feat|feature|add|implement", title_lower):
+            s += 30
+        elif re.search(r"fix|bug|resolve", title_lower):
+            s += 20
+        elif re.search(r"refactor|improve", title_lower):
+            s += 15
+
+        changes = pr.additions + pr.deletions
+        if changes >= 500:
+            s += 20
+        elif changes >= 100:
+            s += 10
+
+        if re.search(r"typo|readme|bump", title_lower):
+            s -= 20
+
+        return s
+
+    return sorted(pulls, key=score, reverse=True)
+
+
+def _summarize_pr_body(body: str, max_length: int = 300) -> str:
+    """PR 본문에서 유의미한 내용만 추출"""
+    text = re.sub(r"<!--.*?-->", "", body, flags=re.DOTALL)
+    text = re.sub(r"- \[[ x]\] .+", "", text)
+    text = re.sub(r"!\[.*?\]\(.*?\)", "", text)
+    text = re.sub(r"#+\s*$", "", text, flags=re.MULTILINE)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    text = text.strip()
+
+    if not text:
+        return ""
+
+    text = text.replace("\n", " ")
+    return text[:max_length]
+
+
+def _format_commit_message(commit) -> str:
+    """커밋 메시지를 유의미하게 포맷"""
+    lines = commit.message.strip().split("\n")
+    first_line = lines[0].strip()
+
+    body_first_line = ""
+    for line in lines[1:]:
+        stripped = line.strip()
+        if stripped:
+            body_first_line = stripped
+            break
+
+    if body_first_line:
+        return f"commit: {first_line} | {body_first_line}"
+    return f"commit: {first_line}"
+
+
 def _filter_and_sort_dependencies(deps: list[str]) -> list[str]:
     """의존성 필터링 및 우선순위 정렬
 
@@ -162,7 +255,7 @@ async def collect_project_info(request: ResumeRequest) -> list[dict]:
                 author_name=author_name,
             )
             file_tree = project_info["file_tree"]
-            commits = project_info["commits"]
+            commits = _filter_noise_commits(project_info["commits"])
             pulls = project_info["pulls"]
 
             if _is_empty_repository(file_tree):
@@ -190,8 +283,18 @@ async def collect_project_info(request: ResumeRequest) -> list[dict]:
                 messages=len(messages),
             )
 
+        except httpx.HTTPStatusError as e:
+            logger.error(
+                "프로젝트 정보 수집 실패 - HTTP 오류",
+                repo=repo_name,
+                status=e.response.status_code,
+            )
+
         except Exception as e:
             logger.error("프로젝트 정보 수집 실패", repo=repo_name, error=str(e))
+
+    if unique_urls and not results:
+        logger.warning("모든 레포지토리에서 프로젝트 정보 수집 실패", total=len(unique_urls))
 
     logger.info("전체 프로젝트 정보 수집 완료", valid=len(results))
     return results
@@ -212,32 +315,6 @@ def _is_empty_repository(file_tree: list[str]) -> bool:
             if ext in MEANINGFUL_EXTENSIONS:
                 return False
     return True
-
-
-def _has_user_contribution(commits: list, pulls: list, author: str) -> bool:
-    """사용자의 커밋이나 PR이 있는지 검사
-
-    Args:
-        commits: 커밋 리스트
-        pulls: PR 리스트
-        author: GitHub 유저네임
-
-    Returns:
-        True면 기여 있음
-    """
-    author_lower = author.lower()
-
-    for commit in commits:
-        commit_author = getattr(commit, "author", "") or ""
-        if author_lower in commit_author.lower():
-            return True
-
-    for pr in pulls:
-        pr_author = getattr(pr, "author", "") or ""
-        if pr_author.lower() == author_lower:
-            return True
-
-    return len(commits) > 0 or len(pulls) > 0
 
 
 def _summarize_file_tree(file_tree: list[str]) -> list[str]:
@@ -311,7 +388,7 @@ async def _parse_dependencies(repo_url: str, file_tree: list[str], token: str | 
 
 
 def _format_messages(commits: list, pulls: list) -> list[str]:
-    """커밋과 PR 정보를 메시지 리스트로 포맷팅.
+    """커밋과 PR 정보를 메시지 리스트로 포맷팅
 
     Args:
         commits: CommitInfo 리스트
@@ -322,17 +399,18 @@ def _format_messages(commits: list, pulls: list) -> list[str]:
     """
     messages = []
 
-    for pr in pulls:
+    sorted_pulls = _prioritize_pulls(pulls)
+    for pr in sorted_pulls:
         msg = f"PR #{pr.number}: {pr.title}"
         msg += f" [커밋 {pr.commits_count}개, +{pr.additions}/-{pr.deletions}]"
         if pr.body:
-            body_summary = pr.body[:1000].replace("\n", " ")
-            msg += f" - {body_summary}"
+            body_summary = _summarize_pr_body(pr.body)
+            if body_summary:
+                msg += f" | {body_summary}"
         messages.append(msg)
 
     for commit in commits:
-        first_line = commit.message.split("\n")[0]
-        messages.append(f"commit: {first_line}")
+        messages.append(_format_commit_message(commit))
 
     return messages
 
@@ -437,25 +515,12 @@ def validate_position_match(
     deps_lower = {dep.lower() for dep in dependencies}
     position_lower = position.lower()
 
-    has_backend = any(tech in dep for dep in deps_lower for tech in BACKEND_TECHS)
-    has_frontend = any(tech in dep for dep in deps_lower for tech in FRONTEND_TECHS)
-    has_mobile = any(tech in dep for dep in deps_lower for tech in MOBILE_TECHS)
-
-    if "백엔드" in position_lower or "backend" in position_lower:
-        if not has_backend:
-            return False, "백엔드 포지션에 맞는 기술 스택이 없습니다"
-
-    elif "프론트엔드" in position_lower or "frontend" in position_lower:
-        if not has_frontend:
-            return False, "프론트엔드 포지션에 맞는 기술 스택이 없습니다"
-
-    elif "풀스택" in position_lower or "fullstack" in position_lower:
-        if not has_backend and not has_frontend:
-            return False, "풀스택 포지션에 맞는 기술 스택이 없습니다"
-
-    elif "모바일" in position_lower or "mobile" in position_lower or "앱" in position_lower:
-        if not has_mobile:
-            return False, "모바일 포지션에 맞는 기술 스택이 없습니다"
+    for keywords, required_techs, display_name in POSITION_VALIDATION_RULES:
+        if any(keyword in position_lower for keyword in keywords):
+            has_required = any(tech in dep for dep in deps_lower for tech in required_techs)
+            if not has_required:
+                return False, f"{display_name} 포지션에 맞는 기술 스택이 없습니다"
+            return True, ""
 
     return True, ""
 

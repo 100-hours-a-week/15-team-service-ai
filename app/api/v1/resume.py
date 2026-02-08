@@ -6,6 +6,13 @@ import httpx
 from fastapi import APIRouter, Request
 
 from app.api.v1.schemas import GenerateRequest, GenerateResponse
+from app.api.v1.schemas.callback import (
+    CallbackErrorData,
+    CallbackFailurePayload,
+    CallbackProjectData,
+    CallbackResumeData,
+    CallbackSuccessPayload,
+)
 from app.core.config import settings
 from app.core.context import set_job_id
 from app.core.exceptions import ErrorCode
@@ -19,6 +26,7 @@ logger = get_logger(__name__)
 
 MAX_CONCURRENT_JOBS = 10
 _job_semaphore = Semaphore(MAX_CONCURRENT_JOBS)
+_background_tasks: set[asyncio.Task] = set()
 
 
 async def _send_callback_with_retry(
@@ -89,6 +97,12 @@ async def _run_agent_and_callback(
 
         except Exception as e:
             logger.error("작업 처리 실패", error=str(e))
+            try:
+                payload = _build_callback_payload(job_id, None, str(e))
+                async with httpx.AsyncClient(timeout=settings.callback_timeout) as client:
+                    await _send_callback_with_retry(client, callback_url, payload, job_id)
+            except Exception as cb_err:
+                logger.error("실패 콜백 전송도 실패", error=str(cb_err))
 
 
 def _build_callback_payload(
@@ -98,30 +112,29 @@ def _build_callback_payload(
 ) -> dict:
     """콜백 페이로드 생성"""
     if resume_data:
-        return {
-            "jobId": job_id,
-            "status": "success",
-            "resume": {
-                "projects": [
-                    {
-                        "name": p.name,
-                        "repoUrl": p.repo_url,
-                        "description": p.description,
-                        "techStack": p.tech_stack,
-                    }
+        payload = CallbackSuccessPayload(
+            job_id=job_id,
+            resume=CallbackResumeData(
+                projects=[
+                    CallbackProjectData(
+                        name=p.name,
+                        repo_url=p.repo_url,
+                        description=p.description,
+                        tech_stack=p.tech_stack,
+                    )
                     for p in resume_data.projects
                 ],
-            },
-        }
+            ),
+        )
     else:
-        return {
-            "jobId": job_id,
-            "status": "failed",
-            "error": {
-                "code": ErrorCode.GENERATION_FAILED,
-                "message": error_message or "이력서 생성에 실패했습니다.",
-            },
-        }
+        payload = CallbackFailurePayload(
+            job_id=job_id,
+            error=CallbackErrorData(
+                code=ErrorCode.GENERATION_FAILED,
+                message=error_message or "이력서 생성에 실패했습니다.",
+            ),
+        )
+    return payload.model_dump(by_alias=True)
 
 
 @router.post("/generate", response_model=GenerateResponse)
@@ -145,6 +158,8 @@ async def generate_resume(
         callback_url=callback_url,
     )
 
-    create_task(_run_agent_and_callback(job_id, resume_request, callback_url))
+    task = create_task(_run_agent_and_callback(job_id, resume_request, callback_url))
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
 
     return GenerateResponse(job_id=job_id)
