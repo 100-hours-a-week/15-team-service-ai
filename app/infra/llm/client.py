@@ -1,12 +1,19 @@
 import os
 
+from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_openai import ChatOpenAI
 from langfuse.langchain import CallbackHandler
 
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.domain.resume.prompts import (
+    RESUME_EDIT_EVALUATOR_HUMAN,
+    RESUME_EDIT_EVALUATOR_SYSTEM,
+    RESUME_EDIT_HUMAN,
+    RESUME_EDIT_RETRY_HUMAN,
+    RESUME_EDIT_SYSTEM,
     RESUME_EVALUATOR_HUMAN,
     RESUME_EVALUATOR_SYSTEM,
     RESUME_GENERATOR_HUMAN,
@@ -41,10 +48,21 @@ def get_langfuse_handler() -> CallbackHandler | None:
     return CallbackHandler()
 
 
-def get_llm(model: str) -> ChatGoogleGenerativeAI:
-    """Gemini LLM 클라이언트 반환"""
+def get_generator_llm() -> ChatOpenAI:
+    """이력서 생성용 vLLM 클라이언트 반환"""
+    return ChatOpenAI(
+        model=settings.vllm_model,
+        api_key=settings.vllm_api_key or "EMPTY",
+        base_url=settings.vllm_base_url,
+        timeout=settings.vllm_timeout,
+        temperature=0.0,
+    )
+
+
+def get_evaluator_llm() -> ChatGoogleGenerativeAI:
+    """이력서 평가용 Gemini 클라이언트 반환"""
     return ChatGoogleGenerativeAI(
-        model=model,
+        model=settings.gemini_evaluator_model,
         google_api_key=settings.gemini_api_key,
         timeout=settings.gemini_timeout,
         temperature=0.0,
@@ -64,14 +82,14 @@ def _build_langfuse_config(session_id: str | None, tags: list[str]) -> dict:
 
 
 async def _invoke_llm[T](
-    model: str,
+    llm: BaseChatModel,
     output_type: type[T],
     system_prompt: str,
     human_content: str,
     config: dict,
 ) -> T:
     """구조화된 출력으로 LLM 호출"""
-    llm = get_llm(model).with_structured_output(output_type)
+    llm = llm.with_structured_output(output_type)
     messages = [
         SystemMessage(content=system_prompt),
         HumanMessage(content=human_content),
@@ -224,7 +242,7 @@ async def generate_resume(
     system_prompt = _build_generator_system_prompt(position)
 
     result = await _invoke_llm(
-        model=settings.gemini_generator_model,
+        llm=get_generator_llm(),
         output_type=ResumeData,
         system_prompt=system_prompt,
         human_content=human_content,
@@ -272,7 +290,7 @@ async def evaluate_resume(
     system_prompt = _build_evaluator_system_prompt(position)
 
     result = await _invoke_llm(
-        model=settings.gemini_evaluator_model,
+        llm=get_evaluator_llm(),
         output_type=EvaluationOutput,
         system_prompt=system_prompt,
         human_content=human_content,
@@ -281,6 +299,73 @@ async def evaluate_resume(
 
     logger.debug(
         "이력서 평가 완료",
+        result=result.result,
+        rule=result.violated_rule,
+        item=result.violated_item,
+        feedback=result.feedback,
+    )
+    return result
+
+
+async def edit_resume[T](
+    resume_json: str,
+    message: str,
+    output_type: type[T],
+    feedback: str | None = None,
+    session_id: str | None = None,
+) -> T:
+    """이력서 수정 - vLLM 사용"""
+    logger.debug("이력서 수정 요청")
+
+    if feedback:
+        human_content = RESUME_EDIT_RETRY_HUMAN.format(
+            resume_json=resume_json,
+            message=message,
+            feedback=feedback,
+        )
+    else:
+        human_content = RESUME_EDIT_HUMAN.format(
+            resume_json=resume_json,
+            message=message,
+        )
+
+    config = _build_langfuse_config(session_id, ["resume", "edit"])
+
+    result = await _invoke_llm(
+        llm=get_generator_llm(),
+        output_type=output_type,
+        system_prompt=RESUME_EDIT_SYSTEM,
+        human_content=human_content,
+        config=config,
+    )
+
+    logger.debug("이력서 수정 완료")
+    return result
+
+
+async def evaluate_edited_resume(
+    resume_json: str,
+    session_id: str | None = None,
+) -> EvaluationOutput:
+    """수정된 이력서 평가 - Gemini 사용, 포지션 체크 없음"""
+    logger.debug("수정 이력서 평가 요청")
+
+    human_content = RESUME_EDIT_EVALUATOR_HUMAN.format(
+        resume_json=resume_json,
+    )
+
+    config = _build_langfuse_config(session_id, ["resume", "edit-evaluate"])
+
+    result = await _invoke_llm(
+        llm=get_evaluator_llm(),
+        output_type=EvaluationOutput,
+        system_prompt=RESUME_EDIT_EVALUATOR_SYSTEM,
+        human_content=human_content,
+        config=config,
+    )
+
+    logger.debug(
+        "수정 이력서 평가 완료",
         result=result.result,
         rule=result.violated_rule,
         item=result.violated_item,

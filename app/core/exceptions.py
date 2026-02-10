@@ -32,6 +32,7 @@ class ErrorCode(str, Enum):
     POSITION_MISMATCH = "POSITION_MISMATCH"
     RATE_LIMIT_EXCEEDED = "RATE_LIMIT_EXCEEDED"
     CALLBACK_ERROR = "CALLBACK_ERROR"
+    EDIT_FAILED = "EDIT_FAILED"
 
 
 class CustomException(Exception):

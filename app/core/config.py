@@ -7,10 +7,15 @@ class Settings(BaseSettings):
 
     environment: str = "development"
 
-    # Gemini 설정
+    # vLLM 설정
+    vllm_api_key: str = ""
+    vllm_base_url: str = ""
+    vllm_model: str = ""
+    vllm_timeout: float = 120.0
+
+    # Gemini 평가용 설정
     gemini_api_key: str = ""
-    gemini_generator_model: str
-    gemini_evaluator_model: str
+    gemini_evaluator_model: str = "gemini-3-pro-preview"
     gemini_timeout: float = 120.0
 
     # Callback
@@ -63,6 +68,8 @@ class Settings(BaseSettings):
     def validate_for_production(self) -> list[str]:
         """프로덕션 환경에서 필수 설정 검증 후 누락된 항목 반환"""
         errors = []
+        if not self.vllm_base_url:
+            errors.append("VLLM_BASE_URL")
         if not self.gemini_api_key:
             errors.append("GEMINI_API_KEY")
         if not self.backend_callback_url:

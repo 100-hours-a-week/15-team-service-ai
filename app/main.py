@@ -5,7 +5,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
-from app.api.routers import api_router
+from app.api.routers import api_router, api_v2_router
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
 from app.core.limiter import limiter
@@ -44,6 +44,7 @@ app.add_middleware(RequestLoggingMiddleware)
 
 register_exception_handlers(app)
 app.include_router(api_router)
+app.include_router(api_v2_router)
 
 
 @app.get("/health")

@@ -1,3 +1,10 @@
+from app.domain.resume.prompts.edit import (
+    RESUME_EDIT_EVALUATOR_HUMAN,
+    RESUME_EDIT_EVALUATOR_SYSTEM,
+    RESUME_EDIT_HUMAN,
+    RESUME_EDIT_RETRY_HUMAN,
+    RESUME_EDIT_SYSTEM,
+)
 from app.domain.resume.prompts.evaluation import (
     RESUME_EVALUATOR_HUMAN,
     RESUME_EVALUATOR_SYSTEM,
@@ -20,6 +27,11 @@ __all__ = [
     "RESUME_GENERATOR_RETRY_HUMAN",
     "RESUME_EVALUATOR_SYSTEM",
     "RESUME_EVALUATOR_HUMAN",
+    "RESUME_EDIT_SYSTEM",
+    "RESUME_EDIT_HUMAN",
+    "RESUME_EDIT_RETRY_HUMAN",
+    "RESUME_EDIT_EVALUATOR_SYSTEM",
+    "RESUME_EDIT_EVALUATOR_HUMAN",
     "get_position_config",
     "get_position_rules",
     "get_position_example",
