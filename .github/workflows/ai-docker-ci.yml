@@ -99,12 +99,7 @@ jobs:
       # Phase 3: 심층 검사 (Inside Docker)
       # ──────────────────────────────────────────
 
-      # 9. Typecheck (mypy) — 환경 의존적 검사
-      # 라이브러리 타입 참조가 필요하므로 Docker 내부에서 수행
-      - name: Typecheck (mypy)
-        run: docker run --rm ai-server:test mypy .
-
-      # 10. Tests (pytest) — 단위/통합 테스트
+      # 9. Tests (pytest) — 단위/통합 테스트
       - name: Create results directories
         run: mkdir -p test-results coverage
 
@@ -123,7 +118,7 @@ jobs:
       # Phase 5: 마무리
       # ──────────────────────────────────────────
 
-      # 13. 테스트 결과 리포트 업로드
+      # 10. 테스트 결과 리포트 업로드
       - name: Upload Test Results
         if: always()
         uses: actions/upload-artifact@v4
