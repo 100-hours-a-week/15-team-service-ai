@@ -1,15 +1,15 @@
-"""이력서 수정 LangGraph 워크플로우"""
-
-from typing import Literal
-
 import httpx
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
-from app.api.v2.schemas.resume_edit import EditResumeOutput
 from app.core.exceptions import ErrorCode
 from app.core.logging import get_logger
-from app.domain.resume.schemas.edit import EditState
+from app.domain.resume.schemas.edit import EditResumeOutput, EditState
+from app.domain.resume.workflow_utils import (
+    evaluate_with_fallback,
+    make_should_retry,
+    should_evaluate,
+)
 from app.infra.llm.client import edit_resume, evaluate_edited_resume
 
 logger = get_logger(__name__)
@@ -18,7 +18,7 @@ MAX_EDIT_RETRIES = 1
 
 
 async def edit_node(state: EditState) -> EditState:
-    """이력서 수정 노드: vLLM으로 이력서 수정"""
+    """이력서 수정 노드"""
     retry_count = state.get("retry_count", 0)
     evaluation = state.get("evaluation")
 
@@ -50,6 +50,24 @@ async def edit_node(state: EditState) -> EditState:
             "edited_resume": edited_resume,
         }
 
+    except httpx.ConnectError:
+        logger.error("edit_node LLM 서버 연결 실패")
+        return {
+            **state,
+            "retry_count": retry_count,
+            "error_code": ErrorCode.LLM_API_ERROR,
+            "error_message": "LLM 서버 연결 실패",
+        }
+
+    except httpx.TimeoutException:
+        logger.error("edit_node LLM 요청 타임아웃")
+        return {
+            **state,
+            "retry_count": retry_count,
+            "error_code": ErrorCode.LLM_API_ERROR,
+            "error_message": "LLM 요청 타임아웃",
+        }
+
     except httpx.HTTPStatusError as e:
         logger.error("edit_node LLM API 오류", status=e.response.status_code)
         return {
@@ -70,75 +88,18 @@ async def edit_node(state: EditState) -> EditState:
 
 
 async def evaluate_node(state: EditState) -> EditState:
-    """수정 평가 노드: Gemini로 품질 평가"""
-    logger.info("evaluate_node 시작")
-
+    """수정 평가 노드"""
     edited_resume = state["edited_resume"]
     session_id = state.get("session_id")
 
-    try:
+    async def _evaluate():
         resume_json = edited_resume.model_dump_json(indent=2)
-        evaluation = await evaluate_edited_resume(
+        return await evaluate_edited_resume(
             resume_json=resume_json,
             session_id=session_id,
         )
 
-        logger.info("evaluate_node 완료", result=evaluation.result)
-
-        return {
-            **state,
-            "evaluation": evaluation.result,
-            "evaluation_feedback": evaluation.feedback,
-        }
-
-    except httpx.HTTPStatusError as e:
-        logger.warning("evaluate_node LLM API 오류, 평가 건너뜀", status=e.response.status_code)
-        return {
-            **state,
-            "evaluation": "pass",
-            "evaluation_feedback": "",
-        }
-
-    except (ValueError, KeyError, TypeError) as e:
-        logger.warning("evaluate_node 데이터 오류, 평가 건너뜀", error=str(e))
-        return {
-            **state,
-            "evaluation": "pass",
-            "evaluation_feedback": "",
-        }
-
-
-def _has_error(state: EditState, caller: str) -> bool:
-    """에러 상태 확인"""
-    if state.get("error_code"):
-        logger.info("에러 발생, 종료", caller=caller)
-        return True
-    return False
-
-
-def should_evaluate(state: EditState) -> Literal["evaluate", "end"]:
-    """에러 확인: 에러 있으면 종료, 없으면 평가로"""
-    return "end" if _has_error(state, "should_evaluate") else "evaluate"
-
-
-def should_retry(state: EditState) -> Literal["edit", "end"]:
-    """재시도 여부 결정"""
-    if _has_error(state, "should_retry"):
-        return "end"
-
-    evaluation = state.get("evaluation", "pass")
-    retry_count = state.get("retry_count", 0)
-
-    if evaluation == "pass":
-        logger.info("should_retry: 평가 통과, 종료")
-        return "end"
-
-    if retry_count >= MAX_EDIT_RETRIES:
-        logger.warning("should_retry: 최대 재시도 도달, 강제 통과")
-        return "end"
-
-    logger.info("should_retry: 재시도 필요", retry_count=retry_count)
-    return "edit"
+    return await evaluate_with_fallback(state, _evaluate)
 
 
 def create_edit_workflow() -> CompiledStateGraph:
@@ -159,6 +120,7 @@ def create_edit_workflow() -> CompiledStateGraph:
         },
     )
 
+    should_retry = make_should_retry(MAX_EDIT_RETRIES, "edit")
     workflow.add_conditional_edges(
         "evaluate",
         should_retry,

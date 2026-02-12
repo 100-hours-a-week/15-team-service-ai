@@ -13,12 +13,25 @@ from app.domain.resume.error_handler import (
     handle_data_error,
     handle_http_error,
 )
-from app.domain.resume.schemas import RepoContext, ResumeData, ResumeRequest, ResumeState
+from app.domain.resume.schemas import (
+    ProjectInfoDict,
+    RepoContext,
+    ResumeData,
+    ResumeRequest,
+    ResumeState,
+)
 from app.domain.resume.service import (
     collect_project_info,
     collect_repo_contexts,
     collect_user_stats,
+    filter_tech_stack_by_position,
     validate_position_match,
+)
+from app.domain.resume.workflow_utils import (
+    evaluate_with_fallback,
+    has_error,
+    make_should_retry,
+    should_evaluate,
 )
 from app.infra.github.client import parse_repo_url
 from app.infra.llm.client import evaluate_resume, generate_resume
@@ -133,6 +146,12 @@ async def generate_node(state: ResumeState) -> ResumeState:
             session_id=session_id,
         )
 
+        for project in resume_data.projects:
+            project.tech_stack = filter_tech_stack_by_position(
+                project.tech_stack,
+                request.position,
+            )
+
         logger.info("generate_node 완료", projects=len(resume_data.projects))
 
         return {
@@ -140,6 +159,24 @@ async def generate_node(state: ResumeState) -> ResumeState:
             "retry_count": retry_count,
             "resume_data": resume_data,
         }
+
+    except httpx.ConnectError:
+        logger.error("generate_node LLM 서버 연결 실패")
+        return create_error_state(
+            state,
+            ErrorCode.LLM_API_ERROR,
+            "LLM 서버 연결 실패",
+            retry_count=retry_count,
+        )
+
+    except httpx.TimeoutException:
+        logger.error("generate_node LLM 요청 타임아웃")
+        return create_error_state(
+            state,
+            ErrorCode.LLM_API_ERROR,
+            "LLM 요청 타임아웃",
+            retry_count=retry_count,
+        )
 
     except httpx.HTTPStatusError as e:
         return handle_http_error(
@@ -182,81 +219,23 @@ async def generate_node(state: ResumeState) -> ResumeState:
 
 async def evaluate_node(state: ResumeState) -> ResumeState:
     """이력서 평가 노드: 품질 평가 수행"""
-    logger.info("evaluate_node 시작")
-
     resume_data = state["resume_data"]
     request = state["request"]
     session_id = state.get("session_id")
 
-    try:
-        evaluation = await evaluate_resume(
+    async def _evaluate():
+        return await evaluate_resume(
             resume_data=resume_data,
             position=request.position,
             session_id=session_id,
         )
 
-        logger.info("evaluate_node 완료", result=evaluation.result)
-
-        return {
-            **state,
-            "evaluation": evaluation.result,
-            "evaluation_feedback": evaluation.feedback,
-        }
-
-    except httpx.HTTPStatusError as e:
-        status_code = e.response.status_code
-        logger.warning("evaluate_node LLM API 오류, 평가 건너뜀", status=status_code)
-        return {
-            **state,
-            "evaluation": "pass",
-            "evaluation_feedback": "",
-        }
-
-    except (ValueError, KeyError, TypeError) as e:
-        logger.warning("evaluate_node 데이터 오류, 평가 건너뜀", error=str(e))
-        return {
-            **state,
-            "evaluation": "pass",
-            "evaluation_feedback": "",
-        }
-
-
-def _has_error(state: ResumeState, caller: str) -> bool:
-    """에러 상태 확인 공통 함수"""
-    if state.get("error_code"):
-        logger.info("에러 발생, 종료", caller=caller)
-        return True
-    return False
+    return await evaluate_with_fallback(state, _evaluate)
 
 
 def should_continue(state: ResumeState) -> Literal["generate", "end"]:
     """에러 상태 확인: 에러 있으면 종료, 없으면 다음 노드로"""
-    return "end" if _has_error(state, "should_continue") else "generate"
-
-
-def should_evaluate(state: ResumeState) -> Literal["evaluate", "end"]:
-    """에러 상태 확인: 에러 있으면 종료, 없으면 평가 노드로"""
-    return "end" if _has_error(state, "should_evaluate") else "evaluate"
-
-
-def should_retry(state: ResumeState) -> Literal["generate", "end"]:
-    """재시도 여부 결정: pass면 종료, fail이면 generate로 루프"""
-    if _has_error(state, "should_retry"):
-        return "end"
-
-    evaluation = state.get("evaluation", "pass")
-    retry_count = state.get("retry_count", 0)
-
-    if evaluation == "pass":
-        logger.info("should_retry: 평가 통과, 종료")
-        return "end"
-
-    if retry_count >= settings.workflow_max_retries:
-        logger.warning("should_retry: 최대 재시도 도달, 종료")
-        return "end"
-
-    logger.info("should_retry: 재시도 필요", retry_count=retry_count)
-    return "generate"
+    return "end" if has_error(state, "should_continue") else "generate"
 
 
 def create_resume_workflow() -> CompiledStateGraph:
@@ -287,6 +266,7 @@ def create_resume_workflow() -> CompiledStateGraph:
         },
     )
 
+    should_retry = make_should_retry(settings.workflow_max_retries, "generate")
     workflow.add_conditional_edges(
         "evaluate",
         should_retry,
@@ -300,7 +280,7 @@ def create_resume_workflow() -> CompiledStateGraph:
 
 
 async def _generate_in_batches(
-    project_info: list[dict],
+    project_info: list[ProjectInfoDict],
     request: ResumeRequest,
     repo_contexts: dict[str, RepoContext],
     user_stats: dict | None = None,

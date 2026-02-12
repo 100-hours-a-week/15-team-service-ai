@@ -1,5 +1,3 @@
-"""V1 API 스키마"""
-
 from app.api.v1.schemas.callback import (
     CallbackErrorData,
     CallbackFailurePayload,

@@ -1,8 +1,21 @@
-"""이력서 수정 워크플로우 상태"""
-
 from typing import TypedDict
 
-from app.api.v2.schemas.resume_edit import EditResumeOutput
+from pydantic import BaseModel
+
+
+class EditProjectOutput(BaseModel):
+    """LLM 구조화 출력 프로젝트"""
+
+    name: str
+    repo_url: str
+    tech_stack: list[str]
+    description: str
+
+
+class EditResumeOutput(BaseModel):
+    """LLM 구조화 출력 전체"""
+
+    projects: list[EditProjectOutput]
 
 
 class EditState(TypedDict, total=False):

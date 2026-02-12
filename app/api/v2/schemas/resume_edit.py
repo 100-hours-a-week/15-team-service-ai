@@ -1,6 +1,18 @@
-"""이력서 수정 API 스키마"""
-
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.domain.resume.schemas.edit import EditProjectOutput, EditResumeOutput
+
+__all__ = [
+    "EditProjectRequest",
+    "EditContentRequest",
+    "EditRequest",
+    "EditProjectOutput",
+    "EditResumeOutput",
+    "EditProjectResponse",
+    "EditContentResponse",
+    "EditErrorResponse",
+    "EditResponse",
+]
 
 
 class EditProjectRequest(BaseModel):
@@ -36,21 +48,6 @@ class EditRequest(BaseModel):
         if not stripped:
             raise ValueError("수정 요청 메시지가 비어있습니다")
         return stripped
-
-
-class EditProjectOutput(BaseModel):
-    """LLM 구조화 출력 프로젝트"""
-
-    name: str
-    repo_url: str
-    tech_stack: list[str]
-    description: str
-
-
-class EditResumeOutput(BaseModel):
-    """LLM 구조화 출력 전체"""
-
-    projects: list[EditProjectOutput]
 
 
 class EditProjectResponse(BaseModel):

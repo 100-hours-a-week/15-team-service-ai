@@ -1,5 +1,3 @@
-"""포지션별 tech_stack 및 description 규칙 정의"""
-
 COMMON_TECH_EXCLUDE = [
     "OpenAI",
     "Whisper",
@@ -530,7 +528,7 @@ def get_position_rules(position: str) -> str:
         "**tech_stack 포함 기술:**",
     ]
 
-    allowed = config["tech_allowed"][:15]
+    allowed = config["tech_allowed"]
     lines.append(", ".join(allowed))
 
     if config["tech_exclude"]:

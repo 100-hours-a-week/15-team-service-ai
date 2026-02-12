@@ -15,35 +15,40 @@ from app.domain.resume.prompts import (
     RESUME_EDIT_RETRY_HUMAN,
     RESUME_EDIT_SYSTEM,
     RESUME_EVALUATOR_HUMAN,
-    RESUME_EVALUATOR_SYSTEM,
     RESUME_GENERATOR_HUMAN,
     RESUME_GENERATOR_RETRY_HUMAN,
-    RESUME_GENERATOR_SYSTEM,
-    get_position_example,
-    get_position_rules,
+)
+from app.domain.resume.prompts.builder import (
+    build_evaluator_system_prompt,
+    build_generator_system_prompt,
+    format_project_info,
+    format_repo_contexts,
 )
 from app.domain.resume.schemas import (
     EvaluationOutput,
+    ProjectInfoDict,
     RepoContext,
     ResumeData,
     UserStats,
 )
-from app.domain.resume.service import filter_tech_stack_by_position
 
 logger = get_logger(__name__)
 
 
-def get_langfuse_handler() -> CallbackHandler | None:
-    """Langfuse 콜백 핸들러 반환"""
-    if not settings.langfuse_public_key or not settings.langfuse_secret_key:
-        return None
-
+def setup_langfuse_env() -> None:
+    """Langfuse 환경 변수 설정 - 앱 시작 시 한 번만 호출"""
     if settings.langfuse_public_key:
         os.environ["LANGFUSE_PUBLIC_KEY"] = settings.langfuse_public_key
     if settings.langfuse_secret_key:
         os.environ["LANGFUSE_SECRET_KEY"] = settings.langfuse_secret_key
     if settings.langfuse_base_url:
         os.environ["LANGFUSE_HOST"] = settings.langfuse_base_url
+
+
+def get_langfuse_handler() -> CallbackHandler | None:
+    """Langfuse 콜백 핸들러 반환"""
+    if not settings.langfuse_public_key or not settings.langfuse_secret_key:
+        return None
 
     return CallbackHandler()
 
@@ -87,9 +92,13 @@ async def _invoke_llm[T](
     system_prompt: str,
     human_content: str,
     config: dict,
+    structured_output_method: str | None = None,
 ) -> T:
     """구조화된 출력으로 LLM 호출"""
-    llm = llm.with_structured_output(output_type)
+    kwargs = {}
+    if structured_output_method:
+        kwargs["method"] = structured_output_method
+    llm = llm.with_structured_output(output_type, **kwargs)
     messages = [
         SystemMessage(content=system_prompt),
         HumanMessage(content=human_content),
@@ -97,101 +106,8 @@ async def _invoke_llm[T](
     return await llm.ainvoke(messages, config=config)
 
 
-def format_project_info(project_info: list[dict]) -> str:
-    """프로젝트 정보를 프롬프트용 텍스트로 포맷"""
-    lines = []
-    total_projects = len(project_info)
-
-    for idx, project in enumerate(project_info, start=1):
-        if idx > 1:
-            lines.append("")
-            lines.append("---")
-            lines.append("")
-
-        lines.append(f"### 프로젝트 {idx}/{total_projects}: {project['repo_name']}")
-        lines.append(f"- 레포지토리: {project['repo_url']}")
-
-        if project.get("file_tree"):
-            tree_summary = ", ".join(project["file_tree"][: settings.prompt_file_tree_max_count])
-            lines.append(f"- 파일 구조: {tree_summary}")
-
-        if project.get("dependencies"):
-            lines.append("- 핵심 의존성 [tech_stack에 반드시 포함]:")
-            for dep in project["dependencies"][: settings.prompt_dependencies_max_count]:
-                lines.append(f"  * {dep}")
-
-        if project.get("messages"):
-            lines.append("- 주요 작업:")
-            for msg in project["messages"][: settings.prompt_messages_max_count]:
-                lines.append(f"  - {msg}")
-
-    return "\n".join(lines)
-
-
-def format_repo_contexts(repo_contexts: dict[str, RepoContext]) -> str:
-    """레포지토리 컨텍스트를 프롬프트용 텍스트로 포맷"""
-    if not repo_contexts:
-        return "없음"
-
-    lines = []
-    total = len(repo_contexts)
-
-    for idx, (name, ctx) in enumerate(repo_contexts.items(), start=1):
-        if idx > 1:
-            lines.append("")
-            lines.append("---")
-            lines.append("")
-
-        lines.append(f"### 레포지토리 {idx}/{total}: {name}")
-        lines.append(f"- 언어: {', '.join(ctx.languages.keys()) or '없음'}")
-        lines.append(f"- 설명: {ctx.description or '없음'}")
-        lines.append(f"- 토픽: {', '.join(ctx.topics) if ctx.topics else '없음'}")
-
-        if ctx.readme_summary:
-            readme_content = ctx.readme_summary[: settings.readme_max_length_prompt]
-            lines.append(f'- README:\n"""\n{readme_content}\n"""')
-
-    return "\n".join(lines)
-
-
-def _build_generator_system_prompt(position: str) -> str:
-    """포지션별 규칙을 주입한 시스템 프롬프트 생성"""
-    position_rules = get_position_rules(position)
-    position_example = get_position_example(position)
-
-    return RESUME_GENERATOR_SYSTEM.format(
-        position=position,
-        position_rules=position_rules,
-        position_example=position_example,
-    )
-
-
-def _build_evaluator_system_prompt(position: str) -> str:
-    """포지션별 규칙을 주입한 평가 시스템 프롬프트 생성"""
-    position_rules = _get_evaluator_position_rules(position)
-
-    return RESUME_EVALUATOR_SYSTEM.format(
-        position=position,
-        position_rules=position_rules,
-    )
-
-
-def _get_evaluator_position_rules(position: str) -> str:
-    """평가용 포지션별 제외 규칙 반환"""
-    from app.domain.resume.prompts.positions import get_position_config
-
-    config = get_position_config(position)
-    name_ko = config["name_ko"]
-
-    if not config["tech_exclude"]:
-        return f"- {name_ko}: 모든 기술 허용"
-
-    exclude_list = ", ".join(config["tech_exclude"])
-    return f"- {name_ko} FAIL if has: {exclude_list}"
-
-
 async def generate_resume(
-    project_info: list[dict],
+    project_info: list[ProjectInfoDict],
     position: str,
     repo_urls: list[str],
     feedback: str | None = None,
@@ -239,7 +155,7 @@ async def generate_resume(
         )
 
     config = _build_langfuse_config(session_id, ["resume", "generate", position])
-    system_prompt = _build_generator_system_prompt(position)
+    system_prompt = build_generator_system_prompt(position)
 
     result = await _invoke_llm(
         llm=get_generator_llm(),
@@ -252,22 +168,6 @@ async def generate_resume(
     output_count = len(result.projects) if result.projects else 0
     if output_count < project_count:
         logger.warning("프로젝트 누락", input=project_count, output=output_count)
-
-    for project in result.projects:
-        original_count = len(project.tech_stack)
-        project.tech_stack = filter_tech_stack_by_position(
-            project.tech_stack,
-            position,
-        )
-        filtered_count = len(project.tech_stack)
-
-        if filtered_count < original_count:
-            logger.debug(
-                "tech_stack 필터링",
-                project=project.name,
-                original=original_count,
-                filtered=filtered_count,
-            )
 
     logger.debug("이력서 생성 완료", position=position, projects=len(result.projects))
     return result
@@ -287,7 +187,7 @@ async def evaluate_resume(
     )
 
     config = _build_langfuse_config(session_id, ["resume", "evaluate", position])
-    system_prompt = _build_evaluator_system_prompt(position)
+    system_prompt = build_evaluator_system_prompt(position)
 
     result = await _invoke_llm(
         llm=get_evaluator_llm(),
@@ -295,6 +195,7 @@ async def evaluate_resume(
         system_prompt=system_prompt,
         human_content=human_content,
         config=config,
+        structured_output_method="json_mode",
     )
 
     logger.debug(
@@ -362,6 +263,7 @@ async def evaluate_edited_resume(
         system_prompt=RESUME_EDIT_EVALUATOR_SYSTEM,
         human_content=human_content,
         config=config,
+        structured_output_method="json_mode",
     )
 
     logger.debug(

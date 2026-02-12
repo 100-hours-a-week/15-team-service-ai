@@ -5,6 +5,16 @@ from pydantic import BaseModel
 from app.domain.resume.schemas.github import RepoContext, UserStats
 
 
+class ProjectInfoDict(TypedDict):
+    """프로젝트 데이터 수집 결과"""
+
+    repo_name: str
+    repo_url: str
+    file_tree: list[str]
+    dependencies: list[str]
+    messages: list[str]
+
+
 class ResumeRequest(BaseModel):
     """이력서 생성 요청"""
 
@@ -45,7 +55,7 @@ class ResumeState(TypedDict, total=False):
     request: ResumeRequest
     job_id: str
     session_id: str | None
-    project_info: list[dict]
+    project_info: list[ProjectInfoDict]
     repo_contexts: dict[str, RepoContext]
     user_stats: UserStats | None
     resume_data: ResumeData

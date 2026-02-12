@@ -1,5 +1,3 @@
-"""콜백 페이로드 스키마"""
-
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field

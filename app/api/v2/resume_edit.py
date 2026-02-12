@@ -1,5 +1,3 @@
-"""이력서 수정 v2 엔드포인트"""
-
 import json
 import uuid
 
