@@ -1,5 +1,3 @@
-"""워크플로우 에러 처리 헬퍼 테스트"""
-
 from unittest.mock import MagicMock
 
 import httpx

@@ -1,5 +1,3 @@
-"""이력서 API 엔드포인트 테스트"""
-
 from unittest.mock import AsyncMock, patch
 
 import pytest

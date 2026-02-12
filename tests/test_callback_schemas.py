@@ -1,5 +1,3 @@
-"""콜백 페이로드 스키마 테스트"""
-
 from app.api.v1.schemas.callback import (
     CallbackErrorData,
     CallbackFailurePayload,

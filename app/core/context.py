@@ -4,8 +4,11 @@
 contextvars를 사용하여 비동기 환경에서도 안전하게 request_id와 job_id를 관리
 """
 
+import re
 import uuid
 from contextvars import ContextVar
+
+_REQUEST_ID_PATTERN = re.compile(r"^[a-zA-Z0-9\-_]{1,64}$")
 
 request_id_var: ContextVar[str | None] = ContextVar("request_id", default=None)
 job_id_var: ContextVar[str | None] = ContextVar("job_id", default=None)
@@ -22,7 +25,7 @@ def set_request_id(request_id: str | None = None) -> str:
 
     인자가 없으면 8자리 UUID 자동 생성
     """
-    if request_id is None:
+    if request_id is None or not _REQUEST_ID_PATTERN.match(request_id):
         request_id = uuid.uuid4().hex[:8]
     request_id_var.set(request_id)
     return request_id

@@ -1,15 +1,14 @@
-"""이력서 수정 워크플로우 실행 진입점"""
-
 import asyncio
 
-from app.api.v2.schemas.resume_edit import EditResumeOutput
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.domain.resume.edit_workflow import create_edit_workflow
-from app.domain.resume.schemas.edit import EditState
+from app.domain.resume.schemas.edit import EditResumeOutput, EditState
 from app.infra.llm.client import get_langfuse_handler
 
 logger = get_logger(__name__)
+
+_edit_workflow = create_edit_workflow()
 
 
 async def run_edit_agent(
@@ -25,8 +24,6 @@ async def run_edit_agent(
     logger.info("수정 에이전트 시작", session_id=session_id)
 
     try:
-        workflow = create_edit_workflow()
-
         initial_state: EditState = {
             "resume_json": resume_json,
             "message": message,
@@ -38,7 +35,7 @@ async def run_edit_agent(
         config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
 
         final_state = await asyncio.wait_for(
-            workflow.ainvoke(initial_state, config=config),
+            _edit_workflow.ainvoke(initial_state, config=config),
             timeout=settings.workflow_timeout,
         )
 
@@ -60,4 +57,4 @@ async def run_edit_agent(
 
     except Exception as e:
         logger.error("수정 에이전트 실패", error=str(e), exc_info=True)
-        return None, str(e)
+        return None, "알 수 없는 오류가 발생했습니다"

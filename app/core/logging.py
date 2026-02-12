@@ -44,10 +44,7 @@ def add_context_processor(logger: logging.Logger, method_name: str, event_dict: 
 
 
 def mask_sensitive_processor(logger: logging.Logger, method_name: str, event_dict: dict) -> dict:
-    """프로덕션에서 민감한 정보 마스킹"""
-    if not settings.is_production:
-        return event_dict
-
+    """모든 환경에서 민감한 정보 마스킹"""
     for key, value in event_dict.items():
         if isinstance(value, str):
             event_dict[key] = _mask_sensitive_data(value)

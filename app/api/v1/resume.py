@@ -98,7 +98,7 @@ async def _run_agent_and_callback(
         except Exception as e:
             logger.error("작업 처리 실패", error=str(e))
             try:
-                payload = _build_callback_payload(job_id, None, str(e))
+                payload = _build_callback_payload(job_id, None, "알 수 없는 오류가 발생했습니다")
                 async with httpx.AsyncClient(timeout=settings.callback_timeout) as client:
                     await _send_callback_with_retry(client, callback_url, payload, job_id)
             except Exception as cb_err:

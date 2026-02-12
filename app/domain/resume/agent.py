@@ -8,6 +8,8 @@ from app.infra.llm.client import get_langfuse_handler
 
 logger = get_logger(__name__)
 
+_resume_workflow = create_resume_workflow()
+
 
 async def run_resume_agent(
     request: ResumeRequest,
@@ -30,8 +32,6 @@ async def run_resume_agent(
     )
 
     try:
-        workflow = create_resume_workflow()
-
         initial_state: ResumeState = {
             "request": request,
             "session_id": session_id,
@@ -41,7 +41,7 @@ async def run_resume_agent(
         config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
 
         final_state = await asyncio.wait_for(
-            workflow.ainvoke(initial_state, config=config),
+            _resume_workflow.ainvoke(initial_state, config=config),
             timeout=settings.workflow_timeout,
         )
 
@@ -63,4 +63,4 @@ async def run_resume_agent(
 
     except Exception as e:
         logger.error("에이전트 실패", error=str(e), exc_info=True)
-        return None, str(e)
+        return None, "알 수 없는 오류가 발생했습니다"

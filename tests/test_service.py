@@ -4,7 +4,10 @@ from app.domain.resume.schemas import CommitInfo, PRInfoExtended
 from app.domain.resume.service import (
     _filter_and_sort_dependencies,
     _format_messages,
+    _is_empty_repository,
     _summarize_file_tree,
+    filter_tech_stack_by_position,
+    validate_position_match,
 )
 
 
@@ -206,3 +209,122 @@ class TestFormatMessages:
 
         assert len(result) == 1
         assert "PR #1: Quick fix" in result[0]
+
+
+class TestIsEmptyRepository:
+    """_is_empty_repository 함수 테스트"""
+
+    def test_empty_file_tree(self):
+        """빈 파일 트리는 빈 레포지토리"""
+        assert _is_empty_repository([]) is True
+
+    def test_only_config_files(self):
+        """설정 파일만 있으면 빈 레포지토리"""
+        file_tree = ["README.md", ".gitignore", "LICENSE"]
+        assert _is_empty_repository(file_tree) is True
+
+    def test_with_python_files(self):
+        """파이썬 파일이 있으면 빈 레포지토리가 아님"""
+        file_tree = ["README.md", "src/main.py"]
+        assert _is_empty_repository(file_tree) is False
+
+    def test_with_java_files(self):
+        """자바 파일이 있으면 빈 레포지토리가 아님"""
+        file_tree = ["src/Main.java"]
+        assert _is_empty_repository(file_tree) is False
+
+    def test_with_javascript_files(self):
+        """자바스크립트 파일이 있으면 빈 레포지토리가 아님"""
+        file_tree = ["index.js"]
+        assert _is_empty_repository(file_tree) is False
+
+    def test_with_typescript_files(self):
+        """타입스크립트 파일이 있으면 빈 레포지토리가 아님"""
+        file_tree = ["src/app.ts", "src/app.tsx"]
+        assert _is_empty_repository(file_tree) is False
+
+
+class TestValidatePositionMatch:
+    """validate_position_match 함수 테스트"""
+
+    def test_backend_with_backend_deps(self):
+        """백엔드 포지션 + 백엔드 의존성 = 성공"""
+        is_valid, error_msg = validate_position_match(
+            "백엔드 개발자",
+            ["spring-boot", "mysql"],
+        )
+        assert is_valid is True
+        assert error_msg == ""
+
+    def test_backend_with_frontend_only_deps(self):
+        """백엔드 포지션 + 프론트엔드 의존성만 = 실패"""
+        is_valid, error_msg = validate_position_match(
+            "백엔드 개발자",
+            ["react", "next"],
+        )
+        assert is_valid is False
+        assert "포지션에 맞는 기술 스택이 없습니다" in error_msg
+
+    def test_frontend_with_frontend_deps(self):
+        """프론트엔드 포지션 + 프론트엔드 의존성 = 성공"""
+        is_valid, error_msg = validate_position_match(
+            "프론트엔드 개발자",
+            ["react", "typescript"],
+        )
+        assert is_valid is True
+        assert error_msg == ""
+
+    def test_frontend_with_backend_only_deps(self):
+        """프론트엔드 포지션 + 백엔드 의존성만 = 실패"""
+        is_valid, error_msg = validate_position_match(
+            "프론트엔드 개발자",
+            ["spring-boot", "mysql"],
+        )
+        assert is_valid is False
+
+    def test_unknown_position_always_valid(self):
+        """알 수 없는 포지션은 항상 성공"""
+        is_valid, error_msg = validate_position_match(
+            "데이터 엔지니어",
+            ["airflow", "spark"],
+        )
+        assert is_valid is True
+
+    def test_empty_dependencies(self):
+        """빈 의존성 리스트"""
+        is_valid, error_msg = validate_position_match(
+            "백엔드 개발자",
+            [],
+        )
+        assert is_valid is False
+
+
+class TestFilterTechStackByPosition:
+    """filter_tech_stack_by_position 함수 테스트"""
+
+    def test_backend_filters_frontend_techs(self):
+        """백엔드 포지션에서 프론트엔드 기술 제외"""
+        tech_stack = ["Python", "FastAPI", "React", "PostgreSQL", "Docker", "Redis"]
+        result = filter_tech_stack_by_position(tech_stack, "백엔드 개발자")
+
+        assert "Python" in result
+        assert "FastAPI" in result
+
+    def test_max_count_limit(self):
+        """max_count 제한 적용"""
+        tech_stack = [f"Tech{i}" for i in range(15)]
+        result = filter_tech_stack_by_position(tech_stack, "백엔드 개발자", max_count=5)
+
+        assert len(result) <= 5
+
+    def test_empty_tech_stack(self):
+        """빈 기술 스택"""
+        result = filter_tech_stack_by_position([], "백엔드 개발자")
+        assert result == []
+
+    def test_excluded_techs_removed(self):
+        """제외 대상 기술은 제거"""
+        tech_stack = ["Python", "lombok", "FastAPI", "Spring Boot", "Docker", "Redis"]
+        result = filter_tech_stack_by_position(tech_stack, "백엔드 개발자")
+
+        assert "lombok" not in result

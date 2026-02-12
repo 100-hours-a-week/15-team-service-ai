@@ -1,5 +1,3 @@
-"""워크플로우 노드 함수 테스트"""
-
 from unittest.mock import AsyncMock, patch
 
 import httpx
@@ -20,8 +18,10 @@ from app.domain.resume.workflow import (
     evaluate_node,
     generate_node,
     should_continue,
+)
+from app.domain.resume.workflow_utils import (
+    make_should_retry,
     should_evaluate,
-    should_retry,
 )
 
 
@@ -421,6 +421,10 @@ class TestShouldEvaluate:
 class TestShouldRetry:
     """should_retry 조건 함수 테스트"""
 
+    def setup_method(self):
+        """각 테스트 전에 should_retry 함수 생성"""
+        self.should_retry = make_should_retry(max_retries=2, retry_node="generate")
+
     def test_returns_end_when_error(self):
         """에러 있을 때 end 반환"""
         state = ResumeState(
@@ -431,9 +435,7 @@ class TestShouldRetry:
             error_code=ErrorCode.GENERATE_ERROR,
         )
 
-        result = should_retry(state)
-
-        assert result == "end"
+        assert self.should_retry(state) == "end"
 
     def test_returns_end_when_pass(self):
         """평가 통과 시 end 반환"""
@@ -446,9 +448,7 @@ class TestShouldRetry:
             retry_count=0,
         )
 
-        result = should_retry(state)
-
-        assert result == "end"
+        assert self.should_retry(state) == "end"
 
     def test_returns_generate_when_fail_and_can_retry(self):
         """평가 실패 + 재시도 가능 시 generate 반환"""
@@ -461,9 +461,7 @@ class TestShouldRetry:
             retry_count=0,
         )
 
-        result = should_retry(state)
-
-        assert result == "generate"
+        assert self.should_retry(state) == "generate"
 
     def test_returns_end_when_max_retries_reached(self):
         """최대 재시도 도달 시 end 반환"""
@@ -473,11 +471,7 @@ class TestShouldRetry:
                 position="개발자",
             ),
             evaluation="fail",
-            retry_count=3,
+            retry_count=2,
         )
 
-        with patch("app.domain.resume.workflow.settings") as mock_settings:
-            mock_settings.workflow_max_retries = 3
-            result = should_retry(state)
-
-        assert result == "end"
+        assert self.should_retry(state) == "end"

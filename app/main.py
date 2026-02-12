@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -6,24 +7,27 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
 from app.api.routers import api_router, api_v2_router
+from app.api.v1.resume import _background_tasks
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
 from app.core.limiter import limiter
-from app.core.logging import setup_logging
+from app.core.logging import get_logger, setup_logging
 from app.core.middleware import RequestLoggingMiddleware
 from app.infra.github.client import close_client as close_github_client
+from app.infra.llm.client import setup_langfuse_env
 
 setup_logging()
+setup_langfuse_env()
+logger = get_logger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """앱 시작/종료 이벤트 관리"""
-    if settings.is_production:
-        errors = settings.validate_for_production()
-        if errors:
-            raise RuntimeError(f"프로덕션 설정 오류: {', '.join(errors)}")
     yield
+    if _background_tasks:
+        logger.info("백그라운드 작업 완료 대기", count=len(_background_tasks))
+        await asyncio.gather(*_background_tasks, return_exceptions=True)
     await close_github_client()
 
 

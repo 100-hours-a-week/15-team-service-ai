@@ -1,5 +1,3 @@
-"""LLM 클라이언트 테스트"""
-
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest

@@ -1,5 +1,3 @@
-"""이력서 수정 기능 테스트"""
-
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -275,8 +273,8 @@ class TestEditAgent:
 
         with (
             patch(
-                "app.domain.resume.edit_agent.create_edit_workflow",
-                return_value=mock_workflow,
+                "app.domain.resume.edit_agent._edit_workflow",
+                mock_workflow,
             ),
             patch(
                 "app.domain.resume.edit_agent.get_langfuse_handler",
@@ -306,8 +304,8 @@ class TestEditAgent:
 
         with (
             patch(
-                "app.domain.resume.edit_agent.create_edit_workflow",
-                return_value=mock_workflow,
+                "app.domain.resume.edit_agent._edit_workflow",
+                mock_workflow,
             ),
             patch(
                 "app.domain.resume.edit_agent.get_langfuse_handler",
@@ -332,8 +330,8 @@ class TestEditAgent:
 
         with (
             patch(
-                "app.domain.resume.edit_agent.create_edit_workflow",
-                return_value=mock_workflow,
+                "app.domain.resume.edit_agent._edit_workflow",
+                mock_workflow,
             ),
             patch(
                 "app.domain.resume.edit_agent.get_langfuse_handler",
