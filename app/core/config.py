@@ -11,12 +11,12 @@ class Settings(BaseSettings):
     vllm_api_key: str = ""
     vllm_base_url: str = ""
     vllm_model: str = ""
-    vllm_timeout: float = 120.0
+    vllm_timeout: float = 300.0
 
     # Gemini 평가용 설정
     gemini_api_key: str = ""
     gemini_evaluator_model: str = "gemini-3-pro-preview"
-    gemini_timeout: float = 120.0
+    gemini_timeout: float = 60.0
 
     # Callback
     backend_callback_url: str = ""
@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     # Timeout 설정
     github_timeout: float = 60.0
     callback_timeout: float = 120.0
-    workflow_timeout: float = 180.0
+    workflow_timeout: float = 600.0
 
     # 동시 요청 제한
     github_max_concurrent_requests: int = 5
@@ -36,7 +36,7 @@ class Settings(BaseSettings):
 
     # 워크플로우 설정
     workflow_max_retries: int = 2
-    workflow_batch_size: int = 3
+    workflow_batch_size: int = 1
 
     # README 설정
     readme_max_length_github: int = 4000
@@ -68,12 +68,16 @@ class Settings(BaseSettings):
     def validate_for_production(self) -> list[str]:
         """프로덕션 환경에서 필수 설정 검증 후 누락된 항목 반환"""
         errors = []
+        if not self.vllm_api_key:
+            errors.append("VLLM_API_KEY")
         if not self.vllm_base_url:
             errors.append("VLLM_BASE_URL")
         if not self.gemini_api_key:
             errors.append("GEMINI_API_KEY")
         if not self.backend_callback_url:
             errors.append("BACKEND_CALLBACK_URL")
+        if not self.ai_callback_secret:
+            errors.append("AI_CALLBACK_SECRET")
         return errors
 
     @model_validator(mode="after")

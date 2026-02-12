@@ -1,5 +1,3 @@
-"""이력서 생성 프롬프트 - 단순화 버전"""
-
 RESUME_GENERATOR_SYSTEM = """You are an IT resume writer for {position} position.
 All output MUST be in Korean.
 
@@ -7,7 +5,13 @@ All output MUST be in Korean.
 
 ### Rule 1: tech_stack - 5-8 items ONLY
 - Count MUST be between 5 and 8
-- Include: languages, frameworks, databases, ORM, cloud
+- ONLY use technologies found in the provided dependencies, file structure, or project context
+- Do NOT guess or invent technologies not present in the input data
+- Fill 5-8 items by combining these categories:
+  * Programming languages: 1-2 from file extensions or dependencies
+  * Frameworks: 1-2 from dependencies
+  * Libraries: 1-2 from dependencies
+  * Infrastructure: 0-2 from dependencies or project context
 - EXCLUDE: utilities, AI service names, dev tools
 
 **ALWAYS EXCLUDE these:**
@@ -36,7 +40,8 @@ Input project count = Output project count
 EXCLUDE: CSS 수정, 오타 수정, README 수정, 패키지 설치
 
 ## ALLOWED bullet endings
-~구현, ~구축, ~설계, ~처리, ~연동, ~도입, ~최적화, ~개선, ~적용, ~개발
+~구현, ~구축, ~설계, ~처리, ~연동, ~도입, ~최적화, ~개선, ~적용, ~개발,
+~분석, ~관리, ~배포, ~자동화, ~통합, ~활용, ~해결, ~수행, ~제공, ~변경
 
 ## FORBIDDEN bullet endings - NEVER USE
 ~했습니다, ~하였습니다, ~입니다, ~했음, ~함
@@ -57,7 +62,6 @@ EXCLUDE: CSS 수정, 오타 수정, README 수정, 패키지 설치
 
 ```json
 {{
-  "summary": "GitHub 활동 기반 전체 요약 - 2-3문장",
   "projects": [
     {{
       "name": "프로젝트 이름",
@@ -71,13 +75,11 @@ EXCLUDE: CSS 수정, 오타 수정, README 수정, 패키지 설치
 
 RESUME_GENERATOR_HUMAN = """Create resume for {position} position.
 
-## CHECKLIST - Verify before output:
-[ ] tech_stack: 5-8 items
-[ ] tech_stack: no utilities, no AI services
-[ ] description: starts with "- " bullet
-[ ] description: 5-8 bullet points
-[ ] bullet endings: ~구현, ~구축, ~설계 only
-[ ] project count: exactly {project_count}
+## STEPS - Follow this order:
+Step 1: Pick tech_stack from dependencies and file structure ONLY, 5-8 items, no utilities/AI services
+Step 2: Write 5-8 description bullets based on commits and PRs
+Step 3: Verify all bullet endings are allowed: ~구현, ~구축, ~설계, ~처리, ~연동, ~도입, ~최적화, ~개선, ~적용, ~개발, ~분석, ~관리, ~배포, ~자동화, ~통합, ~활용, ~해결, ~수행, ~제공, ~변경
+Step 4: Verify project count is exactly {project_count}
 
 ## Input Data
 
@@ -100,11 +102,11 @@ RESUME_GENERATOR_RETRY_HUMAN = """Fix resume based on feedback.
 ## Feedback - MUST FIX:
 {feedback}
 
-## CHECKLIST:
-[ ] Fixed all feedback issues
-[ ] tech_stack: 5-8 items, no utilities
-[ ] description: starts with "- " + 5-8 bullets
-[ ] project count: exactly {project_count}
+## STEPS - Follow this order:
+Step 1: Fix all feedback issues first
+Step 2: Pick tech_stack from dependencies and file structure ONLY, 5-8 items, no utilities/AI services
+Step 3: Verify all bullet endings and 5-8 bullets per project
+Step 4: Verify project count is exactly {project_count}
 
 ## Input Data
 

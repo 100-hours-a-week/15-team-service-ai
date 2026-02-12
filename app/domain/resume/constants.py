@@ -33,6 +33,13 @@ BACKEND_TECHS = frozenset(
         "celery",
         "graphql",
         "grpc",
+        "docker",
+        "kubernetes",
+        "aws",
+        "gcp",
+        "azure",
+        "nginx",
+        "github actions",
     ]
 )
 
@@ -216,5 +223,15 @@ EXCLUDED_TECHS = frozenset(
         "jjwt",
         "java-jwt",
         "aws sdk",
+        "openai",
+        "gemini",
+        "google gemini api",
+        "gpt",
+        "gpt-4o",
+        "chatgpt",
+        "claude",
+        "anthropic",
+        "whisper",
+        "copilot",
     ]
 )

@@ -11,7 +11,7 @@ from app.domain.resume.constants import (
     POSITION_VALIDATION_RULES,
 )
 from app.domain.resume.parsers import DEPENDENCY_FILE_NAMES, parse_dependency_file
-from app.domain.resume.schemas import RepoContext, ResumeRequest, UserStats
+from app.domain.resume.schemas import ProjectInfoDict, RepoContext, ResumeRequest, UserStats
 from app.infra.github.client import (
     get_authenticated_user,
     get_files_content,
@@ -222,7 +222,7 @@ def _filter_and_sort_dependencies(deps: list[str]) -> list[str]:
     return sorted_deps
 
 
-async def collect_project_info(request: ResumeRequest) -> list[dict]:
+async def collect_project_info(request: ResumeRequest) -> list[ProjectInfoDict]:
     """파일 목록 + 의존성 파일 기반으로 프로젝트 정보 수집
 
     Args:
@@ -425,8 +425,9 @@ async def collect_repo_contexts(request: ResumeRequest) -> dict[str, RepoContext
         레포 이름을 키로 하는 RepoContext 딕셔너리
     """
     contexts = {}
+    unique_urls = list(dict.fromkeys(request.repo_urls))
 
-    for repo_url in request.repo_urls:
+    for repo_url in unique_urls:
         _, repo_name = parse_repo_url(repo_url)
 
         try:
@@ -525,10 +526,23 @@ def validate_position_match(
     return True, ""
 
 
+def _is_tech_allowed(tech_lower: str, allowed_techs: frozenset[str]) -> bool:
+    """기술명이 허용 목록에 포함되는지 단어 단위로 검사"""
+    if tech_lower in allowed_techs:
+        return True
+
+    first_word = tech_lower.split()[0] if tech_lower else ""
+    if first_word in allowed_techs:
+        return True
+
+    return False
+
+
 def filter_tech_stack_by_position(
     tech_stack: list[str],
     position: str,
     max_count: int = 8,
+    min_count: int = 5,
 ) -> list[str]:
     """포지션에 맞는 기술만 필터링하여 최대 max_count개 반환
 
@@ -536,6 +550,7 @@ def filter_tech_stack_by_position(
         tech_stack: 원본 기술 스택 리스트
         position: 지원 포지션
         max_count: 최대 반환 개수
+        min_count: 최소 보장 개수
 
     Returns:
         필터링된 기술 스택 리스트
@@ -545,14 +560,24 @@ def filter_tech_stack_by_position(
         allowed_techs = BACKEND_TECHS | FRONTEND_TECHS
 
     filtered = []
+    non_excluded = []
+
     for tech in tech_stack:
         tech_lower = tech.lower()
 
         if tech_lower in EXCLUDED_TECHS:
             continue
 
-        is_allowed = any(allowed in tech_lower for allowed in allowed_techs)
-        if is_allowed:
+        non_excluded.append(tech)
+
+        if _is_tech_allowed(tech_lower, allowed_techs):
             filtered.append(tech)
+
+    if len(filtered) < min_count:
+        for tech in non_excluded:
+            if tech not in filtered:
+                filtered.append(tech)
+            if len(filtered) >= min_count:
+                break
 
     return filtered[:max_count]

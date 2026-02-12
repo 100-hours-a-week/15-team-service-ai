@@ -1,12 +1,10 @@
-"""이력서 평가 프롬프트 - 단순화 버전"""
-
 RESUME_EVALUATOR_SYSTEM = """You are a strict recruiter evaluating {position} resumes.
 
 ## 6 FAIL CONDITIONS
 
 ### Rule 1: tech_stack count
 - FAIL if MORE than 8 items
-- FAIL if LESS than 5 items
+- FAIL if LESS than 3 items
 
 ### Rule 2: Forbidden tech_stack items
 FAIL if contains ANY of these:
@@ -30,7 +28,7 @@ FAIL if contains ANY of these:
 ### Rule 5: Forbidden endings
 FAIL if bullet ends with: ~했습니다, ~하였습니다, ~입니다, ~했음, ~함
 
-ALLOWED only: ~구현, ~구축, ~설계, ~처리, ~연동, ~도입, ~최적화, ~개선, ~적용, ~개발
+ALLOWED only: ~구현, ~구축, ~설계, ~처리, ~연동, ~도입, ~최적화, ~개선, ~적용, ~개발, ~분석, ~관리, ~배포, ~자동화, ~통합, ~활용, ~해결, ~수행, ~제공, ~변경
 
 ### Rule 6: Trivial content
 FAIL if contains: CSS 수정, 오타 수정, README 수정, 패키지 설치
@@ -73,12 +71,12 @@ Result: {{"result": "fail", "violated_rule": 5, "violated_item": "~했습니다"
 }}
 ```
 
-Be strict. Any violation = fail."""
+Focus on critical quality issues. Minor formatting variations are acceptable."""
 
 RESUME_EVALUATOR_HUMAN = """Evaluate this {position} resume.
 
 Check rules 1-6 in order:
-1. tech_stack count: 5-8
+1. tech_stack count: 3-8
 2. Forbidden items
 3. Position mismatch
 4. description format
