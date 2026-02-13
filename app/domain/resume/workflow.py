@@ -96,7 +96,7 @@ async def collect_data_node(state: ResumeState) -> ResumeState:
         )
 
     except ValueError as e:
-        logger.error("collect_data_node 값 오류", error=str(e))
+        logger.error("collect_data_node 값 오류", error=str(e), exc_info=True)
         return create_error_state(
             state,
             ErrorCode.INVALID_INPUT,
@@ -160,8 +160,8 @@ async def generate_node(state: ResumeState) -> ResumeState:
             "resume_data": resume_data,
         }
 
-    except httpx.ConnectError:
-        logger.error("generate_node LLM 서버 연결 실패")
+    except httpx.ConnectError as e:
+        logger.error("generate_node LLM 서버 연결 실패", error=str(e))
         return create_error_state(
             state,
             ErrorCode.LLM_API_ERROR,
@@ -169,8 +169,8 @@ async def generate_node(state: ResumeState) -> ResumeState:
             retry_count=retry_count,
         )
 
-    except httpx.TimeoutException:
-        logger.error("generate_node LLM 요청 타임아웃")
+    except httpx.TimeoutException as e:
+        logger.error("generate_node LLM 요청 타임아웃", error=str(e))
         return create_error_state(
             state,
             ErrorCode.LLM_API_ERROR,

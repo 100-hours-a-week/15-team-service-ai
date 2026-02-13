@@ -18,9 +18,9 @@ def _log_parser_result(filename: str) -> Callable:
             deps = result.get("dependencies", [])
             dev_deps = result.get("devDependencies", [])
             if dev_deps:
-                logger.info(f"{filename} 파싱 완료", deps=len(deps), dev=len(dev_deps))
+                logger.info("파싱 완료", filename=filename, deps=len(deps), dev=len(dev_deps))
             else:
-                logger.info(f"{filename} 파싱 완료", deps=len(deps))
+                logger.info("파싱 완료", filename=filename, deps=len(deps))
             return result
 
         return wrapper

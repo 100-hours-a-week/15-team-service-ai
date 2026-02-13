@@ -8,16 +8,6 @@ from langfuse.langchain import CallbackHandler
 
 from app.core.config import settings
 from app.core.logging import get_logger
-from app.domain.resume.prompts import (
-    RESUME_EDIT_EVALUATOR_HUMAN,
-    RESUME_EDIT_EVALUATOR_SYSTEM,
-    RESUME_EDIT_HUMAN,
-    RESUME_EDIT_RETRY_HUMAN,
-    RESUME_EDIT_SYSTEM,
-    RESUME_EVALUATOR_HUMAN,
-    RESUME_GENERATOR_HUMAN,
-    RESUME_GENERATOR_RETRY_HUMAN,
-)
 from app.domain.resume.prompts.builder import (
     build_evaluator_system_prompt,
     build_generator_system_prompt,
@@ -31,12 +21,13 @@ from app.domain.resume.schemas import (
     ResumeData,
     UserStats,
 )
+from app.infra.langfuse.prompt_manager import get_prompt
 
 logger = get_logger(__name__)
 
 
 def setup_langfuse_env() -> None:
-    """Langfuse 환경 변수 설정 - 앱 시작 시 한 번만 호출"""
+    """Langfuse 환경 변수 설정"""
     if settings.langfuse_public_key:
         os.environ["LANGFUSE_PUBLIC_KEY"] = settings.langfuse_public_key
     if settings.langfuse_secret_key:
@@ -60,7 +51,7 @@ def get_generator_llm() -> ChatOpenAI:
         api_key=settings.vllm_api_key or "EMPTY",
         base_url=settings.vllm_base_url,
         timeout=settings.vllm_timeout,
-        temperature=0.0,
+        temperature=0.1,
     )
 
 
@@ -70,7 +61,7 @@ def get_evaluator_llm() -> ChatGoogleGenerativeAI:
         model=settings.gemini_evaluator_model,
         google_api_key=settings.gemini_api_key,
         timeout=settings.gemini_timeout,
-        temperature=0.0,
+        temperature=0.09,
     )
 
 
@@ -135,23 +126,25 @@ async def generate_resume(
     project_count = len(project_info)
 
     if feedback:
-        human_content = RESUME_GENERATOR_RETRY_HUMAN.format(
+        human_content = get_prompt(
+            "resume-generator-retry-human",
             position=position,
             project_info=project_info_text,
             repo_urls=repo_urls_text,
             feedback=feedback,
             repo_contexts=contexts_text,
             user_stats=user_stats_text,
-            project_count=project_count,
+            project_count=str(project_count),
         )
     else:
-        human_content = RESUME_GENERATOR_HUMAN.format(
+        human_content = get_prompt(
+            "resume-generator-human",
             position=position,
             project_info=project_info_text,
             repo_urls=repo_urls_text,
             repo_contexts=contexts_text,
             user_stats=user_stats_text,
-            project_count=project_count,
+            project_count=str(project_count),
         )
 
     config = _build_langfuse_config(session_id, ["resume", "generate", position])
@@ -181,7 +174,8 @@ async def evaluate_resume(
 
     resume_json = resume_data.model_dump_json(indent=2)
 
-    human_content = RESUME_EVALUATOR_HUMAN.format(
+    human_content = get_prompt(
+        "resume-evaluator-human",
         position=position,
         resume_json=resume_json,
     )
@@ -219,23 +213,26 @@ async def edit_resume[T](
     logger.debug("이력서 수정 요청")
 
     if feedback:
-        human_content = RESUME_EDIT_RETRY_HUMAN.format(
+        human_content = get_prompt(
+            "resume-edit-retry-human",
             resume_json=resume_json,
             message=message,
             feedback=feedback,
         )
     else:
-        human_content = RESUME_EDIT_HUMAN.format(
+        human_content = get_prompt(
+            "resume-edit-human",
             resume_json=resume_json,
             message=message,
         )
 
+    system_prompt = get_prompt("resume-edit-system")
     config = _build_langfuse_config(session_id, ["resume", "edit"])
 
     result = await _invoke_llm(
         llm=get_generator_llm(),
         output_type=output_type,
-        system_prompt=RESUME_EDIT_SYSTEM,
+        system_prompt=system_prompt,
         human_content=human_content,
         config=config,
     )
@@ -251,16 +248,18 @@ async def evaluate_edited_resume(
     """수정된 이력서 평가 - Gemini 사용, 포지션 체크 없음"""
     logger.debug("수정 이력서 평가 요청")
 
-    human_content = RESUME_EDIT_EVALUATOR_HUMAN.format(
+    human_content = get_prompt(
+        "resume-edit-evaluator-human",
         resume_json=resume_json,
     )
 
+    system_prompt = get_prompt("resume-edit-evaluator-system")
     config = _build_langfuse_config(session_id, ["resume", "edit-evaluate"])
 
     result = await _invoke_llm(
         llm=get_evaluator_llm(),
         output_type=EvaluationOutput,
-        system_prompt=RESUME_EDIT_EVALUATOR_SYSTEM,
+        system_prompt=system_prompt,
         human_content=human_content,
         config=config,
         structured_output_method="json_mode",

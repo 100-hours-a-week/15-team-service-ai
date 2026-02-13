@@ -219,7 +219,7 @@ async def get_commits(
             )
         )
 
-    logger.info("커밋 조회 완료", repo=f"{owner}/{repo}", count=len(commits))
+    logger.debug("커밋 조회 완료", repo=f"{owner}/{repo}", count=len(commits))
     return commits
 
 
@@ -239,7 +239,7 @@ async def get_repo_languages(repo_url: str, token: str | None = None) -> dict[st
     response = await _client.get(url, headers=_get_headers(token))
     response.raise_for_status()
 
-    logger.info("언어 조회 완료", repo=f"{owner}/{repo}")
+    logger.debug("언어 조회 완료", repo=f"{owner}/{repo}")
     return response.json()
 
 
@@ -260,7 +260,7 @@ async def get_repo_info(repo_url: str, token: str | None = None) -> dict:
     response.raise_for_status()
     data = response.json()
 
-    logger.info("레포 정보 조회 완료", repo=f"{owner}/{repo}")
+    logger.debug("레포 정보 조회 완료", repo=f"{owner}/{repo}")
     return {
         "description": data.get("description"),
         "topics": data.get("topics", []),
@@ -286,11 +286,11 @@ async def get_repo_readme(repo_url: str, token: str | None = None) -> str | None
         data = response.json()
 
         content = base64.b64decode(data["content"]).decode("utf-8")
-        logger.info("README 조회 완료", repo=f"{owner}/{repo}")
+        logger.debug("README 조회 완료", repo=f"{owner}/{repo}")
         return content[: settings.readme_max_length_github]
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 404:
-            logger.info("README 없음", repo=f"{owner}/{repo}")
+            logger.debug("README 없음", repo=f"{owner}/{repo}")
             return None
         raise
 
@@ -318,7 +318,7 @@ async def get_repo_tree(repo_url: str, token: str | None = None) -> list[str]:
     data = response.json()
 
     files = [item["path"] for item in data.get("tree", []) if item["type"] == "blob"]
-    logger.info("파일 트리 조회 완료", repo=f"{owner}/{repo}", files=len(files))
+    logger.debug("파일 트리 조회 완료", repo=f"{owner}/{repo}", files=len(files))
     return files
 
 
@@ -345,16 +345,16 @@ async def get_file_content(repo_url: str, path: str, token: str | None = None) -
             return None
 
         content = base64.b64decode(data["content"]).decode("utf-8")
-        logger.info("파일 조회 완료", repo=f"{owner}/{repo}", path=path)
+        logger.debug("파일 조회 완료", repo=f"{owner}/{repo}", path=path)
         return content
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 404:
-            logger.info("파일 없음", repo=f"{owner}/{repo}", path=path)
+            logger.debug("파일 없음", repo=f"{owner}/{repo}", path=path)
             return None
         logger.warning("파일 조회 실패", repo=f"{owner}/{repo}", path=path, error=type(e).__name__)
         return None
     except UnicodeDecodeError:
-        logger.info("바이너리 파일 스킵", repo=f"{owner}/{repo}", path=path)
+        logger.debug("바이너리 파일 스킵", repo=f"{owner}/{repo}", path=path)
         return None
 
 
@@ -654,7 +654,7 @@ async def get_files_content_graphql(
         else:
             result[path] = None
 
-    logger.info("GraphQL 파일 조회 완료", repo=f"{owner}/{repo}", files=len(paths))
+    logger.debug("GraphQL 파일 조회 완료", repo=f"{owner}/{repo}", files=len(paths))
     return result
 
 
@@ -803,7 +803,7 @@ async def get_user_stats(username: str, token: str) -> UserStats:
     user = data["user"]
     contrib = user["contributionsCollection"]
 
-    logger.info("사용자 통계 조회 완료", username=username)
+    logger.debug("사용자 통계 조회 완료", username=username)
     return UserStats(
         total_commits=contrib["totalCommitContributions"],
         total_prs=contrib["totalPullRequestContributions"],
@@ -866,7 +866,7 @@ async def get_pulls_extended(
         for pr, detail in zip(merged_prs, details, strict=True)
     ]
 
-    logger.info("PR 확장 조회 완료", repo=f"{owner}/{repo}", count=len(prs))
+    logger.debug("PR 확장 조회 완료", repo=f"{owner}/{repo}", count=len(prs))
     return prs
 
 

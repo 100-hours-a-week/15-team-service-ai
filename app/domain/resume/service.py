@@ -291,7 +291,7 @@ async def collect_project_info(request: ResumeRequest) -> list[ProjectInfoDict]:
             )
 
         except Exception as e:
-            logger.error("프로젝트 정보 수집 실패", repo=repo_name, error=str(e))
+            logger.error("프로젝트 정보 수집 실패", repo=repo_name, error=str(e), exc_info=True)
 
     if unique_urls and not results:
         logger.warning("모든 레포지토리에서 프로젝트 정보 수집 실패", total=len(unique_urls))

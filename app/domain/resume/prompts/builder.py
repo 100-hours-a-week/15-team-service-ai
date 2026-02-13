@@ -1,12 +1,8 @@
 from app.core.config import settings
-from app.domain.resume.prompts import (
-    RESUME_EVALUATOR_SYSTEM,
-    RESUME_GENERATOR_SYSTEM,
-    get_position_example,
-    get_position_rules,
-)
+from app.domain.resume.prompts import get_position_example, get_position_rules
 from app.domain.resume.prompts.positions import get_position_config
 from app.domain.resume.schemas import ProjectInfoDict, RepoContext
+from app.infra.langfuse.prompt_manager import get_prompt
 
 
 def format_project_info(project_info: list[ProjectInfoDict]) -> str:
@@ -71,7 +67,8 @@ def build_generator_system_prompt(position: str) -> str:
     position_rules = get_position_rules(position)
     position_example = get_position_example(position)
 
-    return RESUME_GENERATOR_SYSTEM.format(
+    return get_prompt(
+        "resume-generator-system",
         position=position,
         position_rules=position_rules,
         position_example=position_example,
@@ -82,7 +79,8 @@ def build_evaluator_system_prompt(position: str) -> str:
     """포지션별 규칙을 주입한 평가 시스템 프롬프트 생성"""
     position_rules = _get_evaluator_position_rules(position)
 
-    return RESUME_EVALUATOR_SYSTEM.format(
+    return get_prompt(
+        "resume-evaluator-system",
         position=position,
         position_rules=position_rules,
     )

@@ -12,7 +12,7 @@ logger = get_logger(__name__)
 def has_error(state: dict[str, Any], caller: str) -> bool:
     """에러 상태 확인"""
     if state.get("error_code"):
-        logger.info("에러 발생, 종료", caller=caller)
+        logger.warning("에러 상태 감지, 종료", caller=caller, error_code=state.get("error_code"))
         return True
     return False
 
