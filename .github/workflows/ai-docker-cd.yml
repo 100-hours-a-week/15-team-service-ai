@@ -76,10 +76,35 @@ jobs:
 
       # 7. CodeDeploy 실행
       - name: Create CodeDeploy Deployment
+        id: create-deployment
         run: |
-          aws deploy create-deployment \
+          DEPLOYMENT_ID=$(aws deploy create-deployment \
             --application-name ${{ vars.CODEDEPLOY_APP_NAME }} \
             --deployment-group-name ${{ vars.CODEDEPLOY_DG_NAME }} \
             --region ${{ secrets.AWS_REGION }} \
             --deployment-config-name CodeDeployDefault.AllAtOnce \
-            --s3-location bucket=${{ vars.S3_BUCKET_NAME }},bundleType=zip,key=ai-server/deploy-${{ github.sha }}.zip
+            --s3-location bucket=${{ vars.S3_BUCKET_NAME }},bundleType=zip,key=ai-server/deploy-${{ github.sha }}.zip \
+            --query 'deploymentId' \
+            --output text)
+        
+            echo "deployment_id=$DEPLOYMENT_ID" >> "$GITHUB_OUTPUT"
+            echo "🚀 Deployment started: $DEPLOYMENT_ID"
+
+      - name: Wait for deployment
+        run: |
+            DEPLOYMENT_ID=${{ steps.create-deployment.outputs.deployment_id }}
+            
+            aws deploy wait deployment-successful \
+            --deployment-id $DEPLOYMENT_ID \
+            --region ${{ secrets.AWS_REGION }}
+            
+            echo "✅ Deployment completed successfully!"
+
+      - name: Get deployment status
+        if: failure()
+        run: |
+            DEPLOYMENT_ID=${{ steps.create-deployment.outputs.deployment_id }}
+            
+            aws deploy get-deployment \
+            --deployment-id $DEPLOYMENT_ID \
+            --region ${{ secrets.AWS_REGION }}
