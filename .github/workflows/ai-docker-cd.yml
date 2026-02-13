@@ -1,0 +1,110 @@
+name: AI Server CD (Blue/Green ASG)
+
+on:
+  push:
+    branches: ["main", "feature/cd"]
+  workflow_dispatch:
+
+# 동시 실행 제어 (배포 중복 방지)
+concurrency:
+  group: cd-${{ github.ref }}
+  cancel-in-progress: true
+  
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      # 1. AWS 자격 증명 설정 (ECR Push & S3 Upload용)
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ secrets.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+
+      # 2. AWS ECR 로그인
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+        
+      # 3. 빌드 도구 설치 (로그인 된 상태에서 도구 준비)
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+            
+      # 4. 운영용 이미지 빌드 및 ECR Push
+      - name: Build and Push Prod Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile
+          target: prod
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:latest
+            ${{ steps.login-ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:${{ github.sha }}
+          cache-from: type=registry,ref=${{ steps.login-ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:build-cache
+          cache-to: type=registry,ref=${{ steps.login-ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:build-cache,mode=max
+
+      # 5. 배포 패키지 생성 (이미지는 제외하고, 스크립트와 정보만 담음)
+      - name: Zip Deployment Package
+        run: |
+          mkdir -p deploy
+          
+          # appspec.yml과 scripts 폴더를 deploy 디렉토리로 복사
+          cp appspec.yml deploy/
+          cp -r scripts deploy/
+          
+          # EC2가 Pull할 이미지 URI 정보를 담은 파일 생성
+          # 이 파일은 deploy 폴더 안에 생성되므로, zip 압축 해제 시 deploy/image-uri.txt가 아니라
+          # CodeDeploy의 appspec.yml files 매핑에 따라 /home/ec2-user/deploy/image-uri.txt 위치에 놓이게 됨
+          echo "${{ steps.login-ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:${{ github.sha }}" > deploy/image-uri.txt
+          
+          # deploy 폴더 내부로 이동하여 압축 (이렇게 해야 압축 해제 시 appspec.yml이 루트에 위치함)
+          cd deploy && zip -r ../deploy-package.zip .
+
+      # 6. S3 업로드 (설정 파일이라 용량이 매우 작음)
+      - name: Upload to S3
+        run: |
+          aws s3 cp deploy-package.zip s3://${{ vars.S3_BUCKET_NAME }}/ai-server/deploy-${{ github.sha }}.zip
+
+      # 7. CodeDeploy 실행
+      - name: Create CodeDeploy Deployment
+        id: create-deployment
+        run: |
+          DEPLOYMENT_ID=$(aws deploy create-deployment \
+            --application-name ${{ vars.CODEDEPLOY_APP_NAME }} \
+            --deployment-group-name ${{ vars.CODEDEPLOY_DG_NAME }} \
+            --region ${{ secrets.AWS_REGION }} \
+            --deployment-config-name CodeDeployDefault.AllAtOnce \
+            --s3-location bucket=${{ vars.S3_BUCKET_NAME }},bundleType=zip,key=ai-server/deploy-${{ github.sha }}.zip \
+            --query 'deploymentId' \
+            --output text)
+        
+            echo "deployment_id=$DEPLOYMENT_ID" >> "$GITHUB_OUTPUT"
+            echo "🚀 Deployment started: $DEPLOYMENT_ID"
+
+      - name: Wait for deployment
+        run: |
+            DEPLOYMENT_ID=${{ steps.create-deployment.outputs.deployment_id }}
+            
+            aws deploy wait deployment-successful \
+            --deployment-id $DEPLOYMENT_ID \
+            --region ${{ secrets.AWS_REGION }}
+            
+            echo "✅ Deployment completed successfully!"
+
+      - name: Get deployment status
+        if: failure()
+        run: |
+            DEPLOYMENT_ID=${{ steps.create-deployment.outputs.deployment_id }}
+            
+            aws deploy get-deployment \
+            --deployment-id $DEPLOYMENT_ID \
+            --region ${{ secrets.AWS_REGION }}
