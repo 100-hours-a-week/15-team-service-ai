@@ -1,5 +1,5 @@
 from app.core.config import settings
-from app.domain.resume.prompts import get_position_example, get_position_rules
+from app.domain.resume.prompts import get_position_rules
 from app.domain.resume.prompts.positions import get_position_config
 from app.domain.resume.schemas import ProjectInfoDict, RepoContext
 from app.infra.langfuse.prompt_manager import get_prompt
@@ -24,14 +24,17 @@ def format_project_info(project_info: list[ProjectInfoDict]) -> str:
             lines.append(f"- 파일 구조: {tree_summary}")
 
         if project.get("dependencies"):
-            lines.append("- 핵심 의존성 [tech_stack에 반드시 포함]:")
+            lines.append("<dependencies_for_techstack>")
             for dep in project["dependencies"][: settings.prompt_dependencies_max_count]:
                 lines.append(f"  * {dep}")
+            lines.append("</dependencies_for_techstack>")
 
         if project.get("messages"):
-            lines.append("- 주요 작업:")
+            lines.append("<user_commits>")
+            lines.append("아래 커밋만이 description 작성의 유일한 근거입니다")
             for msg in project["messages"][: settings.prompt_messages_max_count]:
                 lines.append(f"  - {msg}")
+            lines.append("</user_commits>")
 
     return "\n".join(lines)
 
@@ -57,7 +60,13 @@ def format_repo_contexts(repo_contexts: dict[str, RepoContext]) -> str:
 
         if ctx.readme_summary:
             readme_content = ctx.readme_summary[: settings.readme_max_length_prompt]
-            lines.append(f'- README:\n"""\n{readme_content}\n"""')
+            lines.append(
+                f"<readme_reference_only>\n"
+                f"이 README는 프로젝트 전체 설명이며 사용자 개인의 기여가 아닙니다\n"
+                f"tech_stack 참고용으로만 사용하고 description 작성에 사용하지 마세요\n"
+                f"{readme_content}\n"
+                f"</readme_reference_only>"
+            )
 
     return "\n".join(lines)
 
@@ -65,13 +74,11 @@ def format_repo_contexts(repo_contexts: dict[str, RepoContext]) -> str:
 def build_generator_system_prompt(position: str) -> str:
     """포지션별 규칙을 주입한 시스템 프롬프트 생성"""
     position_rules = get_position_rules(position)
-    position_example = get_position_example(position)
 
     return get_prompt(
         "resume-generator-system",
         position=position,
         position_rules=position_rules,
-        position_example=position_example,
     )
 
 

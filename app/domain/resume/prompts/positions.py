@@ -537,7 +537,7 @@ def get_position_rules(position: str) -> str:
         lines.append(", ".join(config["tech_exclude"]))
 
     lines.append("")
-    lines.append("**불릿 포인트 키워드:**")
+    lines.append("**불릿 포인트 참고 키워드 [커밋에서 확인된 경우에만 사용]:**")
     lines.append(", ".join(config["bullet_keywords"]))
 
     return "\n".join(lines)
@@ -547,7 +547,7 @@ def get_position_example(position: str) -> str:
     """포지션별 예시 JSON 반환"""
     config = get_position_config(position)
 
-    tech_stack = config["tech_allowed"][:6]
+    tech_stack = config["tech_allowed"][:5]
     bullet_examples = config["bullet_examples"]
 
     description_lines = []

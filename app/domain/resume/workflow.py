@@ -135,6 +135,7 @@ async def generate_node(state: ResumeState) -> ResumeState:
     user_stats = state.get("user_stats")
     session_id = state.get("session_id")
     feedback = state.get("evaluation_feedback")
+    previous_resume = state.get("resume_data") if feedback else None
 
     try:
         resume_data = await _generate_in_batches(
@@ -144,6 +145,7 @@ async def generate_node(state: ResumeState) -> ResumeState:
             user_stats=user_stats,
             feedback=feedback,
             session_id=session_id,
+            previous_resume=previous_resume,
         )
 
         for project in resume_data.projects:
@@ -218,15 +220,33 @@ async def generate_node(state: ResumeState) -> ResumeState:
 
 
 async def evaluate_node(state: ResumeState) -> ResumeState:
-    """이력서 평가 노드: 품질 평가 수행"""
+    """이력서 평가 노드: 코드 검증 후 LLM 품질 평가"""
     resume_data = state["resume_data"]
     request = state["request"]
     session_id = state.get("session_id")
+    project_info = state.get("project_info", [])
+
+    from app.domain.resume.validators import format_violations_as_feedback, validate_resume_format
+
+    violations = validate_resume_format(resume_data, request.position)
+    if violations:
+        feedback = format_violations_as_feedback(violations)
+        logger.info("코드 검증 실패", violations=len(violations))
+        return {
+            **state,
+            "evaluation": "fail",
+            "evaluation_feedback": feedback,
+        }
+
+    all_commits: list[str] = []
+    for project in project_info:
+        all_commits.extend(project.get("messages", []))
 
     async def _evaluate():
         return await evaluate_resume(
             resume_data=resume_data,
             position=request.position,
+            commit_messages=all_commits,
             session_id=session_id,
         )
 
@@ -286,6 +306,7 @@ async def _generate_in_batches(
     user_stats: dict | None = None,
     feedback: str | None = None,
     session_id: str | None = None,
+    previous_resume: ResumeData | None = None,
 ) -> ResumeData:
     """프로젝트를 배치로 나누어 이력서 생성 후 병합"""
     if len(project_info) <= settings.workflow_batch_size:
@@ -297,6 +318,7 @@ async def _generate_in_batches(
             user_stats=user_stats,
             feedback=feedback,
             session_id=session_id,
+            previous_resume=previous_resume,
         )
 
     batches = [
@@ -321,6 +343,7 @@ async def _generate_in_batches(
             user_stats=user_stats if batch_idx == 0 else None,
             feedback=feedback,
             session_id=session_id,
+            previous_resume=previous_resume,
         )
         tasks.append(task)
 
