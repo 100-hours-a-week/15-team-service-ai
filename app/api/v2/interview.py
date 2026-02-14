@@ -1,0 +1,92 @@
+import json
+import uuid
+
+from fastapi import APIRouter, Request
+
+from app.api.v2.schemas.interview import (
+    InterviewContentResponse,
+    InterviewErrorResponse,
+    InterviewQuestionResponse,
+    InterviewRequest,
+    InterviewResponse,
+)
+from app.core.exceptions import ErrorCode
+from app.core.limiter import limiter
+from app.core.logging import get_logger
+from app.domain.interview.agent import run_interview_agent
+
+router = APIRouter(prefix="/interview", tags=["v2"])
+logger = get_logger(__name__)
+
+
+def _build_resume_json(body: InterviewRequest) -> str:
+    """요청 데이터를 LLM 입력용 JSON 문자열로 변환"""
+    projects = []
+    for p in body.content.projects:
+        projects.append(
+            {
+                "name": p.name,
+                "repo_url": p.repo_url,
+                "tech_stack": p.tech_stack,
+                "description": p.description,
+            }
+        )
+    return json.dumps({"projects": projects}, ensure_ascii=False, indent=2)
+
+
+@router.post("", response_model=InterviewResponse, summary="면접 질문 생성")
+@limiter.limit("10/minute")
+async def generate_interview(
+    request: Request,
+    body: InterviewRequest,
+) -> InterviewResponse:
+    """면접 질문 생성 요청
+
+    분당 10회 요청 제한이 적용됩니다
+    """
+    session_id = str(uuid.uuid4())
+    logger.info(
+        "면접 질문 생성 요청",
+        resume_id=body.resume_id,
+        interview_type=body.type,
+        position=body.position,
+        session_id=session_id,
+    )
+
+    resume_json = _build_resume_json(body)
+
+    questions, error_message = await run_interview_agent(
+        resume_json=resume_json,
+        interview_type=body.type,
+        position=body.position,
+        session_id=session_id,
+    )
+
+    if error_message or not questions:
+        logger.error("면접 질문 생성 실패", error=error_message)
+        return InterviewResponse(
+            status="failed",
+            interview_type=body.type,
+            error=InterviewErrorResponse(
+                code=ErrorCode.INTERVIEW_GENERATE_ERROR,
+                message=error_message or "면접 질문 생성에 실패했습니다",
+            ),
+        )
+
+    content = InterviewContentResponse(
+        questions=[
+            InterviewQuestionResponse(
+                question=q.question,
+                intent=q.intent,
+                related_project=q.related_project,
+            )
+            for q in questions.questions
+        ],
+    )
+
+    logger.info("면접 질문 생성 성공", questions=len(questions.questions))
+    return InterviewResponse(
+        status="success",
+        interview_type=body.type,
+        content=content,
+    )
