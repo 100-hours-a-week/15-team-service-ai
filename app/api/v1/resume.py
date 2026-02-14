@@ -21,7 +21,7 @@ from app.core.logging import get_logger
 from app.domain.resume.agent import run_resume_agent
 from app.domain.resume.schemas import ResumeData, ResumeRequest
 
-router = APIRouter(prefix="/resume", tags=["resume"])
+router = APIRouter(prefix="/resume", tags=["v1"])
 logger = get_logger(__name__)
 
 MAX_CONCURRENT_JOBS = 10
@@ -137,7 +137,7 @@ def _build_callback_payload(
     return payload.model_dump(by_alias=True)
 
 
-@router.post("/generate", response_model=GenerateResponse)
+@router.post("/generate", response_model=GenerateResponse, summary="이력서 생성")
 @limiter.limit("5/minute")
 async def generate_resume(
     request: Request,

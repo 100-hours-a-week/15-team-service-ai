@@ -15,7 +15,7 @@ from app.core.limiter import limiter
 from app.core.logging import get_logger
 from app.domain.resume.edit_agent import run_edit_agent
 
-router = APIRouter(prefix="/resume", tags=["resume-edit"])
+router = APIRouter(prefix="/resume", tags=["v2"])
 logger = get_logger(__name__)
 
 
@@ -34,7 +34,7 @@ def _build_resume_json(body: EditRequest) -> str:
     return json.dumps({"projects": projects}, ensure_ascii=False, indent=2)
 
 
-@router.post("/edit", response_model=EditResponse)
+@router.post("/edit", response_model=EditResponse, summary="이력서 수정")
 @limiter.limit("10/minute")
 async def edit_resume(
     request: Request,
