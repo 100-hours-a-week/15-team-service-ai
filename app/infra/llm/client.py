@@ -1,3 +1,4 @@
+import functools
 import os
 
 from langchain_core.language_models import BaseChatModel
@@ -45,6 +46,7 @@ def get_langfuse_handler() -> CallbackHandler | None:
     return CallbackHandler()
 
 
+@functools.cache
 def get_generator_llm() -> ChatOpenAI:
     """이력서 생성용 vLLM 클라이언트 반환"""
     return ChatOpenAI(
@@ -57,6 +59,7 @@ def get_generator_llm() -> ChatOpenAI:
     )
 
 
+@functools.cache
 def get_evaluator_llm() -> ChatGoogleGenerativeAI:
     """이력서 평가용 Gemini 클라이언트 반환"""
     return ChatGoogleGenerativeAI(

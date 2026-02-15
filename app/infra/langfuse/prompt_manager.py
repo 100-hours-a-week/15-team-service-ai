@@ -1,5 +1,6 @@
 from langfuse import Langfuse
 
+from app.core.exceptions import LLMError
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -25,7 +26,18 @@ def get_prompt(name: str, **variables: str) -> str:
     variables: 프롬프트에 주입할 변수들
     """
     client = _get_client()
-    prompt = client.get_prompt(name)
-    compiled = prompt.compile(**variables)
+
+    try:
+        prompt = client.get_prompt(name)
+    except Exception as e:
+        logger.error("Langfuse 프롬프트 조회 실패", prompt_name=name, error=str(e), exc_info=True)
+        raise LLMError(detail=f"프롬프트 조회 실패: {name}") from e
+
+    try:
+        compiled = prompt.compile(**variables)
+    except KeyError as e:
+        logger.error("프롬프트 변수 누락", prompt_name=name, variable=str(e), exc_info=True)
+        raise LLMError(detail=f"프롬프트 '{name}'에 필요한 변수 누락: {e}") from e
+
     logger.debug("Langfuse 프롬프트 사용", prompt_name=name)
     return compiled
