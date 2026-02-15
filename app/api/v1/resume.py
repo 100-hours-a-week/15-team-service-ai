@@ -163,3 +163,8 @@ async def generate_resume(
     task.add_done_callback(_background_tasks.discard)
 
     return GenerateResponse(job_id=job_id)
+
+
+def get_background_tasks() -> set[asyncio.Task]:
+    """진행 중인 백그라운드 태스크 반환"""
+    return _background_tasks

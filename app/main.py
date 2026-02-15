@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -6,6 +7,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
 from app.api.routers import api_router, api_v2_router
+from app.api.v1.resume import get_background_tasks
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
 from app.core.limiter import limiter
@@ -23,6 +25,19 @@ logger = get_logger(__name__)
 async def lifespan(app: FastAPI):
     """앱 시작/종료 이벤트 관리"""
     yield
+    tasks = get_background_tasks()
+    if tasks:
+        logger.info("진행 중인 작업 종료 대기", count=len(tasks))
+        for task in tasks:
+            task.cancel()
+        try:
+            await asyncio.wait_for(
+                asyncio.gather(*tasks, return_exceptions=True),
+                timeout=30.0,
+            )
+            logger.info("모든 작업 종료 완료")
+        except TimeoutError:
+            logger.warning("작업 종료 타임아웃 - 30초 초과")
     await close_github_client()
 
 
