@@ -5,6 +5,11 @@ from langgraph.graph.state import CompiledStateGraph
 from app.core.exceptions import ErrorCode
 from app.core.logging import get_logger
 from app.domain.interview.schemas import InterviewState
+from app.domain.resume.error_handler import (
+    handle_connection_error,
+    handle_data_error,
+    handle_http_error,
+)
 from app.domain.resume.workflow_utils import (
     evaluate_with_fallback,
     make_should_retry,
@@ -51,41 +56,34 @@ async def generate_node(state: InterviewState) -> InterviewState:
             "questions": questions,
         }
 
-    except httpx.ConnectError:
-        logger.error("generate_node LLM 서버 연결 실패")
-        return {
-            **state,
-            "retry_count": retry_count,
-            "error_code": ErrorCode.LLM_API_ERROR,
-            "error_message": "LLM 서버 연결 실패",
-        }
-
-    except httpx.TimeoutException:
-        logger.error("generate_node LLM 요청 타임아웃")
-        return {
-            **state,
-            "retry_count": retry_count,
-            "error_code": ErrorCode.LLM_API_ERROR,
-            "error_message": "LLM 요청 타임아웃",
-        }
+    except (httpx.ConnectError, httpx.TimeoutException) as e:
+        return handle_connection_error(
+            e,
+            state,
+            "generate_node",
+            ErrorCode.LLM_API_ERROR,
+            retry_count=retry_count,
+        )
 
     except httpx.HTTPStatusError as e:
-        logger.error("generate_node LLM API 오류", status=e.response.status_code)
-        return {
-            **state,
-            "retry_count": retry_count,
-            "error_code": ErrorCode.LLM_API_ERROR,
-            "error_message": f"LLM API 오류: HTTP {e.response.status_code}",
-        }
+        return handle_http_error(
+            e,
+            state,
+            "generate_node",
+            ErrorCode.LLM_API_ERROR,
+            "LLM API 오류",
+            retry_count=retry_count,
+        )
 
     except (ValueError, KeyError, TypeError) as e:
-        logger.error("generate_node 오류", error=str(e), exc_info=True)
-        return {
-            **state,
-            "retry_count": retry_count,
-            "error_code": ErrorCode.INTERVIEW_GENERATE_ERROR,
-            "error_message": f"면접 질문 생성 실패: {e}",
-        }
+        return handle_data_error(
+            e,
+            state,
+            "generate_node",
+            ErrorCode.INTERVIEW_GENERATE_ERROR,
+            "면접 질문 생성 실패",
+            retry_count=retry_count,
+        )
 
 
 async def evaluate_node(state: InterviewState) -> InterviewState:

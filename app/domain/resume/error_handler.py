@@ -2,17 +2,16 @@ import httpx
 
 from app.core.exceptions import ErrorCode
 from app.core.logging import get_logger
-from app.domain.resume.schemas import ResumeState
 
 logger = get_logger(__name__)
 
 
 def create_error_state(
-    state: ResumeState,
+    state: dict,
     error_code: ErrorCode | str,
     error_message: str,
     **additional_fields,
-) -> ResumeState:
+) -> dict:
     """에러 상태를 포함한 새 상태 반환"""
     return {
         **state,
@@ -31,12 +30,12 @@ GITHUB_STATUS_CODE_MAP = {
 
 def handle_http_error(
     e: httpx.HTTPStatusError,
-    state: ResumeState,
+    state: dict,
     node_name: str,
     error_code: ErrorCode | str,
     error_label: str,
     **additional_fields,
-) -> ResumeState:
+) -> dict:
     """HTTPStatusError를 에러 상태로 변환"""
     status_code = e.response.status_code
     logger.error("HTTP 오류", node=node_name, status=status_code)
@@ -59,18 +58,36 @@ def handle_http_error(
 
 
 def handle_data_error(
-    e: KeyError | TypeError,
-    state: ResumeState,
+    e: ValueError | KeyError | TypeError,
+    state: dict,
     node_name: str,
     error_code: ErrorCode | str,
     error_label: str,
     **additional_fields,
-) -> ResumeState:
-    """KeyError/TypeError를 에러 상태로 변환"""
+) -> dict:
+    """ValueError/KeyError/TypeError를 에러 상태로 변환"""
     logger.error("데이터 오류", node=node_name, error=str(e), exc_info=True)
     return create_error_state(
         state,
         error_code,
         f"{error_label}: {e}",
+        **additional_fields,
+    )
+
+
+def handle_connection_error(
+    e: httpx.ConnectError | httpx.TimeoutException,
+    state: dict,
+    node_name: str,
+    error_code: ErrorCode | str,
+    **additional_fields,
+) -> dict:
+    """ConnectError/TimeoutException을 에러 상태로 변환"""
+    error_type = "연결 실패" if isinstance(e, httpx.ConnectError) else "요청 타임아웃"
+    logger.error(error_type, node=node_name)
+    return create_error_state(
+        state,
+        error_code,
+        error_type,
         **additional_fields,
     )

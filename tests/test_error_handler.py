@@ -5,6 +5,7 @@ import httpx
 from app.core.exceptions import ErrorCode
 from app.domain.resume.error_handler import (
     create_error_state,
+    handle_connection_error,
     handle_data_error,
     handle_http_error,
 )
@@ -178,3 +179,50 @@ class TestHandleDataError:
         assert result["error_code"] == ErrorCode.GENERATE_PARSE_ERROR
         assert "unexpected type" in result["error_message"]
         assert result["retry_count"] == 2
+
+
+class TestHandleConnectionError:
+    def test_connect_error_returns_connection_failed(self):
+        """ConnectError 시 '연결 실패' 메시지 반환"""
+        state = _make_base_state()
+        error = httpx.ConnectError("Connection refused")
+
+        result = handle_connection_error(
+            error,
+            state,
+            "generate_node",
+            ErrorCode.LLM_API_ERROR,
+        )
+
+        assert result["error_code"] == ErrorCode.LLM_API_ERROR
+        assert "연결 실패" in result["error_message"]
+
+    def test_timeout_returns_timeout_message(self):
+        """TimeoutException 시 '요청 타임아웃' 메시지 반환"""
+        state = _make_base_state()
+        error = httpx.ReadTimeout("Request timed out")
+
+        result = handle_connection_error(
+            error,
+            state,
+            "generate_node",
+            ErrorCode.LLM_API_ERROR,
+        )
+
+        assert result["error_code"] == ErrorCode.LLM_API_ERROR
+        assert "타임아웃" in result["error_message"]
+
+    def test_additional_fields_passed(self):
+        """additional_fields가 결과 상태에 포함"""
+        state = _make_base_state()
+        error = httpx.ConnectError("Connection refused")
+
+        result = handle_connection_error(
+            error,
+            state,
+            "generate_node",
+            ErrorCode.LLM_API_ERROR,
+            retry_count=3,
+        )
+
+        assert result["retry_count"] == 3

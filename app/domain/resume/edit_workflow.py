@@ -4,6 +4,11 @@ from langgraph.graph.state import CompiledStateGraph
 
 from app.core.exceptions import ErrorCode
 from app.core.logging import get_logger
+from app.domain.resume.error_handler import (
+    handle_connection_error,
+    handle_data_error,
+    handle_http_error,
+)
 from app.domain.resume.schemas.edit import EditResumeOutput, EditState
 from app.domain.resume.workflow_utils import (
     evaluate_with_fallback,
@@ -50,41 +55,34 @@ async def edit_node(state: EditState) -> EditState:
             "edited_resume": edited_resume,
         }
 
-    except httpx.ConnectError:
-        logger.error("edit_node LLM 서버 연결 실패")
-        return {
-            **state,
-            "retry_count": retry_count,
-            "error_code": ErrorCode.LLM_API_ERROR,
-            "error_message": "LLM 서버 연결 실패",
-        }
-
-    except httpx.TimeoutException:
-        logger.error("edit_node LLM 요청 타임아웃")
-        return {
-            **state,
-            "retry_count": retry_count,
-            "error_code": ErrorCode.LLM_API_ERROR,
-            "error_message": "LLM 요청 타임아웃",
-        }
+    except (httpx.ConnectError, httpx.TimeoutException) as e:
+        return handle_connection_error(
+            e,
+            state,
+            "edit_node",
+            ErrorCode.LLM_API_ERROR,
+            retry_count=retry_count,
+        )
 
     except httpx.HTTPStatusError as e:
-        logger.error("edit_node LLM API 오류", status=e.response.status_code)
-        return {
-            **state,
-            "retry_count": retry_count,
-            "error_code": ErrorCode.LLM_API_ERROR,
-            "error_message": f"LLM API 오류: HTTP {e.response.status_code}",
-        }
+        return handle_http_error(
+            e,
+            state,
+            "edit_node",
+            ErrorCode.LLM_API_ERROR,
+            "LLM API 오류",
+            retry_count=retry_count,
+        )
 
     except (ValueError, KeyError, TypeError) as e:
-        logger.error("edit_node 오류", error=str(e), exc_info=True)
-        return {
-            **state,
-            "retry_count": retry_count,
-            "error_code": ErrorCode.EDIT_FAILED,
-            "error_message": f"이력서 수정 실패: {e}",
-        }
+        return handle_data_error(
+            e,
+            state,
+            "edit_node",
+            ErrorCode.EDIT_FAILED,
+            "이력서 수정 실패",
+            retry_count=retry_count,
+        )
 
 
 async def evaluate_node(state: EditState) -> EditState:

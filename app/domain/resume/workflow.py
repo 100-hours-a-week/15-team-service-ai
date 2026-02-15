@@ -10,6 +10,7 @@ from app.core.exceptions import ErrorCode, PositionMismatchError
 from app.core.logging import get_logger
 from app.domain.resume.error_handler import (
     create_error_state,
+    handle_connection_error,
     handle_data_error,
     handle_http_error,
 )
@@ -19,6 +20,7 @@ from app.domain.resume.schemas import (
     ResumeData,
     ResumeRequest,
     ResumeState,
+    UserStats,
 )
 from app.domain.resume.service import (
     collect_project_info,
@@ -162,21 +164,12 @@ async def generate_node(state: ResumeState) -> ResumeState:
             "resume_data": resume_data,
         }
 
-    except httpx.ConnectError as e:
-        logger.error("generate_node LLM 서버 연결 실패", error=str(e))
-        return create_error_state(
+    except (httpx.ConnectError, httpx.TimeoutException) as e:
+        return handle_connection_error(
+            e,
             state,
+            "generate_node",
             ErrorCode.LLM_API_ERROR,
-            "LLM 서버 연결 실패",
-            retry_count=retry_count,
-        )
-
-    except httpx.TimeoutException as e:
-        logger.error("generate_node LLM 요청 타임아웃", error=str(e))
-        return create_error_state(
-            state,
-            ErrorCode.LLM_API_ERROR,
-            "LLM 요청 타임아웃",
             retry_count=retry_count,
         )
 
@@ -303,7 +296,7 @@ async def _generate_in_batches(
     project_info: list[ProjectInfoDict],
     request: ResumeRequest,
     repo_contexts: dict[str, RepoContext],
-    user_stats: dict | None = None,
+    user_stats: UserStats | None = None,
     feedback: str | None = None,
     session_id: str | None = None,
     previous_resume: ResumeData | None = None,
