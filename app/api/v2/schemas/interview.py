@@ -69,7 +69,7 @@ class InterviewResponse(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True, by_alias=True)
 
-    status: str
-    interview_type: str = Field(alias="interviewType")
+    status: Literal["success", "failed"]
+    interview_type: Literal["technical", "behavioral"] = Field(alias="interviewType")
     content: InterviewContentResponse | None = None
     error: InterviewErrorResponse | None = None

@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.domain.resume.schemas.edit import EditProjectOutput, EditResumeOutput
@@ -77,6 +79,6 @@ class EditErrorResponse(BaseModel):
 class EditResponse(BaseModel):
     """이력서 수정 최상위 응답"""
 
-    status: str
+    status: Literal["success", "failed"]
     content: EditContentResponse | None = None
     error: EditErrorResponse | None = None
