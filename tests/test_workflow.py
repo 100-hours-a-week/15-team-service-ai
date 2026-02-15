@@ -293,10 +293,16 @@ class TestEvaluateNode:
             feedback="이력서가 모든 기준을 충족합니다",
         )
 
-        with patch(
-            "app.domain.resume.workflow.evaluate_resume",
-            new_callable=AsyncMock,
-            return_value=mock_evaluation,
+        with (
+            patch(
+                "app.domain.resume.validators.validate_resume_format",
+                return_value=[],
+            ),
+            patch(
+                "app.domain.resume.workflow.evaluate_resume",
+                new_callable=AsyncMock,
+                return_value=mock_evaluation,
+            ),
         ):
             result = await evaluate_node(base_state)
 
@@ -313,10 +319,16 @@ class TestEvaluateNode:
             feedback="기술 스택이 부족합니다",
         )
 
-        with patch(
-            "app.domain.resume.workflow.evaluate_resume",
-            new_callable=AsyncMock,
-            return_value=mock_evaluation,
+        with (
+            patch(
+                "app.domain.resume.validators.validate_resume_format",
+                return_value=[],
+            ),
+            patch(
+                "app.domain.resume.workflow.evaluate_resume",
+                new_callable=AsyncMock,
+                return_value=mock_evaluation,
+            ),
         ):
             result = await evaluate_node(base_state)
 
@@ -331,10 +343,16 @@ class TestEvaluateNode:
             "Server Error", request=mock_response.request, response=mock_response
         )
 
-        with patch(
-            "app.domain.resume.workflow.evaluate_resume",
-            new_callable=AsyncMock,
-            side_effect=http_error,
+        with (
+            patch(
+                "app.domain.resume.validators.validate_resume_format",
+                return_value=[],
+            ),
+            patch(
+                "app.domain.resume.workflow.evaluate_resume",
+                new_callable=AsyncMock,
+                side_effect=http_error,
+            ),
         ):
             result = await evaluate_node(base_state)
 
@@ -344,15 +362,41 @@ class TestEvaluateNode:
     @pytest.mark.asyncio
     async def test_evaluate_value_error_returns_pass(self, base_state):
         """ValueError 시 관용적으로 pass 처리"""
-        with patch(
-            "app.domain.resume.workflow.evaluate_resume",
-            new_callable=AsyncMock,
-            side_effect=ValueError("Parse error"),
+        with (
+            patch(
+                "app.domain.resume.validators.validate_resume_format",
+                return_value=[],
+            ),
+            patch(
+                "app.domain.resume.workflow.evaluate_resume",
+                new_callable=AsyncMock,
+                side_effect=ValueError("Parse error"),
+            ),
         ):
             result = await evaluate_node(base_state)
 
         assert result["evaluation"] == "pass"
         assert result["evaluation_feedback"] == ""
+
+    @pytest.mark.asyncio
+    async def test_evaluate_format_violation_returns_fail(self, base_state):
+        """코드 검증 위반 시 fail 처리"""
+        mock_violations = [
+            {
+                "project": "Test",
+                "rule": "기술 스택 최소 개수",
+                "detail": "기술 스택이 3개 미만",
+            }
+        ]
+
+        with patch(
+            "app.domain.resume.validators.validate_resume_format",
+            return_value=mock_violations,
+        ):
+            result = await evaluate_node(base_state)
+
+        assert result["evaluation"] == "fail"
+        assert "기술 스택이 3개 미만" in result["evaluation_feedback"]
 
 
 class TestShouldContinue:
