@@ -1,4 +1,3 @@
-import json
 import uuid
 
 from fastapi import APIRouter, Request
@@ -10,6 +9,7 @@ from app.api.v2.schemas.resume_edit import (
     EditRequest,
     EditResponse,
 )
+from app.api.v2.utils import build_resume_json
 from app.core.exceptions import ErrorCode
 from app.core.limiter import limiter
 from app.core.logging import get_logger
@@ -17,21 +17,6 @@ from app.domain.resume.edit_agent import run_edit_agent
 
 router = APIRouter(prefix="/resume", tags=["v2"])
 logger = get_logger(__name__)
-
-
-def _build_resume_json(body: EditRequest) -> str:
-    """요청 데이터를 LLM 입력용 JSON 문자열로 변환"""
-    projects = []
-    for p in body.content.projects:
-        projects.append(
-            {
-                "name": p.name,
-                "repo_url": p.repo_url,
-                "tech_stack": p.tech_stack,
-                "description": p.description,
-            }
-        )
-    return json.dumps({"projects": projects}, ensure_ascii=False, indent=2)
 
 
 @router.post("/edit", response_model=EditResponse, summary="이력서 수정")
@@ -51,7 +36,7 @@ async def edit_resume(
         session_id=session_id,
     )
 
-    resume_json = _build_resume_json(body)
+    resume_json = build_resume_json(body.content)
 
     edited_resume, error_message = await run_edit_agent(
         resume_json=resume_json,

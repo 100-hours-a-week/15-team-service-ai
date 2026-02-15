@@ -1,4 +1,3 @@
-import json
 import uuid
 
 from fastapi import APIRouter, Request
@@ -10,6 +9,7 @@ from app.api.v2.schemas.interview import (
     InterviewRequest,
     InterviewResponse,
 )
+from app.api.v2.utils import build_resume_json
 from app.core.exceptions import ErrorCode
 from app.core.limiter import limiter
 from app.core.logging import get_logger
@@ -17,21 +17,6 @@ from app.domain.interview.agent import run_interview_agent
 
 router = APIRouter(prefix="/interview", tags=["v2"])
 logger = get_logger(__name__)
-
-
-def _build_resume_json(body: InterviewRequest) -> str:
-    """요청 데이터를 LLM 입력용 JSON 문자열로 변환"""
-    projects = []
-    for p in body.content.projects:
-        projects.append(
-            {
-                "name": p.name,
-                "repo_url": p.repo_url,
-                "tech_stack": p.tech_stack,
-                "description": p.description,
-            }
-        )
-    return json.dumps({"projects": projects}, ensure_ascii=False, indent=2)
 
 
 @router.post("", response_model=InterviewResponse, summary="면접 질문 생성")
@@ -53,7 +38,7 @@ async def generate_interview(
         session_id=session_id,
     )
 
-    resume_json = _build_resume_json(body)
+    resume_json = build_resume_json(body.content)
 
     questions, error_message = await run_interview_agent(
         resume_json=resume_json,
