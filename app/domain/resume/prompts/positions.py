@@ -69,6 +69,17 @@ POSITION_CONFIGS = {
             "Redux",
             "Recoil",
             "Zustand",
+            "TensorFlow",
+            "TensorFlow Lite",
+            "PyTorch",
+            "scikit-learn",
+            "Keras",
+            "Pandas",
+            "NumPy",
+            "Hugging Face",
+            "MLflow",
+            "LangChain",
+            "LlamaIndex",
         ],
         "bullet_keywords": [
             "API 설계",
@@ -564,3 +575,34 @@ def get_position_example(position: str) -> str:
   "description": "{description}"
 }}
 ```'''
+
+
+def get_interview_position_focus(position: str) -> str:
+    """포지션별 면접 기술 초점 반환"""
+    config = get_position_config(position)
+    name_ko = config["name_ko"]
+
+    lines = [
+        f"## Position Focus: {name_ko}",
+        "",
+        "### Core technologies for this position:",
+        ", ".join(config["tech_allowed"][:15]),
+        "",
+        "### Key topic areas:",
+        ", ".join(config["bullet_keywords"]),
+    ]
+
+    if config["tech_exclude"]:
+        lines.append("")
+        lines.append("### Technologies to AVOID asking about:")
+        lines.append(", ".join(config["tech_exclude"]))
+
+    lines.append("")
+    lines.append("### IMPORTANT RESTRICTION")
+    lines.append("Questions MUST focus ONLY on the core technologies and topic areas listed above.")
+    lines.append(
+        "Even if the resume contains projects using other technologies, "
+        "frame questions from this position's perspective only."
+    )
+
+    return "\n".join(lines)

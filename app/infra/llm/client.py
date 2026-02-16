@@ -16,6 +16,7 @@ from app.domain.resume.prompts.builder import (
     format_project_info,
     format_repo_contexts,
 )
+from app.domain.resume.prompts.positions import get_interview_position_focus
 from app.domain.resume.schemas import (
     EvaluationOutput,
     ProjectInfoDict,
@@ -295,6 +296,7 @@ async def generate_interview(
     resume_json: str,
     interview_type: str,
     position: str,
+    question_count: int,
     feedback: str | None = None,
     session_id: str | None = None,
 ) -> InterviewQuestionsOutput:
@@ -307,15 +309,22 @@ async def generate_interview(
             position=position,
             resume_json=resume_json,
             feedback=feedback,
+            question_count=str(question_count),
         )
     else:
         human_content = get_prompt(
             f"interview-{interview_type}-human",
             position=position,
             resume_json=resume_json,
+            question_count=str(question_count),
         )
 
-    system_prompt = get_prompt(f"interview-{interview_type}-system")
+    position_focus = get_interview_position_focus(position)
+    system_prompt = get_prompt(
+        f"interview-{interview_type}-system",
+        position_focus=position_focus,
+        question_count=str(question_count),
+    )
     config = _build_langfuse_config(session_id, ["interview", interview_type, position])
 
     result = await _invoke_llm(
@@ -334,6 +343,7 @@ async def evaluate_interview(
     questions_json: str,
     resume_json: str,
     interview_type: str,
+    question_count: int,
     session_id: str | None = None,
 ) -> InterviewEvaluationOutput:
     """면접 질문 평가 - Gemini 사용"""
@@ -346,7 +356,10 @@ async def evaluate_interview(
         questions_json=questions_json,
     )
 
-    system_prompt = get_prompt("interview-evaluator-system")
+    system_prompt = get_prompt(
+        "interview-evaluator-system",
+        question_count=str(question_count),
+    )
     config = _build_langfuse_config(session_id, ["interview", "evaluate", interview_type])
 
     result = await _invoke_llm(

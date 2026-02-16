@@ -15,6 +15,7 @@ async def run_interview_agent(
     resume_json: str,
     interview_type: str,
     position: str,
+    question_count: int,
     session_id: str | None = None,
 ) -> tuple[InterviewQuestionsOutput | None, str | None]:
     """면접 질문 생성 워크플로우 실행
@@ -29,6 +30,7 @@ async def run_interview_agent(
             "resume_json": resume_json,
             "interview_type": interview_type,
             "position": position,
+            "question_count": question_count,
             "session_id": session_id,
             "retry_count": 0,
         }

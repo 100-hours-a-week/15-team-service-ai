@@ -38,12 +38,14 @@ async def generate_node(state: InterviewState) -> InterviewState:
     position = state["position"]
     session_id = state.get("session_id")
     feedback = state.get("evaluation_feedback")
+    question_count = state["question_count"]
 
     try:
         questions = await generate_interview(
             resume_json=resume_json,
             interview_type=interview_type,
             position=position,
+            question_count=question_count,
             feedback=feedback,
             session_id=session_id,
         )
@@ -91,6 +93,7 @@ async def evaluate_node(state: InterviewState) -> InterviewState:
     questions = state["questions"]
     resume_json = state["resume_json"]
     interview_type = state["interview_type"]
+    question_count = state["question_count"]
     session_id = state.get("session_id")
 
     async def _evaluate():
@@ -99,6 +102,7 @@ async def evaluate_node(state: InterviewState) -> InterviewState:
             questions_json=questions_json,
             resume_json=resume_json,
             interview_type=interview_type,
+            question_count=question_count,
             session_id=session_id,
         )
 

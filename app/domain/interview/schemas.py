@@ -39,6 +39,7 @@ class InterviewState(TypedDict, total=False):
     resume_json: str
     interview_type: str
     position: str
+    question_count: int
     session_id: str | None
     questions: InterviewQuestionsOutput
     evaluation: str

@@ -22,6 +22,7 @@ class TestInterviewGenerateNode:
             resume_json='{"projects": []}',
             interview_type="technical",
             position="백엔드 개발자",
+            question_count=5,
         )
 
     @pytest.mark.asyncio

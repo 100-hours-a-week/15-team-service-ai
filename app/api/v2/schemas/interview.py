@@ -7,7 +7,6 @@ __all__ = [
     "InterviewResumeRequest",
     "InterviewRequest",
     "InterviewQuestionResponse",
-    "InterviewContentResponse",
     "InterviewErrorResponse",
     "InterviewResponse",
 ]
@@ -42,19 +41,12 @@ class InterviewRequest(BaseModel):
 
 
 class InterviewQuestionResponse(BaseModel):
-    """면접 응답 질문"""
+    """면접 응답 질문 - API 명세 기준"""
 
     model_config = ConfigDict(populate_by_name=True, by_alias=True)
 
-    question: str
-    intent: str
-    related_project: str | None = Field(default=None, alias="relatedProject")
-
-
-class InterviewContentResponse(BaseModel):
-    """면접 응답 내용"""
-
-    questions: list[InterviewQuestionResponse]
+    question_id: str = Field(alias="questionId")
+    text: str
 
 
 class InterviewErrorResponse(BaseModel):
@@ -70,6 +62,5 @@ class InterviewResponse(BaseModel):
     model_config = ConfigDict(populate_by_name=True, by_alias=True)
 
     status: Literal["success", "failed"]
-    interview_type: Literal["technical", "behavioral"] = Field(alias="interviewType")
-    content: InterviewContentResponse | None = None
+    questions: list[InterviewQuestionResponse] | None = None
     error: InterviewErrorResponse | None = None
