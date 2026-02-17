@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     # Callback
     backend_callback_url: str = ""
     ai_callback_secret: str = ""
+    edit_callback_base_url: str = ""
 
     # Timeout 설정
     github_timeout: float = 60.0
@@ -55,6 +56,18 @@ class Settings(BaseSettings):
     langfuse_secret_key: str = ""
     langfuse_base_url: str = "https://cloud.langfuse.com"
 
+    # STT 설정
+    stt_base_url: str = ""
+    stt_api_key: str = ""
+    stt_model: str = "large-v3"
+    stt_timeout: float = 30.0
+
+    # AWS S3 설정
+    aws_access_key_id: str = ""
+    aws_secret_access_key: str = ""
+    aws_region: str = "ap-northeast-2"
+    s3_bucket_name: str = ""
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -78,6 +91,8 @@ class Settings(BaseSettings):
             errors.append("BACKEND_CALLBACK_URL")
         if not self.ai_callback_secret:
             errors.append("AI_CALLBACK_SECRET")
+        if not self.edit_callback_base_url:
+            errors.append("EDIT_CALLBACK_BASE_URL")
         return errors
 
     @model_validator(mode="after")

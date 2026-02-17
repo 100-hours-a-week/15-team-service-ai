@@ -35,6 +35,9 @@ class ErrorCode(str, Enum):
     EDIT_FAILED = "EDIT_FAILED"
     INTERVIEW_GENERATE_ERROR = "INTERVIEW_GENERATE_ERROR"
     INTERVIEW_EVALUATE_ERROR = "INTERVIEW_EVALUATE_ERROR"
+    STT_API_ERROR = "STT_API_ERROR"
+    S3_DOWNLOAD_ERROR = "S3_DOWNLOAD_ERROR"
+    INVALID_AUDIO_FORMAT = "INVALID_AUDIO_FORMAT"
 
 
 class CustomException(Exception):
@@ -98,6 +101,26 @@ class PositionMismatchError(CustomException):
             status_code=400,
             error_code=ErrorCode.POSITION_MISMATCH,
             message="포지션과 기술 스택이 일치하지 않습니다",
+            detail=detail,
+        )
+
+
+class STTError(CustomException):
+    def __init__(self, detail: str | None = None):
+        super().__init__(
+            status_code=502,
+            error_code=ErrorCode.STT_API_ERROR,
+            message="음성 변환에 실패했습니다",
+            detail=detail,
+        )
+
+
+class S3DownloadError(CustomException):
+    def __init__(self, detail: str | None = None):
+        super().__init__(
+            status_code=502,
+            error_code=ErrorCode.S3_DOWNLOAD_ERROR,
+            message="S3 파일 다운로드에 실패했습니다",
             detail=detail,
         )
 

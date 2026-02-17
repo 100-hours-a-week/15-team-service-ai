@@ -7,7 +7,8 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
 from app.api.routers import api_router, api_v2_router
-from app.api.v1.resume import get_background_tasks
+from app.api.v1.resume import get_background_tasks as get_v1_tasks
+from app.api.v2.resume_edit import get_background_tasks as get_v2_edit_tasks
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
 from app.core.limiter import limiter
@@ -25,7 +26,7 @@ logger = get_logger(__name__)
 async def lifespan(app: FastAPI):
     """앱 시작/종료 이벤트 관리"""
     yield
-    tasks = get_background_tasks()
+    tasks = get_v1_tasks() | get_v2_edit_tasks()
     if tasks:
         logger.info("진행 중인 작업 종료 대기", count=len(tasks))
         for task in tasks:

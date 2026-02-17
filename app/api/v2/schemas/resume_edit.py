@@ -10,10 +10,12 @@ __all__ = [
     "EditRequest",
     "EditProjectOutput",
     "EditResumeOutput",
-    "EditProjectResponse",
-    "EditContentResponse",
-    "EditErrorResponse",
     "EditResponse",
+    "EditCallbackProjectData",
+    "EditCallbackContentData",
+    "EditCallbackErrorData",
+    "EditCallbackSuccessPayload",
+    "EditCallbackFailurePayload",
 ]
 
 
@@ -52,8 +54,16 @@ class EditRequest(BaseModel):
         return stripped
 
 
-class EditProjectResponse(BaseModel):
-    """수정 응답 프로젝트"""
+class EditResponse(BaseModel):
+    """이력서 수정 요청 응답 - jobId만 즉시 반환"""
+
+    model_config = ConfigDict(populate_by_name=True, by_alias=True)
+
+    job_id: str = Field(alias="jobId")
+
+
+class EditCallbackProjectData(BaseModel):
+    """콜백 프로젝트 데이터"""
 
     model_config = ConfigDict(populate_by_name=True, by_alias=True)
 
@@ -63,22 +73,34 @@ class EditProjectResponse(BaseModel):
     description: str
 
 
-class EditContentResponse(BaseModel):
-    """수정 응답 이력서 내용"""
+class EditCallbackContentData(BaseModel):
+    """콜백 이력서 내용 데이터"""
 
-    projects: list[EditProjectResponse]
+    projects: list[EditCallbackProjectData]
 
 
-class EditErrorResponse(BaseModel):
-    """에러 정보"""
+class EditCallbackErrorData(BaseModel):
+    """콜백 에러 데이터"""
 
     code: str
     message: str
 
 
-class EditResponse(BaseModel):
-    """이력서 수정 최상위 응답"""
+class EditCallbackSuccessPayload(BaseModel):
+    """콜백 성공 페이로드"""
 
-    status: Literal["success", "failed"]
-    content: EditContentResponse | None = None
-    error: EditErrorResponse | None = None
+    model_config = ConfigDict(populate_by_name=True, by_alias=True)
+
+    job_id: str = Field(alias="jobId")
+    status: Literal["success"] = "success"
+    content: EditCallbackContentData
+
+
+class EditCallbackFailurePayload(BaseModel):
+    """콜백 실패 페이로드"""
+
+    model_config = ConfigDict(populate_by_name=True, by_alias=True)
+
+    job_id: str = Field(alias="jobId")
+    status: Literal["failed"] = "failed"
+    error: EditCallbackErrorData
