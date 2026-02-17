@@ -1,5 +1,3 @@
-"""LLM 클라이언트 테스트"""
-
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -206,7 +204,7 @@ class TestGenerateResume:
             return_value=expected_result
         )
 
-        with patch("app.infra.llm.client.get_llm", return_value=mock_llm):
+        with patch("app.infra.llm.client.get_generator_llm", return_value=mock_llm):
             result = await generate_resume(
                 project_info=sample_project_info,
                 position="백엔드 개발자",
@@ -236,7 +234,7 @@ class TestGenerateResume:
             return_value=expected_result
         )
 
-        with patch("app.infra.llm.client.get_llm", return_value=mock_llm):
+        with patch("app.infra.llm.client.get_generator_llm", return_value=mock_llm):
             result = await generate_resume(
                 project_info=sample_project_info,
                 position="백엔드 개발자",
@@ -274,7 +272,7 @@ class TestGenerateResume:
             return_value=expected_result
         )
 
-        with patch("app.infra.llm.client.get_llm", return_value=mock_llm):
+        with patch("app.infra.llm.client.get_generator_llm", return_value=mock_llm):
             result = await generate_resume(
                 project_info=sample_project_info,
                 position="백엔드 개발자",
@@ -304,7 +302,7 @@ class TestGenerateResume:
             return_value=expected_result
         )
 
-        with patch("app.infra.llm.client.get_llm", return_value=mock_llm):
+        with patch("app.infra.llm.client.get_generator_llm", return_value=mock_llm):
             result = await generate_resume(
                 project_info=sample_project_info,
                 position="백엔드 개발자",
@@ -347,7 +345,7 @@ class TestEvaluateResume:
             return_value=expected_result
         )
 
-        with patch("app.infra.llm.client.get_llm", return_value=mock_llm):
+        with patch("app.infra.llm.client.get_evaluator_llm", return_value=mock_llm):
             result = await evaluate_resume(
                 resume_data=sample_resume_data,
                 position="백엔드 개발자",
@@ -372,7 +370,7 @@ class TestEvaluateResume:
             return_value=expected_result
         )
 
-        with patch("app.infra.llm.client.get_llm", return_value=mock_llm):
+        with patch("app.infra.llm.client.get_evaluator_llm", return_value=mock_llm):
             result = await evaluate_resume(
                 resume_data=sample_resume_data,
                 position="백엔드 개발자",
@@ -398,7 +396,7 @@ class TestEvaluateResume:
             return_value=expected_result
         )
 
-        with patch("app.infra.llm.client.get_llm", return_value=mock_llm):
+        with patch("app.infra.llm.client.get_evaluator_llm", return_value=mock_llm):
             result = await evaluate_resume(
                 resume_data=sample_resume_data,
                 position="백엔드 개발자",

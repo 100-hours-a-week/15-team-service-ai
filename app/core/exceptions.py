@@ -1,12 +1,12 @@
-import logging
 from enum import Enum
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
 from app.core.config import settings
+from app.core.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class ErrorCode(str, Enum):
@@ -14,7 +14,6 @@ class ErrorCode(str, Enum):
 
     GITHUB_UNAUTHORIZED = "GITHUB_UNAUTHORIZED"
     GITHUB_NOT_FOUND = "GITHUB_NOT_FOUND"
-    GITHUB_ERROR = "GITHUB_ERROR"
     LLM_ERROR = "LLM_ERROR"
     INTERNAL_ERROR = "INTERNAL_ERROR"
     GENERATION_FAILED = "GENERATION_FAILED"
@@ -32,6 +31,13 @@ class ErrorCode(str, Enum):
     NO_CONTRIBUTION = "NO_CONTRIBUTION"
     POSITION_MISMATCH = "POSITION_MISMATCH"
     RATE_LIMIT_EXCEEDED = "RATE_LIMIT_EXCEEDED"
+    CALLBACK_ERROR = "CALLBACK_ERROR"
+    EDIT_FAILED = "EDIT_FAILED"
+    INTERVIEW_GENERATE_ERROR = "INTERVIEW_GENERATE_ERROR"
+    INTERVIEW_EVALUATE_ERROR = "INTERVIEW_EVALUATE_ERROR"
+    STT_API_ERROR = "STT_API_ERROR"
+    S3_DOWNLOAD_ERROR = "S3_DOWNLOAD_ERROR"
+    INVALID_AUDIO_FORMAT = "INVALID_AUDIO_FORMAT"
 
 
 class CustomException(Exception):
@@ -50,9 +56,9 @@ class CustomException(Exception):
 
 
 class GitHubAPIError(CustomException):
-    def __init__(self, detail: str | None = None):
+    def __init__(self, status_code: int = 502, detail: str | None = None):
         super().__init__(
-            status_code=502,
+            status_code=status_code,
             error_code=ErrorCode.GITHUB_API_ERROR,
             message="GitHub API 호출에 실패했습니다",
             detail=detail,
@@ -83,8 +89,38 @@ class CallbackError(CustomException):
     def __init__(self, detail: str | None = None):
         super().__init__(
             status_code=502,
-            error_code=ErrorCode.INTERNAL_ERROR,
+            error_code=ErrorCode.CALLBACK_ERROR,
             message="콜백 전송에 실패했습니다",
+            detail=detail,
+        )
+
+
+class PositionMismatchError(CustomException):
+    def __init__(self, detail: str | None = None):
+        super().__init__(
+            status_code=400,
+            error_code=ErrorCode.POSITION_MISMATCH,
+            message="포지션과 기술 스택이 일치하지 않습니다",
+            detail=detail,
+        )
+
+
+class STTError(CustomException):
+    def __init__(self, detail: str | None = None):
+        super().__init__(
+            status_code=502,
+            error_code=ErrorCode.STT_API_ERROR,
+            message="음성 변환에 실패했습니다",
+            detail=detail,
+        )
+
+
+class S3DownloadError(CustomException):
+    def __init__(self, detail: str | None = None):
+        super().__init__(
+            status_code=502,
+            error_code=ErrorCode.S3_DOWNLOAD_ERROR,
+            message="S3 파일 다운로드에 실패했습니다",
             detail=detail,
         )
 
@@ -106,7 +142,7 @@ def register_exception_handlers(app):
 
     @app.exception_handler(Exception)
     async def general_exception_handler(request: Request, exc: Exception):
-        logger.error("Unhandled exception: %s", exc, exc_info=True)
+        logger.error("Unhandled exception", error=str(exc), exc_info=True)
         return JSONResponse(
             status_code=500,
             content={

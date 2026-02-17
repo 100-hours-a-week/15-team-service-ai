@@ -219,3 +219,5 @@ docs
 CLAUDE.md
 .serena
 15-*
+.claude
+scripts/

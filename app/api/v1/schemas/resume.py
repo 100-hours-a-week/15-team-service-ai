@@ -1,5 +1,3 @@
-"""이력서 API 스키마"""
-
 import re
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator

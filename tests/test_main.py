@@ -1,5 +1,3 @@
-"""app/main.py 테스트"""
-
 import pytest
 from httpx import ASGITransport, AsyncClient
 

@@ -1,5 +1,4 @@
 from app.domain.resume.schemas import (
-    CommitDetail,
     CommitInfo,
     ProjectInfo,
     ResumeData,
@@ -13,18 +12,6 @@ def test_commit_info():
     assert commit.sha == "abc123"
     assert commit.message == "feat: add feature"
     assert commit.author == "user"
-
-
-def test_commit_detail():
-    """CommitDetail 모델 생성."""
-    commit = CommitDetail(
-        sha="abc123",
-        message="feat: add feature",
-        author="user",
-        files=[{"filename": "test.py", "patch": "+print('hello')"}],
-    )
-    assert commit.sha == "abc123"
-    assert len(commit.files) == 1
 
 
 def test_project_info():

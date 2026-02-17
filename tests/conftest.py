@@ -1,5 +1,3 @@
-"""테스트 공통 fixture"""
-
 import pytest
 from httpx import ASGITransport, AsyncClient
 

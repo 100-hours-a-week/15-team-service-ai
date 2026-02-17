@@ -1,5 +1,3 @@
-"""워크플로우 노드 함수 테스트"""
-
 from unittest.mock import AsyncMock, patch
 
 import httpx
@@ -20,8 +18,10 @@ from app.domain.resume.workflow import (
     evaluate_node,
     generate_node,
     should_continue,
+)
+from app.domain.resume.workflow_utils import (
+    make_should_retry,
     should_evaluate,
-    should_retry,
 )
 
 
@@ -122,8 +122,8 @@ class TestCollectDataNode:
         ):
             result = await collect_data_node(base_state)
 
-        assert result["error_code"] == ErrorCode.GITHUB_API_ERROR
-        assert "HTTP 401" in result["error_message"]
+        assert result["error_code"] == ErrorCode.GITHUB_UNAUTHORIZED
+        assert "인증 실패" in result["error_message"]
 
     @pytest.mark.asyncio
     async def test_collect_data_invalid_url(self, base_state):
@@ -293,10 +293,16 @@ class TestEvaluateNode:
             feedback="이력서가 모든 기준을 충족합니다",
         )
 
-        with patch(
-            "app.domain.resume.workflow.evaluate_resume",
-            new_callable=AsyncMock,
-            return_value=mock_evaluation,
+        with (
+            patch(
+                "app.domain.resume.validators.validate_resume_format",
+                return_value=[],
+            ),
+            patch(
+                "app.domain.resume.workflow.evaluate_resume",
+                new_callable=AsyncMock,
+                return_value=mock_evaluation,
+            ),
         ):
             result = await evaluate_node(base_state)
 
@@ -313,10 +319,16 @@ class TestEvaluateNode:
             feedback="기술 스택이 부족합니다",
         )
 
-        with patch(
-            "app.domain.resume.workflow.evaluate_resume",
-            new_callable=AsyncMock,
-            return_value=mock_evaluation,
+        with (
+            patch(
+                "app.domain.resume.validators.validate_resume_format",
+                return_value=[],
+            ),
+            patch(
+                "app.domain.resume.workflow.evaluate_resume",
+                new_callable=AsyncMock,
+                return_value=mock_evaluation,
+            ),
         ):
             result = await evaluate_node(base_state)
 
@@ -331,10 +343,16 @@ class TestEvaluateNode:
             "Server Error", request=mock_response.request, response=mock_response
         )
 
-        with patch(
-            "app.domain.resume.workflow.evaluate_resume",
-            new_callable=AsyncMock,
-            side_effect=http_error,
+        with (
+            patch(
+                "app.domain.resume.validators.validate_resume_format",
+                return_value=[],
+            ),
+            patch(
+                "app.domain.resume.workflow.evaluate_resume",
+                new_callable=AsyncMock,
+                side_effect=http_error,
+            ),
         ):
             result = await evaluate_node(base_state)
 
@@ -344,15 +362,41 @@ class TestEvaluateNode:
     @pytest.mark.asyncio
     async def test_evaluate_value_error_returns_pass(self, base_state):
         """ValueError 시 관용적으로 pass 처리"""
-        with patch(
-            "app.domain.resume.workflow.evaluate_resume",
-            new_callable=AsyncMock,
-            side_effect=ValueError("Parse error"),
+        with (
+            patch(
+                "app.domain.resume.validators.validate_resume_format",
+                return_value=[],
+            ),
+            patch(
+                "app.domain.resume.workflow.evaluate_resume",
+                new_callable=AsyncMock,
+                side_effect=ValueError("Parse error"),
+            ),
         ):
             result = await evaluate_node(base_state)
 
         assert result["evaluation"] == "pass"
         assert result["evaluation_feedback"] == ""
+
+    @pytest.mark.asyncio
+    async def test_evaluate_format_violation_returns_fail(self, base_state):
+        """코드 검증 위반 시 fail 처리"""
+        mock_violations = [
+            {
+                "project": "Test",
+                "rule": "기술 스택 최소 개수",
+                "detail": "기술 스택이 3개 미만",
+            }
+        ]
+
+        with patch(
+            "app.domain.resume.validators.validate_resume_format",
+            return_value=mock_violations,
+        ):
+            result = await evaluate_node(base_state)
+
+        assert result["evaluation"] == "fail"
+        assert "기술 스택이 3개 미만" in result["evaluation_feedback"]
 
 
 class TestShouldContinue:
@@ -421,6 +465,10 @@ class TestShouldEvaluate:
 class TestShouldRetry:
     """should_retry 조건 함수 테스트"""
 
+    def setup_method(self):
+        """각 테스트 전에 should_retry 함수 생성"""
+        self.should_retry = make_should_retry(max_retries=2, retry_node="generate")
+
     def test_returns_end_when_error(self):
         """에러 있을 때 end 반환"""
         state = ResumeState(
@@ -431,9 +479,7 @@ class TestShouldRetry:
             error_code=ErrorCode.GENERATE_ERROR,
         )
 
-        result = should_retry(state)
-
-        assert result == "end"
+        assert self.should_retry(state) == "end"
 
     def test_returns_end_when_pass(self):
         """평가 통과 시 end 반환"""
@@ -446,9 +492,7 @@ class TestShouldRetry:
             retry_count=0,
         )
 
-        result = should_retry(state)
-
-        assert result == "end"
+        assert self.should_retry(state) == "end"
 
     def test_returns_generate_when_fail_and_can_retry(self):
         """평가 실패 + 재시도 가능 시 generate 반환"""
@@ -461,9 +505,7 @@ class TestShouldRetry:
             retry_count=0,
         )
 
-        result = should_retry(state)
-
-        assert result == "generate"
+        assert self.should_retry(state) == "generate"
 
     def test_returns_end_when_max_retries_reached(self):
         """최대 재시도 도달 시 end 반환"""
@@ -473,11 +515,7 @@ class TestShouldRetry:
                 position="개발자",
             ),
             evaluation="fail",
-            retry_count=3,
+            retry_count=2,
         )
 
-        with patch("app.domain.resume.workflow.settings") as mock_settings:
-            mock_settings.workflow_max_retries = 3
-            result = should_retry(state)
-
-        assert result == "end"
+        assert self.should_retry(state) == "end"
