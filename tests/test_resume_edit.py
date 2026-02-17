@@ -54,10 +54,11 @@ class TestEditEndpointSuccess:
 
     @pytest.mark.asyncio
     async def test_edit_success(self, async_client):
-        """정상 수정 + 평가 통과 시 성공 응답"""
-        with patch("app.api.v2.resume_edit.run_edit_agent") as mock_agent:
-            mock_agent.return_value = (SAMPLE_EDITED_OUTPUT, None)
-
+        """정상 수정 요청 시 jobId 즉시 반환"""
+        with patch(
+            "app.api.v2.resume_edit._run_edit_and_callback",
+            new_callable=AsyncMock,
+        ):
             response = await async_client.post(
                 "/api/v2/resume/edit",
                 json=SAMPLE_EDIT_REQUEST,
@@ -65,11 +66,7 @@ class TestEditEndpointSuccess:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["status"] == "success"
-        assert data["content"] is not None
-        assert len(data["content"]["projects"]) == 1
-        assert data["content"]["projects"][0]["name"] == "Health_advice_app"
-        assert "error" not in data or data["error"] is None
+        assert "jobId" in data
 
 
 class TestEditEndpointFailure:
@@ -77,36 +74,50 @@ class TestEditEndpointFailure:
 
     @pytest.mark.asyncio
     async def test_edit_llm_failure(self, async_client):
-        """LLM 호출 실패 시 에러 응답"""
-        with patch("app.api.v2.resume_edit.run_edit_agent") as mock_agent:
-            mock_agent.return_value = (None, "LLM API 오류: HTTP 500")
+        """LLM 실패 시에도 jobId 반환 후 실패 콜백 페이로드 생성"""
+        from app.api.v2.resume_edit import _build_callback_payload
 
+        with patch(
+            "app.api.v2.resume_edit._run_edit_and_callback",
+            new_callable=AsyncMock,
+        ):
             response = await async_client.post(
                 "/api/v2/resume/edit",
                 json=SAMPLE_EDIT_REQUEST,
             )
 
         assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "failed"
-        assert data["error"]["code"] == ErrorCode.EDIT_FAILED
-        assert "LLM API" in data["error"]["message"]
+        assert "jobId" in response.json()
+
+        payload = _build_callback_payload(
+            response.json()["jobId"], None, "LLM API 오류: HTTP 500"
+        )
+        assert payload["status"] == "failed"
+        assert payload["error"]["code"] == ErrorCode.EDIT_FAILED
+        assert "LLM API" in payload["error"]["message"]
 
     @pytest.mark.asyncio
     async def test_edit_timeout(self, async_client):
-        """워크플로우 타임아웃 시 에러 응답"""
-        with patch("app.api.v2.resume_edit.run_edit_agent") as mock_agent:
-            mock_agent.return_value = (None, "워크플로우 타임아웃: 180초 초과")
+        """타임아웃 시에도 jobId 반환 후 실패 콜백 페이로드 생성"""
+        from app.api.v2.resume_edit import _build_callback_payload
 
+        with patch(
+            "app.api.v2.resume_edit._run_edit_and_callback",
+            new_callable=AsyncMock,
+        ):
             response = await async_client.post(
                 "/api/v2/resume/edit",
                 json=SAMPLE_EDIT_REQUEST,
             )
 
         assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "failed"
-        assert "타임아웃" in data["error"]["message"]
+        assert "jobId" in response.json()
+
+        payload = _build_callback_payload(
+            response.json()["jobId"], None, "워크플로우 타임아웃: 180초 초과"
+        )
+        assert payload["status"] == "failed"
+        assert "타임아웃" in payload["error"]["message"]
 
 
 class TestEditEndpointValidation:
