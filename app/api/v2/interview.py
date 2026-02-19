@@ -13,7 +13,7 @@ from app.core.exceptions import ErrorCode
 from app.core.limiter import limiter
 from app.core.logging import get_logger
 from app.domain.interview.agent import run_interview_agent
-from app.domain.interview.store import QuestionContext, interview_context_store
+from app.domain.interview.store import QuestionContext, SessionMeta, interview_context_store
 
 router = APIRouter(prefix="/interview", tags=["v2"])
 logger = get_logger(__name__)
@@ -76,6 +76,14 @@ async def generate_interview(
         )
 
     interview_context_store.save(body.resume_id, question_contexts)
+    interview_context_store.save_session_meta(
+        body.resume_id,
+        SessionMeta(
+            resume_json=resume_json,
+            position=body.position,
+            interview_type=body.type,
+        ),
+    )
 
     logger.info("면접 질문 생성 성공", questions=len(questions.questions))
     return InterviewResponse(
