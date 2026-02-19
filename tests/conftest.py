@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 
@@ -126,3 +128,19 @@ def async_client():
     """비동기 HTTP 클라이언트"""
     transport = ASGITransport(app=app)
     return AsyncClient(transport=transport, base_url="http://test")
+
+
+@pytest.fixture(autouse=True)
+def mock_langfuse_get_prompt():
+    """모든 테스트에서 Langfuse get_prompt를 자동 mock 처리
+
+    CI 환경에 LANGFUSE_PUBLIC_KEY가 없어도 테스트가 실패하지 않도록
+    get_prompt를 import한 모든 모듈 경로에서 mock 적용
+    """
+    fake = lambda name, **kw: f"mock-prompt-{name}"
+
+    with (
+        patch("app.infra.llm.client.get_prompt", side_effect=fake),
+        patch("app.domain.resume.prompts.builder.get_prompt", side_effect=fake),
+    ):
+        yield
