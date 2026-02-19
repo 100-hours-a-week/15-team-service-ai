@@ -11,17 +11,85 @@ from app.domain.resume.error_handler import (
     handle_data_error,
     handle_http_error,
 )
-from app.domain.resume.schemas.edit import EditResumeOutput, EditState
+from app.domain.resume.schemas.edit import ClassifyOutput, EditResumeOutput, EditState
 from app.domain.resume.workflow_utils import (
     evaluate_with_fallback,
     make_should_retry,
     should_evaluate,
 )
-from app.infra.llm.client import edit_resume, evaluate_edited_resume, plan_edit
+from app.infra.llm.client import classify_edit, edit_resume, evaluate_edited_resume, plan_edit
 
 logger = get_logger(__name__)
 
 MAX_EDIT_RETRIES = 1
+
+
+async def classify_node(state: EditState) -> EditState:
+    """분류 노드 - Gemini가 사용자 요청을 분류하여 범위 밖 요청 식별"""
+    logger.info("classify_node 시작")
+
+    resume_json = state["resume_json"]
+    message = state["message"]
+    session_id = state.get("session_id")
+
+    try:
+        classification = await classify_edit(
+            resume_json=resume_json,
+            message=message,
+            session_id=session_id,
+        )
+
+        logger.info(
+            "classify_node 완료",
+            category=classification.intent_category,
+            confidence=classification.confidence,
+        )
+
+        return {**state, "classification": classification}
+
+    except (httpx.ConnectError, httpx.TimeoutException):
+        logger.warning("classify_node 연결 실패, 기본 edit 경로로 폴백")
+        return state
+
+    except httpx.HTTPStatusError:
+        logger.warning("classify_node API 오류, 기본 edit 경로로 폴백")
+        return state
+
+    except (ValueError, KeyError, TypeError):
+        logger.warning("classify_node 데이터 오류, 기본 edit 경로로 폴백")
+        return state
+
+
+async def reject_node(state: EditState) -> EditState:
+    """거절 노드 - 범위 밖 요청 즉시 거절"""
+    classification: ClassifyOutput = state["classification"]
+    logger.info("reject_node 실행", reason=classification.reason)
+
+    return {
+        **state,
+        "error_code": ErrorCode.EDIT_OUT_OF_SCOPE,
+        "error_message": classification.reason,
+        "reject_reason": classification.reason,
+    }
+
+
+def should_classify(state: EditState) -> str:
+    """분류 결과에 따라 edit 또는 reject으로 분기"""
+    classification = state.get("classification")
+
+    if classification is None:
+        logger.info("should_classify: classification 없음, edit으로 진행")
+        return "edit"
+
+    if classification.intent_category == "out_of_scope":
+        logger.info("should_classify: out_of_scope, reject으로 진행")
+        return "reject"
+
+    logger.info(
+        "should_classify: 유효한 수정 요청, edit으로 진행",
+        category=classification.intent_category,
+    )
+    return "edit"
 
 
 async def plan_node(state: EditState) -> EditState:
@@ -90,10 +158,17 @@ async def edit_node(state: EditState) -> EditState:
     session_id = state.get("session_id")
     feedback = state.get("evaluation_feedback")
     edit_plan = state.get("edit_plan")
+    classification = state.get("classification")
 
-    # 계획이 있는 경우 message를 계획 기반 지시로 보강
     effective_message = message
-    if edit_plan is not None:
+    if classification is not None:
+        effective_message = (
+            f"{message}\n\n"
+            f"[분류 결과]\n"
+            f"유형: {classification.intent_category}\n"
+            f"사유: {classification.reason}"
+        )
+    elif edit_plan is not None:
         effective_message = (
             f"{message}\n\n"
             f"[수정 계획]\n"
@@ -178,35 +253,43 @@ async def evaluate_node(state: EditState) -> EditState:
             ),
         }
 
+    user_message = state.get("message", "")
+
     async def _evaluate():
         resume_json = edited_resume.model_dump_json(indent=2)
         return await evaluate_edited_resume(
             resume_json=resume_json,
             session_id=session_id,
+            user_message=user_message,
         )
 
     return await evaluate_with_fallback(state, _evaluate)
 
 
 def create_edit_workflow() -> CompiledStateGraph:
-    """이력서 수정 워크플로우 생성"""
+    """이력서 수정 워크플로우 생성
+
+    워크플로우: classify → [edit | reject] → evaluate → retry/END
+    """
     workflow = StateGraph(EditState)
 
-    workflow.add_node("plan", plan_node)
+    workflow.add_node("classify", classify_node)
+    workflow.add_node("reject", reject_node)
     workflow.add_node("edit", edit_node)
     workflow.add_node("evaluate", evaluate_node)
 
-    workflow.set_entry_point("plan")
+    workflow.set_entry_point("classify")
 
-    # plan 실패 시 즉시 종료, 성공 시 edit으로 진행
     workflow.add_conditional_edges(
-        "plan",
-        should_evaluate,
+        "classify",
+        should_classify,
         {
-            "evaluate": "edit",
-            "end": END,
+            "edit": "edit",
+            "reject": "reject",
         },
     )
+
+    workflow.add_edge("reject", END)
 
     workflow.add_conditional_edges(
         "edit",

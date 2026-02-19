@@ -16,7 +16,10 @@ from app.domain.interview.feedback_schemas import (
     OverallFeedbackEvaluationOutput,
     OverallFeedbackOutput,
 )
-from app.domain.interview.schemas import InterviewEvaluationOutput, InterviewQuestionsOutput
+from app.domain.interview.schemas import (
+    InterviewEvaluationOutput,
+    InterviewQuestionsOutput,
+)
 from app.domain.resume.prompts.builder import (
     build_evaluator_system_prompt,
     build_generator_system_prompt,
@@ -31,7 +34,7 @@ from app.domain.resume.schemas import (
     ResumeData,
     UserStats,
 )
-from app.domain.resume.schemas.edit import EditPlanOutput
+from app.domain.resume.schemas.edit import ClassifyOutput, EditPlanOutput
 from app.infra.langfuse.prompt_manager import get_prompt
 
 logger = get_logger(__name__)
@@ -247,6 +250,39 @@ async def evaluate_resume(
     return result
 
 
+async def classify_edit(
+    resume_json: str,
+    message: str,
+    session_id: str | None = None,
+) -> ClassifyOutput:
+    """이력서 수정 요청 분류 - Gemini 사용"""
+    logger.debug("이력서 수정 요청 분류 시작")
+
+    system_prompt = get_prompt("resume-edit-classify-system")
+    human_content = get_prompt(
+        "resume-edit-classify-human",
+        resume_json=resume_json,
+        message=message,
+    )
+    config = _build_langfuse_config(session_id, ["resume", "edit-classify"])
+
+    result = await _invoke_llm(
+        llm=get_evaluator_llm(),
+        output_type=ClassifyOutput,
+        system_prompt=system_prompt,
+        human_content=human_content,
+        config=config,
+        structured_output_method="json_mode",
+    )
+
+    logger.debug(
+        "수정 요청 분류 완료",
+        category=result.intent_category,
+        confidence=result.confidence,
+    )
+    return result
+
+
 async def plan_edit(
     resume_json: str,
     message: str,
@@ -326,6 +362,7 @@ async def edit_resume[T](
 async def evaluate_edited_resume(
     resume_json: str,
     session_id: str | None = None,
+    user_message: str = "",
 ) -> EvaluationOutput:
     """수정된 이력서 평가 - Gemini 사용, 포지션 체크 없음"""
     logger.debug("수정 이력서 평가 요청")
@@ -333,6 +370,7 @@ async def evaluate_edited_resume(
     human_content = get_prompt(
         "resume-edit-evaluator-human",
         resume_json=resume_json,
+        user_message=user_message,
     )
 
     system_prompt = get_prompt("resume-edit-evaluator-system")

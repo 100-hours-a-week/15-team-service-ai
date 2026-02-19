@@ -439,3 +439,188 @@ class TestEditAgent:
 
         assert result is None
         assert "타임아웃" in error
+
+
+class TestClassifyNode:
+    """분류 노드 테스트"""
+
+    @pytest.mark.asyncio
+    async def test_classify_node_success_edit(self):
+        """수정 요청으로 분류 - classification이 state에 저장됨"""
+        from app.domain.resume.edit_workflow import classify_node
+        from app.domain.resume.schemas.edit import ClassifyOutput
+
+        state = {
+            "resume_json": '{"projects": []}',
+            "message": "Redis 추가해줘",
+            "session_id": None,
+            "retry_count": 0,
+        }
+
+        classify_result = ClassifyOutput(
+            intent_category="add",
+            confidence="high",
+            reason="사용자가 Redis 추가를 명시적으로 요청",
+        )
+
+        mock_llm = MagicMock()
+        mock_llm.with_structured_output.return_value.ainvoke = AsyncMock(
+            return_value={
+                "raw": MagicMock(content="test"),
+                "parsed": classify_result,
+                "parsing_error": None,
+            }
+        )
+
+        with (
+            patch("app.infra.llm.client.get_evaluator_llm", return_value=mock_llm),
+            patch(
+                "app.infra.llm.client.get_prompt",
+                side_effect=lambda name, **kw: f"mock-{name}",
+            ),
+        ):
+            result = await classify_node(state)
+
+        assert result["classification"] == classify_result
+        assert result["classification"].intent_category == "add"
+        assert "error_code" not in result or not result.get("error_code")
+
+    @pytest.mark.asyncio
+    async def test_classify_node_out_of_scope(self):
+        """범위 밖 요청으로 분류"""
+        from app.domain.resume.edit_workflow import classify_node
+        from app.domain.resume.schemas.edit import ClassifyOutput
+
+        state = {
+            "resume_json": '{"projects": []}',
+            "message": "오늘 날씨 알려줘",
+            "session_id": None,
+            "retry_count": 0,
+        }
+
+        classify_result = ClassifyOutput(
+            intent_category="out_of_scope",
+            confidence="high",
+            reason="이력서 수정과 무관한 요청",
+        )
+
+        mock_llm = MagicMock()
+        mock_llm.with_structured_output.return_value.ainvoke = AsyncMock(
+            return_value={
+                "raw": MagicMock(content="test"),
+                "parsed": classify_result,
+                "parsing_error": None,
+            }
+        )
+
+        with (
+            patch("app.infra.llm.client.get_evaluator_llm", return_value=mock_llm),
+            patch(
+                "app.infra.llm.client.get_prompt",
+                side_effect=lambda name, **kw: f"mock-{name}",
+            ),
+        ):
+            result = await classify_node(state)
+
+        assert result["classification"].intent_category == "out_of_scope"
+
+    @pytest.mark.asyncio
+    async def test_classify_node_fallback_on_error(self):
+        """LLM 실패 시 classification 없이 반환 - 기본 edit 경로로 폴백"""
+        from app.domain.resume.edit_workflow import classify_node
+
+        state = {
+            "resume_json": '{"projects": []}',
+            "message": "수정 요청",
+            "session_id": None,
+            "retry_count": 0,
+        }
+
+        mock_llm = MagicMock()
+        mock_llm.with_structured_output.return_value.ainvoke = AsyncMock(
+            side_effect=ValueError("LLM 파싱 실패")
+        )
+
+        with (
+            patch("app.infra.llm.client.get_evaluator_llm", return_value=mock_llm),
+            patch(
+                "app.infra.llm.client.get_prompt",
+                side_effect=lambda name, **kw: f"mock-{name}",
+            ),
+        ):
+            result = await classify_node(state)
+
+        assert "classification" not in result
+        assert "error_code" not in result or not result.get("error_code")
+
+
+class TestRejectNode:
+    """거절 노드 테스트"""
+
+    @pytest.mark.asyncio
+    async def test_reject_node(self):
+        """error_code와 reject_reason 설정 확인"""
+        from app.domain.resume.edit_workflow import reject_node
+        from app.domain.resume.schemas.edit import ClassifyOutput
+
+        classification = ClassifyOutput(
+            intent_category="out_of_scope",
+            confidence="high",
+            reason="이력서 수정과 무관한 요청",
+        )
+
+        state = {
+            "resume_json": '{"projects": []}',
+            "message": "오늘 날씨 알려줘",
+            "session_id": None,
+            "retry_count": 0,
+            "classification": classification,
+        }
+
+        result = await reject_node(state)
+
+        assert result["error_code"] == ErrorCode.EDIT_OUT_OF_SCOPE
+        assert result["reject_reason"] == "이력서 수정과 무관한 요청"
+        assert result["error_message"] == "이력서 수정과 무관한 요청"
+
+
+class TestShouldClassify:
+    """should_classify 라우터 테스트"""
+
+    def test_should_classify_out_of_scope(self):
+        """out_of_scope이면 reject 반환"""
+        from app.domain.resume.edit_workflow import should_classify
+        from app.domain.resume.schemas.edit import ClassifyOutput
+
+        state = {
+            "classification": ClassifyOutput(
+                intent_category="out_of_scope",
+                confidence="high",
+                reason="범위 밖",
+            )
+        }
+
+        assert should_classify(state) == "reject"
+
+    def test_should_classify_valid_edit(self):
+        """유효한 수정 요청이면 edit 반환"""
+        from app.domain.resume.edit_workflow import should_classify
+        from app.domain.resume.schemas.edit import ClassifyOutput
+
+        state = {
+            "classification": ClassifyOutput(
+                intent_category="add",
+                confidence="high",
+                reason="추가 요청",
+            )
+        }
+
+        assert should_classify(state) == "edit"
+
+    def test_should_classify_no_classification(self):
+        """classification 없으면 edit 반환"""
+        from app.domain.resume.edit_workflow import should_classify
+
+        state = {}
+
+        assert should_classify(state) == "edit"

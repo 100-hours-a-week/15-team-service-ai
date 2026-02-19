@@ -1,3 +1,59 @@
+RESUME_EDIT_CLASSIFY_SYSTEM = """You are a resume edit request classifier.
+Your job is to analyze the user's request and determine whether it is a valid resume edit request
+or an out-of-scope request that should be rejected.
+
+## 6 CATEGORIES
+
+| Category | Description | Examples |
+|----------|-------------|----------|
+| typo_fix | 오타, 잘못된 이름 수정 | "JJWT 오타 아니야?", "React 철자 틀렸어" |
+| add | 내용, 기술 스택 추가 | "Redis 추가해줘", "Docker가 빠져있네" |
+| remove | 내용, 기술 스택 삭제 | "WebSocket 빼줘", "이 불릿 삭제" |
+| replace | 기존 항목을 다른 것으로 교체 | "PostgreSQL을 MySQL로 바꿔줘" |
+| rewrite | 기존 내용을 더 구체적으로 재작성 | "더 구체적으로 써줘", "설명 보강해줘" |
+| out_of_scope | 이력서 수정과 무관한 요청 | "오늘 날씨 알려줘", "코드 짜줘", "면접 팁 알려줘" |
+
+## OUT_OF_SCOPE CRITERIA
+
+The request is out_of_scope if it:
+- Has NO relation to modifying resume content
+- Asks for general advice, coding help, or non-resume tasks
+- Asks about topics unrelated to the resume projects, tech_stack, or description
+- Is a greeting or casual conversation
+
+The request is NOT out_of_scope if it:
+- Mentions any project name, tech stack item, or description content from the resume
+- Uses question form but implies a fix: "오타 아니야?", "이거 맞아?"
+- Is an observation implying action: "빠져있네", "이상한데"
+- Asks to modify any field: name, tech_stack, description, repo_url
+
+## CONFIDENCE
+
+- high: Clear intent, obvious category
+- medium: Somewhat ambiguous but likely this category
+- low: Very ambiguous, could be multiple categories
+
+## OUTPUT FORMAT
+
+```json
+{{
+  "intent_category": "add",
+  "confidence": "high",
+  "reason": "사용자가 Redis 추가를 명시적으로 요청"
+}}
+```"""
+
+RESUME_EDIT_CLASSIFY_HUMAN = """Classify this resume edit request.
+
+## User Request
+{message}
+
+## Current Resume
+{resume_json}
+
+Determine the intent_category, confidence, and reason.
+Return JSON only."""
+
 RESUME_EDIT_SYSTEM = """You are an IT resume editing specialist who makes minimal, \
 targeted modifications to existing resumes.
 Your core principle: change ONLY what the user explicitly requested, \
@@ -356,6 +412,14 @@ ALLOWED only: ~구현, ~구축, ~설계, ~처리, ~연동, ~도입, ~최적화, 
 ### Rule 5: Trivial content
 FAIL if contains: CSS 수정, 오타 수정, README 수정, 패키지 설치
 
+### Rule 6: Intent-result alignment
+If the user's edit request is provided, verify that the edited resume actually reflects the requested change.
+- FAIL if the user asked to add something but it was not added
+- FAIL if the user asked to remove something but it is still present
+- FAIL if the user asked to fix a typo but the typo remains
+- FAIL if the user asked to replace X with Y but X is still present or Y is missing
+- If no user request is provided, skip this rule
+
 ---
 
 ## EXAMPLES
@@ -454,14 +518,18 @@ Return JSON only."""
 
 RESUME_EDIT_EVALUATOR_HUMAN = """Evaluate this edited resume.
 
-Check rules 1-5 in order:
+Check rules 1-6 in order:
 1. tech_stack count: 1-20
 2. Forbidden items
 3. description format
 4. Forbidden endings
 5. Trivial content
+6. Intent-result alignment
 
-Resume:
+## User's Edit Request
+{user_message}
+
+## Edited Resume
 {resume_json}
 
 Return JSON with result, violated_rule, violated_item, feedback."""
