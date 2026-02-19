@@ -16,6 +16,7 @@ class EditResumeOutput(BaseModel):
     """LLM 구조화 출력 전체"""
 
     projects: list[EditProjectOutput]
+    message: str
 
 
 class EditState(TypedDict, total=False):

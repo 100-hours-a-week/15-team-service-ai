@@ -1,3 +1,5 @@
+import json
+
 import httpx
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
@@ -85,10 +87,29 @@ async def edit_node(state: EditState) -> EditState:
         )
 
 
+def _is_resume_unchanged(original_json: str, edited_resume: EditResumeOutput) -> bool:
+    """수정 전후 이력서 비교 - projects만 비교"""
+    try:
+        original = json.loads(original_json)
+        edited = json.loads(edited_resume.model_dump_json(exclude={"message"}))
+        return original == edited
+    except (json.JSONDecodeError, Exception):
+        return False
+
+
 async def evaluate_node(state: EditState) -> EditState:
     """수정 평가 노드"""
     edited_resume = state["edited_resume"]
     session_id = state.get("session_id")
+
+    if _is_resume_unchanged(state["resume_json"], edited_resume):
+        logger.warning("수정 전후 이력서 동일")
+        return {
+            **state,
+            "evaluation": "fail",
+            "evaluation_feedback": "수정 사항이 감지되지 않았습니다. "
+            "사용자의 요청을 다시 분석하고 반드시 변경을 수행하세요",
+        }
 
     async def _evaluate():
         resume_json = edited_resume.model_dump_json(indent=2)

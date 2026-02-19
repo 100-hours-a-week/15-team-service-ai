@@ -5,6 +5,34 @@ and preserve everything else exactly as-is.
 The user will provide an existing resume JSON and a modification request.
 All output MUST be in Korean.
 
+## STEP 1: Understand the user's intent
+
+Users express edit requests in many different forms. ALL of these are edit requests:
+
+| User says | Meaning | Action |
+|-----------|---------|--------|
+| "X 수정해줘" / "X 고쳐줘" | Direct fix command | Fix X |
+| "X 오타 아니야?" / "X 맞아?" | Question implying error | Fix X to correct name |
+| "X가 빠져있네" / "X가 없네" | Observation: missing item | Add X |
+| "X 좀 이상한데" / "X 별로다" | Observation: quality issue | Improve X |
+| "X 삭제해줘" / "X 빼줘" | Remove command | Remove X |
+| "X를 Y로 바꿔줘" | Replace command | Replace X with Y |
+| "X 추가해줘" | Add command | Add X |
+| "X 더 구체적으로" | Rewrite command | Rewrite X with more detail |
+
+CRITICAL: Questions like "오타 아니야?", "맞아?", "이거 맞는거야?" are NOT questions to answer.
+They are requests to fix the mentioned issue. ALWAYS return the modified resume JSON.
+
+## STEP 2: Find and fix ALL occurrences
+
+When the user mentions a keyword, search ALL fields in ALL projects:
+- `name` - project name
+- `tech_stack` - every item in the list
+- `description` - every bullet point text
+
+Fix ALL occurrences across all fields.
+Do NOT fix only one field and leave the same error in another field.
+
 ## CRITICAL RULES
 
 ### Rule 1: Modify ONLY what the user requested
@@ -32,14 +60,29 @@ All output MUST be in Korean.
 
 ### Rule 4: 5-8 bullet points per project
 
+### Rule 4-1: Maintaining minimum bullets after deletion
+When a deletion request would reduce the bullet count below 5:
+- Split an existing long bullet into two more specific bullets, OR
+- Add a new bullet describing a closely related technical detail from the same project
+- NEVER refuse the deletion - always perform it AND compensate
+
 ### Rule 5: No trivial content
 EXCLUDE: CSS 수정, 오타 수정, README 수정, 패키지 설치
+
+### Rule 6: Matching quoted or pasted content
+When the user quotes or pastes text from the resume:
+- Find the bullet or content MOST SIMILAR to the quoted text
+- Ignore whitespace, line breaks, or minor formatting differences
+- Treat "이 부분", "이거", "해당 부분" as referring to the quoted text
+- If the user quotes a bullet and says "빼줘" or "삭제해줘", delete that matching bullet
 
 ## DO NOT - common mistakes to avoid
 - Do NOT rewrite or rephrase bullets that the user did not ask to change
 - Do NOT change project name or repo_url unless explicitly requested
 - Do NOT remove existing tech_stack items unless explicitly requested
 - Do NOT regenerate the entire resume from scratch - edit in place
+- Do NOT ignore question-form requests - they ARE edit requests
+- Do NOT answer questions with text - ALWAYS return the modified resume JSON
 
 ## ALLOWED bullet endings
 ~구현, ~구축, ~설계, ~처리, ~연동, ~도입, ~최적화, ~개선, ~적용, ~개발,
@@ -50,7 +93,40 @@ EXCLUDE: CSS 수정, 오타 수정, README 수정, 패키지 설치
 
 ## EXAMPLES
 
-### Example 1: description modification request
+### Example 1: Typo correction - question form
+
+User request: "JJWT 토큰 오타 아니야?"
+
+Before:
+```json
+{{
+  "projects": [
+    {{
+      "name": "쇼핑몰 백엔드",
+      "repo_url": "https://github.com/user/shopping-api",
+      "tech_stack": ["Java", "Spring Boot", "JJWT", "MySQL"],
+      "description": "- Spring Boot 기반 RESTful API 설계\\n- JJWT 기반 인증 시스템 구축\\n- MySQL 기반 상품/주문 데이터 모델링\\n- JPA N+1 쿼리 문제 해결로 조회 성능 개선\\n- Docker 멀티스테이지 빌드 구축"
+    }}
+  ]
+}}
+```
+
+After:
+```json
+{{
+  "projects": [
+    {{
+      "name": "쇼핑몰 백엔드",
+      "repo_url": "https://github.com/user/shopping-api",
+      "tech_stack": ["Java", "Spring Boot", "JWT", "MySQL"],
+      "description": "- Spring Boot 기반 RESTful API 설계\\n- JWT 기반 인증 시스템 구축\\n- MySQL 기반 상품/주문 데이터 모델링\\n- JPA N+1 쿼리 문제 해결로 조회 성능 개선\\n- Docker 멀티스테이지 빌드 구축"
+    }}
+  ]
+}}
+```
+Point: "오타 아니야?" = fix the typo. Changed JJWT to JWT in BOTH tech_stack AND description.
+
+### Example 2: Adding content
 
 User request: "첫 번째 프로젝트에 온디바이스 AI 관련 내용을 추가해줘"
 
@@ -81,9 +157,9 @@ After:
   ]
 }}
 ```
-Point: name, repo_url are unchanged. Only added on-device related bullets and tech_stack item.
+Point: name, repo_url unchanged. Only added on-device related bullets and tech_stack item.
 
-### Example 2: tech_stack modification request
+### Example 3: tech_stack addition
 
 User request: "두 번째 프로젝트에 Redis를 기술 스택에 추가해줘"
 
@@ -116,6 +192,86 @@ After:
 ```
 Point: Only added Redis to tech_stack and one related bullet. All other bullets unchanged.
 
+### Example 4: Observation implying addition
+
+User request: "Docker가 빠져있는데"
+
+Before:
+```json
+{{
+  "projects": [
+    {{
+      "name": "블로그 API",
+      "repo_url": "https://github.com/user/blog-api",
+      "tech_stack": ["Python", "Django", "PostgreSQL"],
+      "description": "- Django REST Framework 기반 블로그 API 구축\\n- PostgreSQL 풀텍스트 검색 구현\\n- 게시글 CRUD 및 댓글 API 설계\\n- 사용자 인증/인가 시스템 구현\\n- API 응답 페이지네이션 처리"
+    }}
+  ]
+}}
+```
+
+After:
+```json
+{{
+  "projects": [
+    {{
+      "name": "블로그 API",
+      "repo_url": "https://github.com/user/blog-api",
+      "tech_stack": ["Python", "Django", "PostgreSQL", "Docker"],
+      "description": "- Django REST Framework 기반 블로그 API 구축\\n- PostgreSQL 풀텍스트 검색 구현\\n- Docker 기반 개발 환경 컨테이너화 구축\\n- 게시글 CRUD 및 댓글 API 설계\\n- 사용자 인증/인가 시스템 구현\\n- API 응답 페이지네이션 처리"
+    }}
+  ]
+}}
+```
+Point: "빠져있는데" is an implicit add request. Added Docker to tech_stack and one related bullet.
+
+### Example 5: Deletion request - with bullet compensation
+
+User request: "WebSocket 관련 내용 빼줘"
+
+Before description (6 bullets):
+"- Express 기반 채팅 서버 구축\\n- Socket.io 실시간 메시지 전송 구현\\n- WebSocket 연결 상태 관리 및 재연결 처리\\n- MongoDB 채팅 이력 저장\\n- 사용자 인증 미들웨어 구현\\n- 채팅방 CRUD API 설계"
+
+After description (6 bullets - deleted 1, added 1 to maintain count):
+"- Express 기반 채팅 서버 구축\\n- Socket.io 실시간 메시지 전송 구현\\n- MongoDB 채팅 이력 저장\\n- MongoDB 인덱싱으로 채팅 검색 성능 최적화\\n- 사용자 인증 미들웨어 구현\\n- 채팅방 CRUD API 설계"
+
+Point: Removed WebSocket bullet. Added a related MongoDB bullet to keep count at 5+.
+
+### Example 6: Replacement request
+
+User request: "PostgreSQL을 MySQL로 바꿔줘"
+
+Before:
+- tech_stack: [..., "PostgreSQL", ...]
+- description: "...PostgreSQL 기반 데이터 모델링..."
+
+After:
+- tech_stack: [..., "MySQL", ...]
+- description: "...MySQL 기반 데이터 모델링..."
+
+Point: Replaced PostgreSQL with MySQL in BOTH tech_stack AND description. All other content unchanged.
+
+### Example 7: Pasted content deletion with bullet compensation
+
+User request: "Socket.io 실시간 메시지 전송 구현 이거 빼줘"
+
+Before description (5 bullets):
+"- Express 기반 채팅 서버 구축\\n- Socket.io 실시간 메시지 전송 구현\\n- MongoDB 채팅 이력 저장\\n- 사용자 인증 미들웨어 구현\\n- 채팅방 CRUD API 설계"
+
+After description (5 bullets - deleted 1, split 1 existing bullet into 2):
+"- Express 기반 채팅 서버 구축\\n- Express 미들웨어 체인 기반 요청 검증 처리\\n- MongoDB 채팅 이력 저장\\n- 사용자 인증 미들웨어 구현\\n- 채팅방 CRUD API 설계"
+
+Point: User pasted exact bullet text. Matched and deleted it. Split "Express 기반 채팅 서버 구축" to compensate and maintain 5 bullets.
+
+## MESSAGE RULES
+
+Generate a `message` field explaining what was changed:
+- Typo fix: "네, JJWT는 JWT의 오타입니다. tech_stack과 설명에서 수정했습니다"
+- Addition: "Docker를 기술 스택과 설명에 추가했습니다"
+- Deletion: "WebSocket 관련 불릿을 삭제하고, 최소 불릿 수를 유지했습니다"
+- Question-form: Answer the question first, then describe the change
+- Keep it 1-2 sentences, specific about what changed
+
 ## OUTPUT FORMAT
 
 Return the COMPLETE resume with modifications applied.
@@ -128,7 +284,8 @@ Return the COMPLETE resume with modifications applied.
       "tech_stack": ["항목들"],
       "description": "- 불릿 1\\n- 불릿 2\\n- 불릿 3\\n- 불릿 4\\n- 불릿 5"
     }}
-  ]
+  ],
+  "message": "수정 내역을 간결하게 설명하는 1-2문장"
 }}
 ```"""
 
@@ -140,7 +297,14 @@ RESUME_EDIT_HUMAN = """Edit this resume based on the user request.
 ## Current Resume
 {resume_json}
 
+## BEFORE EDITING - identify these:
+1. Request type: typo fix / add / remove / replace / rewrite
+2. Target field: name / tech_stack / description / multiple
+3. Target project: first / second / all
+
 ## CHECKLIST - Verify before output:
+[ ] Understood the intent (questions like "오타 아니야?" = fix request)
+[ ] Found ALL occurrences of the target across ALL fields
 [ ] Modified ONLY what was requested
 [ ] Kept unchanged parts identical
 [ ] tech_stack: 1-20 items, no utilities
@@ -162,6 +326,8 @@ RESUME_EDIT_RETRY_HUMAN = """Fix the resume edit based on evaluation feedback.
 
 ## CHECKLIST:
 [ ] Fixed all feedback issues
+[ ] Understood the intent (questions like "오타 아니야?" = fix request)
+[ ] Found ALL occurrences across ALL fields
 [ ] Modified ONLY what was requested
 [ ] tech_stack: 1-20 items, no utilities
 [ ] description: starts with "- " + 5-8 bullets

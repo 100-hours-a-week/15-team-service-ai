@@ -45,7 +45,8 @@ SAMPLE_EDITED_OUTPUT = EditResumeOutput(
                 "- 모델 경량화 및 온디바이스 배포 최적화"
             ),
         )
-    ]
+    ],
+    message="온디바이스 관련 내용을 추가했습니다",
 )
 
 
@@ -89,9 +90,7 @@ class TestEditEndpointFailure:
         assert response.status_code == 200
         assert "jobId" in response.json()
 
-        payload = _build_callback_payload(
-            response.json()["jobId"], None, "LLM API 오류: HTTP 500"
-        )
+        payload = _build_callback_payload(response.json()["jobId"], None, "LLM API 오류: HTTP 500")
         assert payload["status"] == "failed"
         assert payload["error"]["code"] == ErrorCode.EDIT_FAILED
         assert "LLM API" in payload["error"]["message"]
@@ -198,7 +197,11 @@ class TestEditWorkflow:
 
         mock_llm = MagicMock()
         mock_llm.with_structured_output.return_value.ainvoke = AsyncMock(
-            return_value=SAMPLE_EDITED_OUTPUT
+            return_value={
+                "raw": MagicMock(content="test"),
+                "parsed": SAMPLE_EDITED_OUTPUT,
+                "parsing_error": None,
+            }
         )
 
         with patch("app.infra.llm.client.get_generator_llm", return_value=mock_llm):
@@ -228,7 +231,13 @@ class TestEditWorkflow:
         }
 
         mock_llm = MagicMock()
-        mock_llm.with_structured_output.return_value.ainvoke = AsyncMock(return_value=eval_result)
+        mock_llm.with_structured_output.return_value.ainvoke = AsyncMock(
+            return_value={
+                "raw": MagicMock(content="test"),
+                "parsed": eval_result,
+                "parsing_error": None,
+            }
+        )
 
         with patch("app.infra.llm.client.get_evaluator_llm", return_value=mock_llm):
             result = await evaluate_node(state)
@@ -256,7 +265,13 @@ class TestEditWorkflow:
         }
 
         mock_llm = MagicMock()
-        mock_llm.with_structured_output.return_value.ainvoke = AsyncMock(return_value=eval_result)
+        mock_llm.with_structured_output.return_value.ainvoke = AsyncMock(
+            return_value={
+                "raw": MagicMock(content="test"),
+                "parsed": eval_result,
+                "parsing_error": None,
+            }
+        )
 
         with patch("app.infra.llm.client.get_evaluator_llm", return_value=mock_llm):
             result = await evaluate_node(state)
