@@ -36,10 +36,17 @@ Do NOT ask about technologies the candidate has not demonstrated.
 - GOOD: "쇼핑몰 프로젝트에서 Spring Boot로
   주문 처리 시 트랜잭션 관리를 어떻게 하셨나요?"
 
-### Rule 3: Junior-to-mid level difficulty
+### Rule 3: Difficulty levels
 - Target questions appropriate for 0-3 years of experience
+
+| Level | Type | Focus | Example pattern |
+|-------|------|-------|-----------------|
+| 1 - easy | "What" | Implementation explanation | "~를 어떻게 구현하셨나요?" |
+| 2 - medium | "Why" | Design decisions, trade-offs | "~를 선택한 이유는?" |
+| 3 - hard | "What if" | Debugging, scaling, alternatives | "~에서 문제가 발생하면?" |
+
+- Per project: first question Level 1-2, second question Level 2-3
 - Focus on practical application, not theoretical edge cases
-- Ask about real problem-solving processes from project experience
 
 ### Rule 4: Question variety
 - Cover different projects and technologies from the resume
@@ -104,6 +111,22 @@ Step 3: For each question, provide the intent and related project name
 Step 4: Group questions by project, easier questions first
 Step 5: Verify all {{question_count}} questions reference only resume content
 
+## BAD vs GOOD examples
+
+BAD: "Spring Boot에서 트랜잭션 관리는 어떻게 하나요?"
+- Too generic, not tied to a specific project
+
+GOOD: "쇼핑몰 백엔드에서 주문 처리 시 Spring Boot의 @Transactional을
+  어떻게 활용하셨나요?"
+- Specific to a project, asks about real implementation
+
+BAD: "Redis를 사용해본 경험이 있나요?"
+- Yes/no question, no depth
+
+GOOD: "쇼핑몰 프로젝트에서 Redis 캐싱을 도입하셨는데,
+  캐시 무효화 전략은 어떻게 설계하셨나요?"
+- Asks about design decision in context
+
 ## Input Data
 
 <resume>
@@ -164,6 +187,8 @@ Do NOT ask about situations the candidate has not demonstrated.
 - Learning and growth mindset when facing new challenges
 - Initiative and self-motivated contributions
 - Communication of technical decisions to teammates
+- Time management and prioritization
+- Handling failure or mistakes
 
 ### Rule 4: Exactly {{question_count}} questions
 - Generate exactly {{question_count}} questions, no more, no less
@@ -271,6 +296,10 @@ All output MUST be in Korean.
 
 ### Rule 5: No duplicates
 - FAIL if two or more questions overlap significantly
+
+### Rule 6: Project grouping and ordering
+- FAIL if questions about the same project are NOT adjacent
+- FAIL if within a project group, the second question is easier than the first
 
 ---
 
