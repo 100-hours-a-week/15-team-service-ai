@@ -98,7 +98,6 @@ def _build_callback_payload(
                     for p in edited_resume.projects
                 ],
             ),
-            message=edited_resume.message,
         )
     else:
         payload = EditCallbackFailurePayload(
