@@ -2,6 +2,15 @@ from typing import Literal, TypedDict
 
 from pydantic import BaseModel
 
+
+class ClassifyOutput(BaseModel):
+    """Gemini 분류 노드 출력 - 요청 분류"""
+
+    intent_category: Literal["typo_fix", "add", "remove", "replace", "rewrite", "out_of_scope"]
+    confidence: Literal["high", "medium", "low"]
+    reason: str
+
+
 class EditPlanOutput(BaseModel):
     """Gemini 플래너 노드 출력 - 수정 계획"""
 
@@ -31,6 +40,8 @@ class EditState(TypedDict, total=False):
     resume_json: str
     message: str
     session_id: str | None
+    classification: ClassifyOutput
+    reject_reason: str | None
     edit_plan: EditPlanOutput
     edited_resume: EditResumeOutput
     evaluation: str
