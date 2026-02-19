@@ -9,6 +9,13 @@ from langfuse.langchain import CallbackHandler
 
 from app.core.config import settings
 from app.core.logging import get_logger
+from app.domain.interview.chat_schemas import ChatOutput
+from app.domain.interview.feedback_schemas import (
+    FeedbackEvaluationOutput,
+    FeedbackOutput,
+    OverallFeedbackEvaluationOutput,
+    OverallFeedbackOutput,
+)
 from app.domain.interview.schemas import InterviewEvaluationOutput, InterviewQuestionsOutput
 from app.domain.resume.prompts.builder import (
     build_evaluator_system_prompt,
@@ -91,16 +98,36 @@ async def _invoke_llm[T](
     config: dict,
     structured_output_method: str | None = None,
 ) -> T:
-    """구조화된 출력으로 LLM 호출"""
+    """구조화된 출력으로 LLM 호출 - 원본 출력 추적 포함"""
     kwargs = {}
     if structured_output_method:
         kwargs["method"] = structured_output_method
-    llm = llm.with_structured_output(output_type, **kwargs)
+    structured_llm = llm.with_structured_output(output_type, include_raw=True, **kwargs)
     messages = [
         SystemMessage(content=system_prompt),
         HumanMessage(content=human_content),
     ]
-    return await llm.ainvoke(messages, config=config)
+    response = await structured_llm.ainvoke(messages, config=config)
+
+    raw = response.get("raw")
+    parsed = response.get("parsed")
+    parsing_error = response.get("parsing_error")
+
+    if raw:
+        raw_text = raw.content if hasattr(raw, "content") else str(raw)
+        logger.debug("LLM 원본 출력", raw_text=raw_text[:500])
+
+    if parsed is not None:
+        return parsed
+
+    raw_text = raw.content if raw and hasattr(raw, "content") else "원본 없음"
+    logger.error(
+        "LLM 출력 파싱 실패",
+        raw_text=raw_text[:500],
+        output_type=output_type.__name__,
+        error=str(parsing_error),
+    )
+    raise ValueError(f"LLM 출력 파싱 실패: {parsing_error}")
 
 
 async def generate_resume(
@@ -378,4 +405,211 @@ async def evaluate_interview(
         item=result.violated_item,
         feedback=result.feedback,
     )
+    return result
+
+
+async def generate_feedback(
+    resume_json: str,
+    position: str,
+    interview_type: str,
+    question_text: str,
+    question_intent: str,
+    related_project: str | None,
+    answer: str,
+    feedback: str | None = None,
+    session_id: str | None = None,
+) -> FeedbackOutput:
+    """면접 피드백 생성 - vLLM 사용"""
+    logger.debug("피드백 생성 요청", interview_type=interview_type, position=position)
+
+    related_project_text = related_project or "없음"
+
+    if feedback:
+        human_content = get_prompt(
+            f"feedback-{interview_type}-retry-human",
+            position=position,
+            resume_json=resume_json,
+            question_text=question_text,
+            question_intent=question_intent,
+            related_project=related_project_text,
+            answer=answer,
+            feedback=feedback,
+        )
+    else:
+        human_content = get_prompt(
+            f"feedback-{interview_type}-human",
+            position=position,
+            resume_json=resume_json,
+            question_text=question_text,
+            question_intent=question_intent,
+            related_project=related_project_text,
+            answer=answer,
+        )
+
+    system_prompt = get_prompt(f"feedback-{interview_type}-system")
+    config = _build_langfuse_config(session_id, ["feedback", interview_type, position])
+
+    result = await _invoke_llm(
+        llm=get_generator_llm(),
+        output_type=FeedbackOutput,
+        system_prompt=system_prompt,
+        human_content=human_content,
+        config=config,
+    )
+
+    logger.debug("피드백 생성 완료", score=result.score)
+    return result
+
+
+async def evaluate_feedback(
+    feedback_json: str,
+    question_text: str,
+    answer: str,
+    interview_type: str,
+    session_id: str | None = None,
+) -> FeedbackEvaluationOutput:
+    """면접 피드백 평가 - Gemini 사용"""
+    logger.debug("피드백 평가 요청", interview_type=interview_type)
+
+    human_content = get_prompt(
+        "feedback-evaluator-human",
+        interview_type=interview_type,
+        question_text=question_text,
+        answer=answer,
+        feedback_json=feedback_json,
+    )
+
+    system_prompt = get_prompt("feedback-evaluator-system")
+    config = _build_langfuse_config(session_id, ["feedback", "evaluate", interview_type])
+
+    result = await _invoke_llm(
+        llm=get_evaluator_llm(),
+        output_type=FeedbackEvaluationOutput,
+        system_prompt=system_prompt,
+        human_content=human_content,
+        config=config,
+        structured_output_method="json_mode",
+    )
+
+    logger.debug("피드백 평가 완료", result=result.result)
+    return result
+
+
+async def generate_overall_feedback(
+    resume_json: str,
+    position: str,
+    interview_type: str,
+    qa_pairs_json: str,
+    feedback: str | None = None,
+    session_id: str | None = None,
+) -> OverallFeedbackOutput:
+    """종합 면접 피드백 생성 - vLLM 사용"""
+    logger.debug("종합 피드백 생성 요청", interview_type=interview_type, position=position)
+
+    if feedback:
+        human_content = get_prompt(
+            f"feedback-overall-{interview_type}-retry-human",
+            position=position,
+            resume_json=resume_json,
+            qa_pairs_json=qa_pairs_json,
+            feedback=feedback,
+        )
+    else:
+        human_content = get_prompt(
+            f"feedback-overall-{interview_type}-human",
+            position=position,
+            resume_json=resume_json,
+            qa_pairs_json=qa_pairs_json,
+        )
+
+    system_prompt = get_prompt(f"feedback-overall-{interview_type}-system")
+    config = _build_langfuse_config(session_id, ["feedback", "overall", interview_type, position])
+
+    result = await _invoke_llm(
+        llm=get_generator_llm(),
+        output_type=OverallFeedbackOutput,
+        system_prompt=system_prompt,
+        human_content=human_content,
+        config=config,
+    )
+
+    logger.debug("종합 피드백 생성 완료", overall_score=result.overall_score)
+    return result
+
+
+async def evaluate_overall_feedback(
+    overall_feedback_json: str,
+    qa_pairs_json: str,
+    interview_type: str,
+    session_id: str | None = None,
+) -> OverallFeedbackEvaluationOutput:
+    """종합 면접 피드백 평가 - Gemini 사용"""
+    logger.debug("종합 피드백 평가 요청", interview_type=interview_type)
+
+    human_content = get_prompt(
+        "feedback-overall-evaluator-human",
+        interview_type=interview_type,
+        qa_pairs_json=qa_pairs_json,
+        overall_feedback_json=overall_feedback_json,
+    )
+
+    system_prompt = get_prompt("feedback-overall-evaluator-system")
+    config = _build_langfuse_config(session_id, ["feedback", "overall", "evaluate", interview_type])
+
+    result = await _invoke_llm(
+        llm=get_evaluator_llm(),
+        output_type=OverallFeedbackEvaluationOutput,
+        system_prompt=system_prompt,
+        human_content=human_content,
+        config=config,
+        structured_output_method="json_mode",
+    )
+
+    logger.debug("종합 피드백 평가 완료", result=result.result)
+    return result
+
+
+async def generate_chat_response(
+    resume_json: str,
+    position: str,
+    interview_type: str,
+    question_text: str,
+    question_intent: str,
+    related_project: str | None,
+    answer: str,
+    session_id: str | None = None,
+) -> ChatOutput:
+    """면접 채팅 응답 생성 - vLLM 사용"""
+    logger.debug(
+        "채팅 응답 생성 요청",
+        interview_type=interview_type,
+        position=position,
+    )
+
+    related_project_text = related_project or "없음"
+
+    human_content = get_prompt(
+        f"chat-{interview_type}-human",
+        question_text=question_text,
+        question_intent=question_intent,
+        related_project=related_project_text,
+        answer=answer,
+    )
+
+    system_prompt = get_prompt(
+        f"chat-{interview_type}-system",
+        position=position,
+        resume_json=resume_json,
+    )
+    config = _build_langfuse_config(session_id, ["chat", interview_type, position])
+
+    result = await _invoke_llm(
+        llm=get_generator_llm(),
+        output_type=ChatOutput,
+        system_prompt=system_prompt,
+        human_content=human_content,
+        config=config,
+    )
+
+    logger.debug("채팅 응답 생성 완료")
     return result
