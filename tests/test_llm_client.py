@@ -201,7 +201,11 @@ class TestGenerateResume:
 
         mock_llm = MagicMock()
         mock_llm.with_structured_output.return_value.ainvoke = AsyncMock(
-            return_value=expected_result
+            return_value={
+                "raw": MagicMock(content="test"),
+                "parsed": expected_result,
+                "parsing_error": None,
+            }
         )
 
         with patch("app.infra.llm.client.get_generator_llm", return_value=mock_llm):
@@ -231,7 +235,11 @@ class TestGenerateResume:
 
         mock_llm = MagicMock()
         mock_llm.with_structured_output.return_value.ainvoke = AsyncMock(
-            return_value=expected_result
+            return_value={
+                "raw": MagicMock(content="test"),
+                "parsed": expected_result,
+                "parsing_error": None,
+            }
         )
 
         with patch("app.infra.llm.client.get_generator_llm", return_value=mock_llm):
@@ -269,7 +277,11 @@ class TestGenerateResume:
 
         mock_llm = MagicMock()
         mock_llm.with_structured_output.return_value.ainvoke = AsyncMock(
-            return_value=expected_result
+            return_value={
+                "raw": MagicMock(content="test"),
+                "parsed": expected_result,
+                "parsing_error": None,
+            }
         )
 
         with patch("app.infra.llm.client.get_generator_llm", return_value=mock_llm):
@@ -299,7 +311,11 @@ class TestGenerateResume:
 
         mock_llm = MagicMock()
         mock_llm.with_structured_output.return_value.ainvoke = AsyncMock(
-            return_value=expected_result
+            return_value={
+                "raw": MagicMock(content="test"),
+                "parsed": expected_result,
+                "parsing_error": None,
+            }
         )
 
         with patch("app.infra.llm.client.get_generator_llm", return_value=mock_llm):
@@ -342,7 +358,11 @@ class TestEvaluateResume:
 
         mock_llm = MagicMock()
         mock_llm.with_structured_output.return_value.ainvoke = AsyncMock(
-            return_value=expected_result
+            return_value={
+                "raw": MagicMock(content="test"),
+                "parsed": expected_result,
+                "parsing_error": None,
+            }
         )
 
         with patch("app.infra.llm.client.get_evaluator_llm", return_value=mock_llm):
@@ -367,7 +387,11 @@ class TestEvaluateResume:
 
         mock_llm = MagicMock()
         mock_llm.with_structured_output.return_value.ainvoke = AsyncMock(
-            return_value=expected_result
+            return_value={
+                "raw": MagicMock(content="test"),
+                "parsed": expected_result,
+                "parsing_error": None,
+            }
         )
 
         with patch("app.infra.llm.client.get_evaluator_llm", return_value=mock_llm):
@@ -393,7 +417,11 @@ class TestEvaluateResume:
 
         mock_llm = MagicMock()
         mock_llm.with_structured_output.return_value.ainvoke = AsyncMock(
-            return_value=expected_result
+            return_value={
+                "raw": MagicMock(content="test"),
+                "parsed": expected_result,
+                "parsing_error": None,
+            }
         )
 
         with patch("app.infra.llm.client.get_evaluator_llm", return_value=mock_llm):

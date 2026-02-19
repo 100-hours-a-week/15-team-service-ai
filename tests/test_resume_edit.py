@@ -45,7 +45,7 @@ SAMPLE_EDITED_OUTPUT = EditResumeOutput(
                 "- 모델 경량화 및 온디바이스 배포 최적화"
             ),
         )
-    ]
+    ],
 )
 
 
@@ -89,9 +89,7 @@ class TestEditEndpointFailure:
         assert response.status_code == 200
         assert "jobId" in response.json()
 
-        payload = _build_callback_payload(
-            response.json()["jobId"], None, "LLM API 오류: HTTP 500"
-        )
+        payload = _build_callback_payload(response.json()["jobId"], None, "LLM API 오류: HTTP 500")
         assert payload["status"] == "failed"
         assert payload["error"]["code"] == ErrorCode.EDIT_FAILED
         assert "LLM API" in payload["error"]["message"]
@@ -198,7 +196,11 @@ class TestEditWorkflow:
 
         mock_llm = MagicMock()
         mock_llm.with_structured_output.return_value.ainvoke = AsyncMock(
-            return_value=SAMPLE_EDITED_OUTPUT
+            return_value={
+                "raw": MagicMock(content="test"),
+                "parsed": SAMPLE_EDITED_OUTPUT,
+                "parsing_error": None,
+            }
         )
 
         with patch("app.infra.llm.client.get_generator_llm", return_value=mock_llm):
@@ -228,7 +230,13 @@ class TestEditWorkflow:
         }
 
         mock_llm = MagicMock()
-        mock_llm.with_structured_output.return_value.ainvoke = AsyncMock(return_value=eval_result)
+        mock_llm.with_structured_output.return_value.ainvoke = AsyncMock(
+            return_value={
+                "raw": MagicMock(content="test"),
+                "parsed": eval_result,
+                "parsing_error": None,
+            }
+        )
 
         with patch("app.infra.llm.client.get_evaluator_llm", return_value=mock_llm):
             result = await evaluate_node(state)
@@ -256,13 +264,88 @@ class TestEditWorkflow:
         }
 
         mock_llm = MagicMock()
-        mock_llm.with_structured_output.return_value.ainvoke = AsyncMock(return_value=eval_result)
+        mock_llm.with_structured_output.return_value.ainvoke = AsyncMock(
+            return_value={
+                "raw": MagicMock(content="test"),
+                "parsed": eval_result,
+                "parsing_error": None,
+            }
+        )
 
         with patch("app.infra.llm.client.get_evaluator_llm", return_value=mock_llm):
             result = await evaluate_node(state)
 
         assert result["evaluation"] == "fail"
         assert result["evaluation_feedback"] == "금지 어미 사용"
+
+    @pytest.mark.asyncio
+    async def test_plan_node_success(self):
+        """plan_node 정상 동작 - EditPlanOutput이 state에 저장됨"""
+        from app.domain.resume.edit_workflow import plan_node
+        from app.domain.resume.schemas.edit import EditPlanOutput
+
+        state = {
+            "resume_json": '{"projects": []}',
+            "message": "온디바이스 내용 추가해줘",
+            "session_id": None,
+            "retry_count": 0,
+        }
+
+        plan_result = EditPlanOutput(
+            edit_type="add",
+            target_summary="첫 번째 프로젝트에 온디바이스 내용 추가",
+            detailed_instructions="projects[0]의 description에 온디바이스 관련 불릿을 추가하시오.",
+        )
+
+        mock_llm = MagicMock()
+        mock_llm.with_structured_output.return_value.ainvoke = AsyncMock(
+            return_value={
+                "raw": MagicMock(content="test"),
+                "parsed": plan_result,
+                "parsing_error": None,
+            }
+        )
+
+        with (
+            patch("app.infra.llm.client.get_evaluator_llm", return_value=mock_llm),
+            patch(
+                "app.infra.llm.client.get_prompt",
+                side_effect=lambda name, **kw: f"mock-{name}",
+            ),
+        ):
+            result = await plan_node(state)
+
+        assert "error_code" not in result or not result.get("error_code")
+        assert result["edit_plan"] == plan_result
+        assert result["edit_plan"].edit_type == "add"
+
+    @pytest.mark.asyncio
+    async def test_plan_node_error(self):
+        """plan_node LLM 실패 시 error_code가 state에 담김"""
+        from app.domain.resume.edit_workflow import plan_node
+
+        state = {
+            "resume_json": '{"projects": []}',
+            "message": "수정 요청",
+            "session_id": None,
+            "retry_count": 0,
+        }
+
+        mock_llm = MagicMock()
+        mock_llm.with_structured_output.return_value.ainvoke = AsyncMock(
+            side_effect=ValueError("LLM 파싱 실패")
+        )
+
+        with (
+            patch("app.infra.llm.client.get_evaluator_llm", return_value=mock_llm),
+            patch(
+                "app.infra.llm.client.get_prompt",
+                side_effect=lambda name, **kw: f"mock-{name}",
+            ),
+        ):
+            result = await plan_node(state)
+
+        assert result.get("error_code") is not None
 
 
 class TestEditAgent:

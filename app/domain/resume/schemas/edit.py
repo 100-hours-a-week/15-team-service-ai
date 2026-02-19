@@ -1,6 +1,13 @@
-from typing import TypedDict
+from typing import Literal, TypedDict
 
 from pydantic import BaseModel
+
+class EditPlanOutput(BaseModel):
+    """Gemini 플래너 노드 출력 - 수정 계획"""
+
+    edit_type: Literal["typo_fix", "add", "remove", "replace", "rewrite"]
+    target_summary: str
+    detailed_instructions: str
 
 
 class EditProjectOutput(BaseModel):
@@ -24,6 +31,7 @@ class EditState(TypedDict, total=False):
     resume_json: str
     message: str
     session_id: str | None
+    edit_plan: EditPlanOutput
     edited_resume: EditResumeOutput
     evaluation: str
     evaluation_feedback: str
