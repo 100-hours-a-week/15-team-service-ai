@@ -263,15 +263,6 @@ After description (5 bullets - deleted 1, split 1 existing bullet into 2):
 
 Point: User pasted exact bullet text. Matched and deleted it. Split "Express 기반 채팅 서버 구축" to compensate and maintain 5 bullets.
 
-## MESSAGE RULES
-
-Generate a `message` field explaining what was changed:
-- Typo fix: "네, JJWT는 JWT의 오타입니다. tech_stack과 설명에서 수정했습니다"
-- Addition: "Docker를 기술 스택과 설명에 추가했습니다"
-- Deletion: "WebSocket 관련 불릿을 삭제하고, 최소 불릿 수를 유지했습니다"
-- Question-form: Answer the question first, then describe the change
-- Keep it 1-2 sentences, specific about what changed
-
 ## OUTPUT FORMAT
 
 Return the COMPLETE resume with modifications applied.
@@ -284,8 +275,7 @@ Return the COMPLETE resume with modifications applied.
       "tech_stack": ["항목들"],
       "description": "- 불릿 1\\n- 불릿 2\\n- 불릿 3\\n- 불릿 4\\n- 불릿 5"
     }}
-  ],
-  "message": "수정 내역을 간결하게 설명하는 1-2문장"
+  ]
 }}
 ```"""
 
@@ -405,6 +395,62 @@ Result: {{"result": "fail", "violated_rule": 4, "violated_item": "~했습니다"
 ```
 
 Be strict. Any violation = fail."""
+
+RESUME_EDIT_PLAN_SYSTEM = """You are a resume edit plan analyzer.
+Your job is to analyze the user's edit request and produce a structured plan
+that a smaller language model can follow precisely.
+
+Output a JSON object with these exact fields:
+
+- edit_type: one of "typo_fix", "add", "remove", "replace", "rewrite"
+- target_summary: a short Korean sentence describing what will change and in which project
+- detailed_instructions: step-by-step Korean instructions for the smaller model to follow exactly
+
+## Rules for detailed_instructions
+
+1. Identify the EXACT field to change: tech_stack / description / name / repo_url
+2. If changing description, specify: which bullet to add/remove/replace
+3. Specify which project by name or index (e.g., "첫 번째 프로젝트", "Health_advice_app")
+4. State explicitly what must NOT be changed
+5. Include the constraint: tech_stack 1-20 items, description 5-8 bullets
+
+## edit_type mapping
+
+| User request pattern | edit_type |
+|---|---|
+| 오타 수정, 잘못된 이름 | typo_fix |
+| 추가, 없어, 빠졌어 | add |
+| 삭제, 빼줘, 제거 | remove |
+| X를 Y로 바꿔줘 | replace |
+| 더 구체적으로, 새로 써줘 | rewrite |
+
+## Output format
+
+```json
+{
+  "edit_type": "add",
+  "target_summary": "첫 번째 프로젝트에 Redis 캐싱 내용 추가",
+  "detailed_instructions": "projects[0] (Health_advice_app)의 tech_stack에 Redis를 추가하고, description에 'Redis 기반 조회 캐싱 도입' 불릿 하나를 추가하시오. 다른 모든 필드는 수정 금지. description은 5-8 불릿 유지."
+}
+```
+"""
+
+RESUME_EDIT_PLAN_HUMAN = """Analyze this resume edit request and produce a structured plan.
+
+## User Request
+{message}
+
+## Current Resume
+{resume_json}
+
+Steps:
+1. Understand the user's intent (note: questions like "오타 아니야?" are fix requests)
+2. Identify which project(s) are affected
+3. Identify which field(s): tech_stack / description / name / repo_url
+4. Determine the edit_type
+5. Write detailed_instructions that leave no ambiguity for the executor model
+
+Return JSON only."""
 
 RESUME_EDIT_EVALUATOR_HUMAN = """Evaluate this edited resume.
 

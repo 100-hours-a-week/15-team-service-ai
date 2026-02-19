@@ -31,6 +31,7 @@ from app.domain.resume.schemas import (
     ResumeData,
     UserStats,
 )
+from app.domain.resume.schemas.edit import EditPlanOutput
 from app.infra.langfuse.prompt_manager import get_prompt
 
 logger = get_logger(__name__)
@@ -246,6 +247,42 @@ async def evaluate_resume(
     return result
 
 
+async def plan_edit(
+    resume_json: str,
+    message: str,
+    session_id: str | None = None,
+) -> EditPlanOutput:
+    """이력서 수정 계획 생성 - Gemini 사용
+
+    사용자 요청을 분석하여 vLLM에게 전달할 구체적인 수정 지시를 생성한다.
+    """
+    logger.debug("이력서 수정 계획 요청")
+
+    system_prompt = get_prompt("resume-edit-plan-system")
+    human_content = get_prompt(
+        "resume-edit-plan-human",
+        resume_json=resume_json,
+        message=message,
+    )
+    config = _build_langfuse_config(session_id, ["resume", "edit-plan"])
+
+    result = await _invoke_llm(
+        llm=get_evaluator_llm(),
+        output_type=EditPlanOutput,
+        system_prompt=system_prompt,
+        human_content=human_content,
+        config=config,
+        structured_output_method="json_mode",
+    )
+
+    logger.debug(
+        "수정 계획 생성 완료",
+        edit_type=result.edit_type,
+        target=result.target_summary,
+    )
+    return result
+
+
 async def edit_resume[T](
     resume_json: str,
     message: str,
@@ -279,6 +316,7 @@ async def edit_resume[T](
         system_prompt=system_prompt,
         human_content=human_content,
         config=config,
+        structured_output_method="json_mode",
     )
 
     logger.debug("이력서 수정 완료")
@@ -360,6 +398,7 @@ async def generate_interview(
         system_prompt=system_prompt,
         human_content=human_content,
         config=config,
+        structured_output_method="json_mode",
     )
 
     logger.debug("면접 질문 생성 완료", questions=len(result.questions))
@@ -455,6 +494,7 @@ async def generate_feedback(
         system_prompt=system_prompt,
         human_content=human_content,
         config=config,
+        structured_output_method="json_mode",
     )
 
     logger.debug("피드백 생성 완료", score=result.score)
@@ -531,6 +571,7 @@ async def generate_overall_feedback(
         system_prompt=system_prompt,
         human_content=human_content,
         config=config,
+        structured_output_method="json_mode",
     )
 
     logger.debug("종합 피드백 생성 완료", overall_score=result.overall_score)
@@ -609,6 +650,7 @@ async def generate_chat_response(
         system_prompt=system_prompt,
         human_content=human_content,
         config=config,
+        structured_output_method="json_mode",
     )
 
     logger.debug("채팅 응답 생성 완료")
