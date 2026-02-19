@@ -56,8 +56,8 @@ Do NOT ask about technologies the candidate has not demonstrated.
 ### Rule 5: Exactly {{question_count}} questions
 - Generate exactly {{question_count}} questions, no more, no less
 
-### Rule 6: Project coverage and ordering
-- Generate exactly 2 questions per project in the resume
+### Rule 6: Question grouping
+- Generate 2 questions per project
 - Group questions by project - questions about the same project must be adjacent
 - Within each project, order from easier to harder
 - Order project groups from easier to harder
@@ -105,8 +105,7 @@ INTERVIEW_TECHNICAL_HUMAN = """Generate technical interview questions for {{posi
 
 ## STEPS
 Step 1: Analyze the resume to identify key technologies and projects
-Step 2: Generate 2 questions per project, {{question_count}} total,
-  targeting specific technical depth
+Step 2: Generate 2 questions per project, {{question_count}} total
 Step 3: For each question, provide the intent and related project name
 Step 4: Group questions by project, easier questions first
 Step 5: Verify all {{question_count}} questions reference only resume content
@@ -194,8 +193,8 @@ Do NOT ask about situations the candidate has not demonstrated.
 - Generate exactly {{question_count}} questions, no more, no less
 - Cover the dimensions from Rule 3 as evenly as possible
 
-### Rule 5: Project coverage and ordering
-- Generate exactly 2 questions per project in the resume
+### Rule 5: Question grouping
+- Generate 2 questions per project
 - Group questions by project - questions about the same project must be adjacent
 - Within each project, order from easier to harder
 - Order project groups from easier to harder
@@ -226,7 +225,7 @@ INTERVIEW_BEHAVIORAL_HUMAN = """Generate behavioral interview questions for {{po
 
 ## STEPS
 Step A: Identify key projects and team experiences from the resume
-Step B: For each project, generate 2 questions covering different dimensions:
+Step B: Generate 2 questions per project covering different dimensions:
   - Collaboration and teamwork
   - Conflict resolution
   - Growth mindset and learning

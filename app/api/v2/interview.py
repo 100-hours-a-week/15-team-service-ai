@@ -35,12 +35,12 @@ async def generate_interview(
         resume_id=body.resume_id,
         interview_type=body.type,
         position=body.position,
-        question_count=len(body.content.projects) * 2,
+        question_count=min(len(body.content.projects) * 2, 10),
         session_id=session_id,
     )
 
     resume_json = build_resume_json(body.content)
-    question_count = len(body.content.projects) * 2
+    question_count = min(len(body.content.projects) * 2, 10)
 
     questions, error_message = await run_interview_agent(
         resume_json=resume_json,
