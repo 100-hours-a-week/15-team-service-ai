@@ -137,7 +137,9 @@ def mock_langfuse_get_prompt():
     CI 환경에 LANGFUSE_PUBLIC_KEY가 없어도 테스트가 실패하지 않도록
     get_prompt를 import한 모든 모듈 경로에서 mock 적용
     """
-    fake = lambda name, **kw: f"mock-prompt-{name}"
+
+    def fake(name, **kw):
+        return f"mock-prompt-{name}"
 
     with (
         patch("app.infra.llm.client.get_prompt", side_effect=fake),
