@@ -75,13 +75,17 @@ All output MUST be in Korean.
 
 ### description
 - 5-8 bullets, format: "- [내용]"
-- Allowed endings: ~구현, ~구축, ~설계, ~처리, ~연동, ~도입, ~최적화, ~개선, ~적용, ~개발, ~분석, ~관리, ~배포, ~자동화, ~통합
+- Allowed endings: ~구현, ~구축, ~설계, ~처리, ~연동, ~도입, ~최적화, ~개선, ~적용, ~개발, ~분석, ~관리, ~배포, ~자동화, ~통합, ~활용, ~해결, ~수행, ~제공, ~변경
 - Forbidden endings: ~했습니다, ~하였습니다, ~입니다, ~했음, ~함
 
-### Minimum bullets after deletion
-When deletion drops bullets below 5:
+### Minimum bullets enforcement
+If the input description has FEWER than 5 bullets (regardless of edit type):
+- You MUST bring the total up to 5 bullets as part of this edit
 - Split one existing bullet into two more specific bullets, OR
 - Add one new bullet describing a closely related technical detail
+
+When deletion drops bullets below 5:
+- Same rule applies - always perform the deletion AND compensate
 - NEVER refuse the deletion - always perform it AND compensate
 
 ## OUTPUT FORMAT
@@ -165,7 +169,7 @@ FAIL if contains ANY of these:
 ### Rule 4: Forbidden endings
 FAIL if bullet ends with: ~했습니다, ~하였습니다, ~입니다, ~했음, ~함
 
-ALLOWED only: ~구현, ~구축, ~설계, ~처리, ~연동, ~도입, ~최적화, ~개선, ~적용, ~개발, ~분석, ~관리, ~배포, ~자동화, ~통합
+ALLOWED only: ~구현, ~구축, ~설계, ~처리, ~연동, ~도입, ~최적화, ~개선, ~적용, ~개발, ~분석, ~관리, ~배포, ~자동화, ~통합, ~활용, ~해결, ~수행, ~제공, ~변경
 
 ### Rule 5: Trivial content
 FAIL if contains: CSS 수정, 오타 수정, README 수정, 패키지 설치

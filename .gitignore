@@ -223,3 +223,4 @@ CLAUDE.md
 scripts/
 .langgraph_api
 .DS_Store
+checkpoints.db

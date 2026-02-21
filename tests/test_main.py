@@ -1,4 +1,3 @@
-import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.main import app
@@ -7,7 +6,6 @@ from app.main import app
 class TestHealthCheck:
     """헬스체크 엔드포인트 테스트"""
 
-    @pytest.mark.asyncio
     async def test_health_check_returns_up(self):
         """헬스체크 엔드포인트가 정상 응답을 반환"""
         transport = ASGITransport(app=app)

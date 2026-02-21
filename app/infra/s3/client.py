@@ -6,13 +6,13 @@ from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
+_session = aioboto3.Session()
+
 
 async def download_file(s3_key: str) -> bytes:
     """S3에서 파일 다운로드"""
-    session = aioboto3.Session()
-
     try:
-        async with session.client(
+        async with _session.client(
             "s3",
             aws_access_key_id=settings.aws_access_key_id,
             aws_secret_access_key=settings.aws_secret_access_key,

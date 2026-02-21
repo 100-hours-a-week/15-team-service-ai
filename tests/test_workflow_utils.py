@@ -1,7 +1,6 @@
 from unittest.mock import AsyncMock
 
 import httpx
-import pytest
 
 from app.domain.resume.workflow_utils import (
     evaluate_with_fallback,
@@ -98,7 +97,6 @@ class TestMakeShouldRetry:
 class TestEvaluateWithFallback:
     """evaluate_with_fallback 함수 테스트"""
 
-    @pytest.mark.asyncio
     async def test_success(self):
         """평가 성공 시 결과 반환"""
         mock_result = AsyncMock()
@@ -113,7 +111,6 @@ class TestEvaluateWithFallback:
         assert result["evaluation"] == "pass"
         assert result["evaluation_feedback"] == "좋은 이력서입니다"
 
-    @pytest.mark.asyncio
     async def test_fail_result(self):
         """평가 실패 결과도 정상 반환"""
         mock_result = AsyncMock()
@@ -128,7 +125,6 @@ class TestEvaluateWithFallback:
         assert result["evaluation"] == "fail"
         assert result["evaluation_feedback"] == "기술 스택이 부족합니다"
 
-    @pytest.mark.asyncio
     async def test_timeout_returns_pass(self):
         """타임아웃 시 pass로 폴백"""
         evaluate_fn = AsyncMock(side_effect=httpx.TimeoutException("timeout"))
@@ -139,7 +135,6 @@ class TestEvaluateWithFallback:
         assert result["evaluation"] == "pass"
         assert result["evaluation_feedback"] == ""
 
-    @pytest.mark.asyncio
     async def test_connect_error_returns_pass(self):
         """연결 오류 시 pass로 폴백"""
         evaluate_fn = AsyncMock(side_effect=httpx.ConnectError("connection failed"))
@@ -150,7 +145,6 @@ class TestEvaluateWithFallback:
         assert result["evaluation"] == "pass"
         assert result["evaluation_feedback"] == ""
 
-    @pytest.mark.asyncio
     async def test_http_status_error_returns_pass(self):
         """HTTP 오류 시 pass로 폴백"""
         mock_response = httpx.Response(500, request=httpx.Request("POST", "test"))
@@ -168,7 +162,6 @@ class TestEvaluateWithFallback:
         assert result["evaluation"] == "pass"
         assert result["evaluation_feedback"] == ""
 
-    @pytest.mark.asyncio
     async def test_value_error_returns_pass(self):
         """파싱 오류 시 pass로 폴백"""
         evaluate_fn = AsyncMock(side_effect=ValueError("parse error"))
@@ -179,7 +172,6 @@ class TestEvaluateWithFallback:
         assert result["evaluation"] == "pass"
         assert result["evaluation_feedback"] == ""
 
-    @pytest.mark.asyncio
     async def test_preserves_existing_state(self):
         """기존 상태가 유지되는지 확인"""
         mock_result = AsyncMock()
