@@ -2,6 +2,7 @@ import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from langgraph.checkpoint.memory import MemorySaver
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -25,6 +26,8 @@ logger = get_logger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """앱 시작/종료 이벤트 관리"""
+    app.state.checkpointer = MemorySaver()
+    logger.info("MemorySaver 체크포인터 초기화 완료")
     yield
     tasks = get_v1_tasks() | get_v2_edit_tasks()
     if tasks:

@@ -16,6 +16,9 @@ from app.domain.interview.store import interview_context_store
 router = APIRouter(prefix="/interview", tags=["v2"])
 logger = get_logger(__name__)
 
+MAX_FOLLOW_UP_TURNS = 3
+SKIP_PATTERNS = ["모르겠", "잘 모르", "패스", "모릅니다", "생각이 안", "기억이 안"]
+
 
 @router.post(
     "/chat",
@@ -29,17 +32,20 @@ async def chat_interview(
 ) -> ChatResponse:
     """면접 질문에 대한 실시간 채팅 응답
 
+    같은 aiSessionId + questionId로 반복 호출하면 이전 대화를 이어갑니다
     분당 20회 요청 제한이 적용됩니다
     """
-    session_id = str(uuid.uuid4())
+    trace_id = str(uuid.uuid4())
+    thread_id = f"chat-{body.ai_session_id}-{body.question_id}"
     logger.info(
         "채팅 요청",
-        resume_id=body.resume_id,
+        ai_session_id=body.ai_session_id,
         question_id=body.question_id,
-        session_id=session_id,
+        trace_id=trace_id,
+        thread_id=thread_id,
     )
 
-    contexts = interview_context_store.get(body.resume_id)
+    contexts = interview_context_store.get(body.ai_session_id)
     if not contexts:
         return ChatResponse(
             status="failed",
@@ -59,7 +65,7 @@ async def chat_interview(
             ),
         )
 
-    meta = interview_context_store.get_session_meta(body.resume_id)
+    meta = interview_context_store.get_session_meta(body.ai_session_id)
     if not meta:
         return ChatResponse(
             status="failed",
@@ -69,7 +75,9 @@ async def chat_interview(
             ),
         )
 
-    chat_result, error_message = await run_chat_agent(
+    checkpointer = getattr(request.app.state, "checkpointer", None)
+
+    chat_result, error_message, turn_count = await run_chat_agent(
         resume_json=meta.resume_json,
         position=meta.position,
         interview_type=meta.interview_type,
@@ -77,7 +85,9 @@ async def chat_interview(
         question_intent=question_ctx.intent,
         related_project=question_ctx.related_project,
         answer=body.answer,
-        session_id=session_id,
+        session_id=trace_id,
+        thread_id=thread_id,
+        checkpointer=checkpointer,
     )
 
     if error_message or not chat_result:
@@ -90,9 +100,21 @@ async def chat_interview(
             ),
         )
 
-    logger.info("채팅 응답 성공")
+    follow_up = chat_result.follow_up_question
+
+    is_skip_answer = any(p in body.answer for p in SKIP_PATTERNS)
+    if is_skip_answer:
+        follow_up = None
+        logger.info("모르겠다 답변 감지 - 다음 질문으로 이동")
+
+    if turn_count >= MAX_FOLLOW_UP_TURNS:
+        follow_up = None
+        logger.info("최대 꼬리질문 횟수 도달 - 다음 질문으로 이동", max_turns=MAX_FOLLOW_UP_TURNS)
+
+    logger.info("채팅 응답 성공", turn_count=turn_count)
     return ChatResponse(
         status="success",
         message=chat_result.message,
-        follow_up_question=chat_result.follow_up_question,
+        follow_up_question=follow_up,
+        turn_number=turn_count,
     )

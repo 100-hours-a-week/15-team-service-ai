@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -6,7 +8,7 @@ class ChatRequest(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True)
 
-    resume_id: int = Field(alias="resumeId", gt=0)
+    ai_session_id: str = Field(alias="aiSessionId", min_length=1)
     question_id: str = Field(alias="questionId", min_length=1)
     answer: str = Field(min_length=1, max_length=5000)
 
@@ -23,7 +25,8 @@ class ChatResponse(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True, by_alias=True)
 
-    status: str
+    status: Literal["success", "failed"]
     message: str | None = None
     follow_up_question: str | None = Field(default=None, alias="followUpQuestion")
+    turn_number: int | None = Field(default=None, alias="turnNumber")
     error: ChatErrorResponse | None = None
