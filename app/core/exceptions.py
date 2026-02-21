@@ -1,9 +1,11 @@
 from enum import Enum
 
 from fastapi import Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.core.config import settings
+from app.core.context import get_request_id
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -135,6 +137,7 @@ def register_exception_handlers(app):
         content = {
             "error_code": exc.error_code,
             "message": exc.message,
+            "request_id": get_request_id(),
         }
         if exc.detail and not settings.is_production:
             content["detail"] = exc.detail
@@ -144,6 +147,23 @@ def register_exception_handlers(app):
             content=content,
         )
 
+    @app.exception_handler(RequestValidationError)
+    async def validation_exception_handler(request: Request, exc: RequestValidationError):
+        errors = []
+        for error in exc.errors():
+            field = " -> ".join(str(loc) for loc in error["loc"])
+            errors.append({"field": field, "message": error["msg"]})
+
+        content = {
+            "error_code": ErrorCode.INVALID_INPUT,
+            "message": "요청 데이터가 올바르지 않습니다",
+            "request_id": get_request_id(),
+        }
+        if not settings.is_production:
+            content["errors"] = errors
+
+        return JSONResponse(status_code=422, content=content)
+
     @app.exception_handler(Exception)
     async def general_exception_handler(request: Request, exc: Exception):
         logger.error("Unhandled exception", error=str(exc), exc_info=True)
@@ -152,5 +172,6 @@ def register_exception_handlers(app):
             content={
                 "error_code": ErrorCode.INTERNAL_ERROR,
                 "message": "Internal server error",
+                "request_id": get_request_id(),
             },
         )
