@@ -34,7 +34,7 @@ class InterviewEndRequest(BaseModel):
     interview_type: Literal["TECHNICAL", "BEHAVIORAL"] = Field(alias="interviewType")
     position: str = Field(min_length=1, max_length=100)
     company: str = Field(min_length=1, max_length=100)
-    messages: list[InterviewEndMessage] = Field(min_length=1)
+    messages: list[InterviewEndMessage] = Field(min_length=1, max_length=20)
 
 
 class InterviewEndFeedbackItem(BaseModel):

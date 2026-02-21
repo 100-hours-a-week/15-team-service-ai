@@ -62,5 +62,6 @@ class InterviewResponse(BaseModel):
     model_config = ConfigDict(populate_by_name=True, by_alias=True)
 
     status: Literal["success", "failed"]
+    ai_session_id: str | None = Field(default=None, alias="aiSessionId")
     questions: list[InterviewQuestionResponse] | None = None
     error: InterviewErrorResponse | None = None

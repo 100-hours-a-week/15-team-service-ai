@@ -102,36 +102,20 @@ async def _invoke_llm[T](
     config: dict,
     structured_output_method: str | None = None,
 ) -> T:
-    """구조화된 출력으로 LLM 호출 - 원본 출력 추적 포함"""
+    """구조화된 출력으로 LLM 호출"""
     kwargs = {}
     if structured_output_method:
         kwargs["method"] = structured_output_method
-    structured_llm = llm.with_structured_output(output_type, include_raw=True, **kwargs)
+    structured_llm = llm.with_structured_output(output_type, **kwargs)
     messages = [
         SystemMessage(content=system_prompt),
         HumanMessage(content=human_content),
     ]
-    response = await structured_llm.ainvoke(messages, config=config)
-
-    raw = response.get("raw")
-    parsed = response.get("parsed")
-    parsing_error = response.get("parsing_error")
-
-    if raw:
-        raw_text = raw.content if hasattr(raw, "content") else str(raw)
-        logger.debug("LLM 원본 출력", raw_text=raw_text[:500])
-
-    if parsed is not None:
-        return parsed
-
-    raw_text = raw.content if raw and hasattr(raw, "content") else "원본 없음"
-    logger.error(
-        "LLM 출력 파싱 실패",
-        raw_text=raw_text[:500],
-        output_type=output_type.__name__,
-        error=str(parsing_error),
-    )
-    raise ValueError(f"LLM 출력 파싱 실패: {parsing_error}")
+    try:
+        return await structured_llm.ainvoke(messages, config=config)
+    except Exception as e:
+        logger.error("LLM 출력 파싱 실패", output_type=output_type.__name__, error=str(e))
+        raise ValueError(f"LLM 출력 파싱 실패: {e}") from e
 
 
 async def generate_resume(
@@ -692,4 +676,53 @@ async def generate_chat_response(
     )
 
     logger.debug("채팅 응답 생성 완료")
+    return result
+
+
+async def generate_chat_response_with_history(
+    resume_json: str,
+    position: str,
+    interview_type: str,
+    question_text: str,
+    question_intent: str,
+    related_project: str | None,
+    answer: str,
+    conversation_history: str,
+    session_id: str | None = None,
+) -> ChatOutput:
+    """멀티턴 면접 채팅 응답 생성 - 대화 이력 포함, vLLM 사용"""
+    logger.debug(
+        "멀티턴 채팅 응답 생성 요청",
+        interview_type=interview_type,
+        position=position,
+    )
+
+    related_project_text = related_project or "없음"
+
+    human_content = get_prompt(
+        f"chat-{interview_type}-human-multiturn",
+        question_text=question_text,
+        question_intent=question_intent,
+        related_project=related_project_text,
+        answer=answer,
+        conversation_history=conversation_history,
+    )
+
+    system_prompt = get_prompt(
+        f"chat-{interview_type}-system",
+        position=position,
+        resume_json=resume_json,
+    )
+    config = _build_langfuse_config(session_id, ["chat", "multiturn", interview_type, position])
+
+    result = await _invoke_llm(
+        llm=get_generator_llm(),
+        output_type=ChatOutput,
+        system_prompt=system_prompt,
+        human_content=human_content,
+        config=config,
+        structured_output_method="json_mode",
+    )
+
+    logger.debug("멀티턴 채팅 응답 생성 완료")
     return result

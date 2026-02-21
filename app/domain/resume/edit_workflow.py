@@ -161,20 +161,20 @@ async def edit_node(state: EditState) -> EditState:
     classification = state.get("classification")
 
     effective_message = message
-    if classification is not None:
-        effective_message = (
-            f"{message}\n\n"
-            f"[분류 결과]\n"
-            f"유형: {classification.intent_category}\n"
-            f"사유: {classification.reason}"
-        )
-    elif edit_plan is not None:
+    if edit_plan is not None:
         effective_message = (
             f"{message}\n\n"
             f"[수정 계획]\n"
             f"유형: {edit_plan.edit_type}\n"
             f"대상: {edit_plan.target_summary}\n"
             f"지시: {edit_plan.detailed_instructions}"
+        )
+    elif classification is not None:
+        effective_message = (
+            f"{message}\n\n"
+            f"[분류 결과]\n"
+            f"유형: {classification.intent_category}\n"
+            f"사유: {classification.reason}"
         )
 
     try:
@@ -269,12 +269,13 @@ async def evaluate_node(state: EditState) -> EditState:
 def create_edit_workflow() -> CompiledStateGraph:
     """이력서 수정 워크플로우 생성
 
-    워크플로우: classify → [edit | reject] → evaluate → retry/END
+    워크플로우: classify → [plan → edit | reject] → evaluate → retry/END
     """
     workflow = StateGraph(EditState)
 
     workflow.add_node("classify", classify_node)
     workflow.add_node("reject", reject_node)
+    workflow.add_node("plan", plan_node)
     workflow.add_node("edit", edit_node)
     workflow.add_node("evaluate", evaluate_node)
 
@@ -284,12 +285,13 @@ def create_edit_workflow() -> CompiledStateGraph:
         "classify",
         should_classify,
         {
-            "edit": "edit",
+            "edit": "plan",
             "reject": "reject",
         },
     )
 
     workflow.add_edge("reject", END)
+    workflow.add_edge("plan", "edit")
 
     workflow.add_conditional_edges(
         "edit",

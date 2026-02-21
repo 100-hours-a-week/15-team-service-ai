@@ -1,12 +1,12 @@
 from typing import Literal, TypedDict
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class FeedbackOutput(BaseModel):
     """LLM 구조화 출력 - 개별 피드백"""
 
-    score: int
+    score: int = Field(ge=1, le=10)
     strengths: list[str]
     improvements: list[str]
     model_answer: str
@@ -22,7 +22,7 @@ class FeedbackEvaluationOutput(BaseModel):
 class OverallFeedbackOutput(BaseModel):
     """LLM 구조화 출력 - 종합 피드백"""
 
-    overall_score: int
+    overall_score: int = Field(ge=1, le=10)
     summary: str
     key_strengths: list[str]
     key_improvements: list[str]

@@ -1,0 +1,12 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "resume": "./app/domain/resume/workflow.py:create_resume_workflow",
+    "resume_edit": "./app/domain/resume/edit_workflow.py:create_edit_workflow",
+    "interview": "./app/domain/interview/workflow.py:create_interview_workflow",
+    "feedback": "./app/domain/interview/feedback_workflow.py:create_feedback_workflow",
+    "overall_feedback": "./app/domain/interview/feedback_workflow.py:create_overall_feedback_workflow",
+    "chat": "./app/domain/interview/chat_workflow.py:create_chat_workflow"
+  },
+  "env": ".env"
+}

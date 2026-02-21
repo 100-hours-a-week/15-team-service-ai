@@ -75,9 +75,9 @@ async def generate_interview(
             )
         )
 
-    interview_context_store.save(body.resume_id, question_contexts)
+    interview_context_store.save(session_id, question_contexts)
     interview_context_store.save_session_meta(
-        body.resume_id,
+        session_id,
         SessionMeta(
             resume_json=resume_json,
             position=body.position,
@@ -88,5 +88,6 @@ async def generate_interview(
     logger.info("면접 질문 생성 성공", questions=len(questions.questions))
     return InterviewResponse(
         status="success",
+        ai_session_id=session_id,
         questions=question_responses,
     )

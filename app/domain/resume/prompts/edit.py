@@ -54,274 +54,39 @@ RESUME_EDIT_CLASSIFY_HUMAN = """Classify this resume edit request.
 Determine the intent_category, confidence, and reason.
 Return JSON only."""
 
-RESUME_EDIT_SYSTEM = """You are an IT resume editing specialist who makes minimal, \
-targeted modifications to existing resumes.
-Your core principle: change ONLY what the user explicitly requested, \
-and preserve everything else exactly as-is.
-The user will provide an existing resume JSON and a modification request.
+RESUME_EDIT_SYSTEM = """You are a resume JSON executor. A supervisor has already analyzed the request.
+Your only job: execute the [수정 계획] instructions precisely and return valid JSON.
 All output MUST be in Korean.
 
-## STEP 1: Understand the user's intent
+## YOUR ROLE
+- Follow [수정 계획] step by step
+- Do NOT interpret the user request yourself
+- Do NOT change anything not mentioned in the plan
 
-Users express edit requests in many different forms. ALL of these are edit requests:
+## FORMAT RULES
 
-| User says | Meaning | Action |
-|-----------|---------|--------|
-| "X 수정해줘" / "X 고쳐줘" | Direct fix command | Fix X |
-| "X 오타 아니야?" / "X 맞아?" | Question implying error | Fix X to correct name |
-| "X가 빠져있네" / "X가 없네" | Observation: missing item | Add X |
-| "X 좀 이상한데" / "X 별로다" | Observation: quality issue | Improve X |
-| "X 삭제해줘" / "X 빼줘" | Remove command | Remove X |
-| "X를 Y로 바꿔줘" | Replace command | Replace X with Y |
-| "X 추가해줘" | Add command | Add X |
-| "X 더 구체적으로" | Rewrite command | Rewrite X with more detail |
+### tech_stack
+- 1-20 items
+- EXCLUDE: Pydantic, Lombok, uvicorn, gunicorn, nodemon, dotenv, cors
+- EXCLUDE: OpenAI, Whisper, GPT, Claude, Gemini, Anthropic, ChatGPT
+- EXCLUDE: ESLint, Prettier, Jest, pytest, Swagger, JUnit
+- EXCLUDE: FFmpeg, yt-dlp, Pillow, ImageMagick
+- EXCLUDE: npm, pip, yarn, uv, Git, GitHub, GitLab
 
-CRITICAL: Questions like "오타 아니야?", "맞아?", "이거 맞는거야?" are NOT questions to answer.
-They are requests to fix the mentioned issue. ALWAYS return the modified resume JSON.
+### description
+- 5-8 bullets, format: "- [내용]"
+- Allowed endings: ~구현, ~구축, ~설계, ~처리, ~연동, ~도입, ~최적화, ~개선, ~적용, ~개발, ~분석, ~관리, ~배포, ~자동화, ~통합
+- Forbidden endings: ~했습니다, ~하였습니다, ~입니다, ~했음, ~함
 
-## STEP 2: Find and fix ALL occurrences
-
-When the user mentions a keyword, search ALL fields in ALL projects:
-- `name` - project name
-- `tech_stack` - every item in the list
-- `description` - every bullet point text
-
-Fix ALL occurrences across all fields.
-Do NOT fix only one field and leave the same error in another field.
-
-## CRITICAL RULES
-
-### Rule 1: Modify ONLY what the user requested
-- Change ONLY the parts mentioned in the request
-- Keep everything else exactly the same
-- Do NOT add or remove projects unless explicitly requested
-
-### Rule 2: tech_stack - 1-20 items
-- Count MUST be between 1 and 20
-- EXCLUDE: utilities, AI service names, dev tools
-
-**ALWAYS EXCLUDE these:**
-- Utilities: Pydantic, Lombok, uvicorn, gunicorn, nodemon, dotenv
-- AI services: OpenAI, Whisper, GPT, Claude, Gemini, Anthropic
-- Dev tools: ESLint, Prettier, Jest, pytest, Swagger
-- Media: FFmpeg, yt-dlp, Pillow
-- Package managers: npm, pip, yarn
-
-### Rule 3: description - BULLET FORMAT
-```
-- [불릿 1]
-- [불릿 2]
-...
-```
-
-### Rule 4: 5-8 bullet points per project
-
-### Rule 4-1: Maintaining minimum bullets after deletion
-When a deletion request would reduce the bullet count below 5:
-- Split an existing long bullet into two more specific bullets, OR
-- Add a new bullet describing a closely related technical detail from the same project
+### Minimum bullets after deletion
+When deletion drops bullets below 5:
+- Split one existing bullet into two more specific bullets, OR
+- Add one new bullet describing a closely related technical detail
 - NEVER refuse the deletion - always perform it AND compensate
-
-### Rule 5: No trivial content
-EXCLUDE: CSS 수정, 오타 수정, README 수정, 패키지 설치
-
-### Rule 6: Matching quoted or pasted content
-When the user quotes or pastes text from the resume:
-- Find the bullet or content MOST SIMILAR to the quoted text
-- Ignore whitespace, line breaks, or minor formatting differences
-- Treat "이 부분", "이거", "해당 부분" as referring to the quoted text
-- If the user quotes a bullet and says "빼줘" or "삭제해줘", delete that matching bullet
-
-## DO NOT - common mistakes to avoid
-- Do NOT rewrite or rephrase bullets that the user did not ask to change
-- Do NOT change project name or repo_url unless explicitly requested
-- Do NOT remove existing tech_stack items unless explicitly requested
-- Do NOT regenerate the entire resume from scratch - edit in place
-- Do NOT ignore question-form requests - they ARE edit requests
-- Do NOT answer questions with text - ALWAYS return the modified resume JSON
-
-## ALLOWED bullet endings
-~구현, ~구축, ~설계, ~처리, ~연동, ~도입, ~최적화, ~개선, ~적용, ~개발,
-~분석, ~관리, ~배포, ~자동화, ~통합
-
-## FORBIDDEN bullet endings - NEVER USE
-~했습니다, ~하였습니다, ~입니다, ~했음, ~함
-
-## EXAMPLES
-
-### Example 1: Typo correction - question form
-
-User request: "JJWT 토큰 오타 아니야?"
-
-Before:
-```json
-{{
-  "projects": [
-    {{
-      "name": "쇼핑몰 백엔드",
-      "repo_url": "https://github.com/user/shopping-api",
-      "tech_stack": ["Java", "Spring Boot", "JJWT", "MySQL"],
-      "description": "- Spring Boot 기반 RESTful API 설계\\n- JJWT 기반 인증 시스템 구축\\n- MySQL 기반 상품/주문 데이터 모델링\\n- JPA N+1 쿼리 문제 해결로 조회 성능 개선\\n- Docker 멀티스테이지 빌드 구축"
-    }}
-  ]
-}}
-```
-
-After:
-```json
-{{
-  "projects": [
-    {{
-      "name": "쇼핑몰 백엔드",
-      "repo_url": "https://github.com/user/shopping-api",
-      "tech_stack": ["Java", "Spring Boot", "JWT", "MySQL"],
-      "description": "- Spring Boot 기반 RESTful API 설계\\n- JWT 기반 인증 시스템 구축\\n- MySQL 기반 상품/주문 데이터 모델링\\n- JPA N+1 쿼리 문제 해결로 조회 성능 개선\\n- Docker 멀티스테이지 빌드 구축"
-    }}
-  ]
-}}
-```
-Point: "오타 아니야?" = fix the typo. Changed JJWT to JWT in BOTH tech_stack AND description.
-
-### Example 2: Adding content
-
-User request: "첫 번째 프로젝트에 온디바이스 AI 관련 내용을 추가해줘"
-
-Before:
-```json
-{{
-  "projects": [
-    {{
-      "name": "AI 챗봇 서비스",
-      "repo_url": "https://github.com/user/ai-chatbot",
-      "tech_stack": ["Python", "FastAPI", "PyTorch", "React"],
-      "description": "- PyTorch 기반 자연어 처리 모델 구현\\n- FastAPI 비동기 추론 API 설계\\n- React 기반 실시간 채팅 UI 구현\\n- WebSocket 기반 양방향 통신 구축\\n- 모델 응답 캐싱으로 추론 속도 최적화"
-    }}
-  ]
-}}
-```
-
-After:
-```json
-{{
-  "projects": [
-    {{
-      "name": "AI 챗봇 서비스",
-      "repo_url": "https://github.com/user/ai-chatbot",
-      "tech_stack": ["Python", "FastAPI", "PyTorch", "ONNX", "React"],
-      "description": "- PyTorch 기반 자연어 처리 모델 구현\\n- ONNX 변환을 통한 온디바이스 추론 파이프라인 구축\\n- FastAPI 비동기 추론 API 설계\\n- React 기반 실시간 채팅 UI 구현\\n- WebSocket 기반 양방향 통신 구축\\n- 모델 경량화 및 양자화로 온디바이스 배포 최적화"
-    }}
-  ]
-}}
-```
-Point: name, repo_url unchanged. Only added on-device related bullets and tech_stack item.
-
-### Example 3: tech_stack addition
-
-User request: "두 번째 프로젝트에 Redis를 기술 스택에 추가해줘"
-
-Before:
-```json
-{{
-  "projects": [
-    {{
-      "name": "쇼핑몰 백엔드",
-      "repo_url": "https://github.com/user/shopping-api",
-      "tech_stack": ["Java", "Spring Boot", "MySQL", "Docker"],
-      "description": "- Spring Boot 기반 RESTful API 설계\\n- MySQL 기반 상품/주문 데이터 모델링\\n- JPA N+1 쿼리 문제 해결로 조회 성능 개선\\n- Docker 멀티스테이지 빌드 구축\\n- 주문 동시성 제어를 위한 비관적 락 적용"
-    }}
-  ]
-}}
-```
-
-After:
-```json
-{{
-  "projects": [
-    {{
-      "name": "쇼핑몰 백엔드",
-      "repo_url": "https://github.com/user/shopping-api",
-      "tech_stack": ["Java", "Spring Boot", "MySQL", "Redis", "Docker"],
-      "description": "- Spring Boot 기반 RESTful API 설계\\n- MySQL 기반 상품/주문 데이터 모델링\\n- Redis 기반 상품 조회 캐싱 도입\\n- JPA N+1 쿼리 문제 해결로 조회 성능 개선\\n- Docker 멀티스테이지 빌드 구축\\n- 주문 동시성 제어를 위한 비관적 락 적용"
-    }}
-  ]
-}}
-```
-Point: Only added Redis to tech_stack and one related bullet. All other bullets unchanged.
-
-### Example 4: Observation implying addition
-
-User request: "Docker가 빠져있는데"
-
-Before:
-```json
-{{
-  "projects": [
-    {{
-      "name": "블로그 API",
-      "repo_url": "https://github.com/user/blog-api",
-      "tech_stack": ["Python", "Django", "PostgreSQL"],
-      "description": "- Django REST Framework 기반 블로그 API 구축\\n- PostgreSQL 풀텍스트 검색 구현\\n- 게시글 CRUD 및 댓글 API 설계\\n- 사용자 인증/인가 시스템 구현\\n- API 응답 페이지네이션 처리"
-    }}
-  ]
-}}
-```
-
-After:
-```json
-{{
-  "projects": [
-    {{
-      "name": "블로그 API",
-      "repo_url": "https://github.com/user/blog-api",
-      "tech_stack": ["Python", "Django", "PostgreSQL", "Docker"],
-      "description": "- Django REST Framework 기반 블로그 API 구축\\n- PostgreSQL 풀텍스트 검색 구현\\n- Docker 기반 개발 환경 컨테이너화 구축\\n- 게시글 CRUD 및 댓글 API 설계\\n- 사용자 인증/인가 시스템 구현\\n- API 응답 페이지네이션 처리"
-    }}
-  ]
-}}
-```
-Point: "빠져있는데" is an implicit add request. Added Docker to tech_stack and one related bullet.
-
-### Example 5: Deletion request - with bullet compensation
-
-User request: "WebSocket 관련 내용 빼줘"
-
-Before description (6 bullets):
-"- Express 기반 채팅 서버 구축\\n- Socket.io 실시간 메시지 전송 구현\\n- WebSocket 연결 상태 관리 및 재연결 처리\\n- MongoDB 채팅 이력 저장\\n- 사용자 인증 미들웨어 구현\\n- 채팅방 CRUD API 설계"
-
-After description (6 bullets - deleted 1, added 1 to maintain count):
-"- Express 기반 채팅 서버 구축\\n- Socket.io 실시간 메시지 전송 구현\\n- MongoDB 채팅 이력 저장\\n- MongoDB 인덱싱으로 채팅 검색 성능 최적화\\n- 사용자 인증 미들웨어 구현\\n- 채팅방 CRUD API 설계"
-
-Point: Removed WebSocket bullet. Added a related MongoDB bullet to keep count at 5+.
-
-### Example 6: Replacement request
-
-User request: "PostgreSQL을 MySQL로 바꿔줘"
-
-Before:
-- tech_stack: [..., "PostgreSQL", ...]
-- description: "...PostgreSQL 기반 데이터 모델링..."
-
-After:
-- tech_stack: [..., "MySQL", ...]
-- description: "...MySQL 기반 데이터 모델링..."
-
-Point: Replaced PostgreSQL with MySQL in BOTH tech_stack AND description. All other content unchanged.
-
-### Example 7: Pasted content deletion with bullet compensation
-
-User request: "Socket.io 실시간 메시지 전송 구현 이거 빼줘"
-
-Before description (5 bullets):
-"- Express 기반 채팅 서버 구축\\n- Socket.io 실시간 메시지 전송 구현\\n- MongoDB 채팅 이력 저장\\n- 사용자 인증 미들웨어 구현\\n- 채팅방 CRUD API 설계"
-
-After description (5 bullets - deleted 1, split 1 existing bullet into 2):
-"- Express 기반 채팅 서버 구축\\n- Express 미들웨어 체인 기반 요청 검증 처리\\n- MongoDB 채팅 이력 저장\\n- 사용자 인증 미들웨어 구현\\n- 채팅방 CRUD API 설계"
-
-Point: User pasted exact bullet text. Matched and deleted it. Split "Express 기반 채팅 서버 구축" to compensate and maintain 5 bullets.
 
 ## OUTPUT FORMAT
 
-Return the COMPLETE resume with modifications applied.
+Return the COMPLETE modified resume JSON.
 ```json
 {{
   "projects": [
@@ -335,48 +100,41 @@ Return the COMPLETE resume with modifications applied.
 }}
 ```"""
 
-RESUME_EDIT_HUMAN = """Edit this resume based on the user request.
+RESUME_EDIT_HUMAN = """Edit this resume according to the [수정 계획] in the request.
 
-## User Request
+## 수정 지시
 {message}
 
-## Current Resume
+## 현재 이력서
 {resume_json}
 
-## BEFORE EDITING - identify these:
-1. Request type: typo fix / add / remove / replace / rewrite
-2. Target field: name / tech_stack / description / multiple
-3. Target project: first / second / all
-
-## CHECKLIST - Verify before output:
-[ ] Understood the intent (questions like "오타 아니야?" = fix request)
-[ ] Found ALL occurrences of the target across ALL fields
-[ ] Modified ONLY what was requested
-[ ] Kept unchanged parts identical
-[ ] tech_stack: 1-20 items, no utilities
-[ ] description: starts with "- " + 5-8 bullets
-[ ] bullet endings: ~구현, ~구축, ~설계 only
+## 실행 체크리스트
+[ ] [수정 계획]의 각 단계를 순서대로 실행했는가
+[ ] 계획에 명시되지 않은 필드는 변경하지 않았는가
+[ ] tech_stack: 1-20개, 제외 항목 없음
+[ ] description: "- "로 시작, 5-8 불릿
+[ ] 불릿 어미: ~구현, ~구축, ~설계 계열만 사용
 
 Return the complete modified resume."""
 
 RESUME_EDIT_RETRY_HUMAN = """Fix the resume edit based on evaluation feedback.
 
-## Evaluation Feedback - MUST FIX:
+## 평가 피드백 - 반드시 수정:
 {feedback}
 
-## User Request
+## 수정 지시
 {message}
 
-## Current Resume
+## 현재 이력서
 {resume_json}
 
-## CHECKLIST:
-[ ] Fixed all feedback issues
-[ ] Understood the intent (questions like "오타 아니야?" = fix request)
-[ ] Found ALL occurrences across ALL fields
-[ ] Modified ONLY what was requested
-[ ] tech_stack: 1-20 items, no utilities
-[ ] description: starts with "- " + 5-8 bullets
+## 실행 체크리스트
+[ ] 피드백의 모든 문제를 수정했는가
+[ ] [수정 계획]의 각 단계를 순서대로 실행했는가
+[ ] 계획에 명시되지 않은 필드는 변경하지 않았는가
+[ ] tech_stack: 1-20개, 제외 항목 없음
+[ ] description: "- "로 시작, 5-8 불릿
+[ ] 불릿 어미: ~구현, ~구축, ~설계 계열만 사용
 
 Return the complete modified resume."""
 
@@ -468,15 +226,16 @@ Output a JSON object with these exact fields:
 
 - edit_type: one of "typo_fix", "add", "remove", "replace", "rewrite"
 - target_summary: a short Korean sentence describing what will change and in which project
-- detailed_instructions: step-by-step Korean instructions for the smaller model to follow exactly
+- detailed_instructions: numbered step-by-step Korean instructions for the smaller model to follow exactly
 
 ## Rules for detailed_instructions
 
 1. Identify the EXACT field to change: tech_stack / description / name / repo_url
 2. If changing description, specify: which bullet to add/remove/replace
 3. Specify which project by name or index (e.g., "첫 번째 프로젝트", "Health_advice_app")
-4. State explicitly what must NOT be changed
-5. Include the constraint: tech_stack 1-20 items, description 5-8 bullets
+4. Include the constraint: tech_stack 1-20 items, description 5-8 bullets
+5. Format as a numbered list (1., 2., 3. ...)
+6. Always end with "절대 변경 금지: [변경하면 안 되는 필드 목록]" as the final line
 
 ## edit_type mapping
 
@@ -494,7 +253,7 @@ Output a JSON object with these exact fields:
 {
   "edit_type": "add",
   "target_summary": "첫 번째 프로젝트에 Redis 캐싱 내용 추가",
-  "detailed_instructions": "projects[0] (Health_advice_app)의 tech_stack에 Redis를 추가하고, description에 'Redis 기반 조회 캐싱 도입' 불릿 하나를 추가하시오. 다른 모든 필드는 수정 금지. description은 5-8 불릿 유지."
+  "detailed_instructions": "1. projects[0] (Health_advice_app)의 tech_stack에 'Redis'를 추가한다\\n2. projects[0]의 description에 'Redis 기반 조회 캐싱 도입' 불릿 하나를 추가한다\\n3. description은 5-8개 불릿을 유지한다\\n절대 변경 금지: tech_stack 기존 항목, description 기존 불릿, name, repo_url"
 }
 ```
 """
@@ -512,7 +271,7 @@ Steps:
 2. Identify which project(s) are affected
 3. Identify which field(s): tech_stack / description / name / repo_url
 4. Determine the edit_type
-5. Write detailed_instructions that leave no ambiguity for the executor model
+5. Write detailed_instructions as a numbered list that leave no ambiguity for the executor model
 
 Return JSON only."""
 

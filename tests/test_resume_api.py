@@ -64,8 +64,9 @@ class TestGenerateResumeEndpoint:
             )
 
         assert response.status_code == 422
-        detail = response.json()["detail"]
-        assert any("최소 1개" in str(err) for err in detail)
+        data = response.json()
+        assert data["error_code"] == "INVALID_INPUT"
+        assert any("최소 1개" in err["message"] for err in data["errors"])
 
     @pytest.mark.asyncio
     async def test_generate_too_many_repos_returns_422(self):
@@ -130,8 +131,9 @@ class TestGenerateResumeEndpoint:
             )
 
         assert response.status_code == 422
-        detail = response.json()["detail"]
-        assert any("GitHub URL" in str(err) for err in detail)
+        data = response.json()
+        assert data["error_code"] == "INVALID_INPUT"
+        assert any("GitHub URL" in err["message"] for err in data["errors"])
 
     @pytest.mark.asyncio
     async def test_generate_invalid_url_format_returns_422(self):

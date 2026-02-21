@@ -16,11 +16,11 @@ async def run_edit_agent(
     resume_json: str,
     message: str,
     session_id: str | None = None,
-) -> tuple[EditResumeOutput | None, str | None]:
+) -> tuple[EditResumeOutput | None, str | None, ErrorCode | None]:
     """이력서 수정 워크플로우 실행
 
     Returns:
-        edited_resume, error_message 튜플
+        edited_resume, error_message, error_code 튜플
     """
     logger.info("수정 에이전트 시작", session_id=session_id)
 
@@ -47,19 +47,20 @@ async def run_edit_agent(
                 logger.info("범위 밖 요청 거절", error_code=error_code)
             else:
                 logger.error("수정 워크플로우 실패", error_code=error_code)
-            return None, error_msg
+            return None, error_msg, error_code
 
         edited_resume = final_state.get("edited_resume")
         if not edited_resume:
-            return None, "이력서 수정 실패"
+            return None, "이력서 수정 실패", ErrorCode.EDIT_FAILED
 
         logger.info("수정 에이전트 완료", projects=len(edited_resume.projects))
-        return edited_resume, None
+        return edited_resume, None, None
 
     except asyncio.TimeoutError:
         logger.error("수정 워크플로우 타임아웃", timeout=settings.workflow_timeout)
-        return None, f"워크플로우 타임아웃: {settings.workflow_timeout}초 초과"
+        timeout_msg = f"워크플로우 타임아웃: {settings.workflow_timeout}초 초과"
+        return None, timeout_msg, ErrorCode.EDIT_FAILED
 
     except Exception as e:
         logger.error("수정 에이전트 실패", error=str(e), exc_info=True)
-        return None, "알 수 없는 오류가 발생했습니다"
+        return None, "알 수 없는 오류가 발생했습니다", ErrorCode.EDIT_FAILED

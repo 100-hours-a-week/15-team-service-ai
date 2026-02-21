@@ -89,10 +89,24 @@ class TestEditEndpointFailure:
         assert response.status_code == 200
         assert "jobId" in response.json()
 
-        payload = _build_callback_payload(response.json()["jobId"], None, "LLM API 오류: HTTP 500")
+        payload = _build_callback_payload(
+            response.json()["jobId"], None, "LLM API 오류: HTTP 500", ErrorCode.EDIT_FAILED
+        )
         assert payload["status"] == "failed"
         assert payload["error"]["code"] == ErrorCode.EDIT_FAILED
         assert "LLM API" in payload["error"]["message"]
+
+    @pytest.mark.asyncio
+    async def test_edit_out_of_scope_preserves_error_code(self, async_client):
+        """EDIT_OUT_OF_SCOPE 에러 코드가 콜백 페이로드에 보존됨"""
+        from app.api.v2.resume_edit import _build_callback_payload
+
+        payload = _build_callback_payload(
+            "test-job-id", None, "이력서 수정과 무관한 요청", ErrorCode.EDIT_OUT_OF_SCOPE
+        )
+        assert payload["status"] == "failed"
+        assert payload["error"]["code"] == ErrorCode.EDIT_OUT_OF_SCOPE
+        assert "무관한 요청" in payload["error"]["message"]
 
     @pytest.mark.asyncio
     async def test_edit_timeout(self, async_client):
@@ -196,11 +210,7 @@ class TestEditWorkflow:
 
         mock_llm = MagicMock()
         mock_llm.with_structured_output.return_value.ainvoke = AsyncMock(
-            return_value={
-                "raw": MagicMock(content="test"),
-                "parsed": SAMPLE_EDITED_OUTPUT,
-                "parsing_error": None,
-            }
+            return_value=SAMPLE_EDITED_OUTPUT
         )
 
         with patch("app.infra.llm.client.get_generator_llm", return_value=mock_llm):
@@ -230,13 +240,7 @@ class TestEditWorkflow:
         }
 
         mock_llm = MagicMock()
-        mock_llm.with_structured_output.return_value.ainvoke = AsyncMock(
-            return_value={
-                "raw": MagicMock(content="test"),
-                "parsed": eval_result,
-                "parsing_error": None,
-            }
-        )
+        mock_llm.with_structured_output.return_value.ainvoke = AsyncMock(return_value=eval_result)
 
         with patch("app.infra.llm.client.get_evaluator_llm", return_value=mock_llm):
             result = await evaluate_node(state)
@@ -264,13 +268,7 @@ class TestEditWorkflow:
         }
 
         mock_llm = MagicMock()
-        mock_llm.with_structured_output.return_value.ainvoke = AsyncMock(
-            return_value={
-                "raw": MagicMock(content="test"),
-                "parsed": eval_result,
-                "parsing_error": None,
-            }
-        )
+        mock_llm.with_structured_output.return_value.ainvoke = AsyncMock(return_value=eval_result)
 
         with patch("app.infra.llm.client.get_evaluator_llm", return_value=mock_llm):
             result = await evaluate_node(state)
@@ -298,13 +296,7 @@ class TestEditWorkflow:
         )
 
         mock_llm = MagicMock()
-        mock_llm.with_structured_output.return_value.ainvoke = AsyncMock(
-            return_value={
-                "raw": MagicMock(content="test"),
-                "parsed": plan_result,
-                "parsing_error": None,
-            }
-        )
+        mock_llm.with_structured_output.return_value.ainvoke = AsyncMock(return_value=plan_result)
 
         with (
             patch("app.infra.llm.client.get_evaluator_llm", return_value=mock_llm),
@@ -375,13 +367,14 @@ class TestEditAgent:
                 return_value=None,
             ),
         ):
-            result, error = await run_edit_agent(
+            result, error, error_code = await run_edit_agent(
                 resume_json='{"projects": []}',
                 message="수정 요청",
             )
 
         assert result == SAMPLE_EDITED_OUTPUT
         assert error is None
+        assert error_code is None
 
     @pytest.mark.asyncio
     async def test_run_edit_agent_error(self):
@@ -406,13 +399,46 @@ class TestEditAgent:
                 return_value=None,
             ),
         ):
-            result, error = await run_edit_agent(
+            result, error, error_code = await run_edit_agent(
                 resume_json='{"projects": []}',
                 message="수정 요청",
             )
 
         assert result is None
         assert error == "이력서 수정 실패"
+        assert error_code == ErrorCode.EDIT_FAILED
+
+    @pytest.mark.asyncio
+    async def test_run_edit_agent_out_of_scope(self):
+        """에이전트 범위 밖 거절 시 EDIT_OUT_OF_SCOPE 에러 코드 반환"""
+        from app.domain.resume.edit_agent import run_edit_agent
+
+        mock_workflow = MagicMock()
+        mock_workflow.ainvoke = AsyncMock(
+            return_value={
+                "error_code": ErrorCode.EDIT_OUT_OF_SCOPE,
+                "error_message": "이력서 수정과 무관한 요청",
+            }
+        )
+
+        with (
+            patch(
+                "app.domain.resume.edit_agent._edit_workflow",
+                mock_workflow,
+            ),
+            patch(
+                "app.domain.resume.edit_agent.get_langfuse_handler",
+                return_value=None,
+            ),
+        ):
+            result, error, error_code = await run_edit_agent(
+                resume_json='{"projects": []}',
+                message="오늘 날씨 알려줘",
+            )
+
+        assert result is None
+        assert error == "이력서 수정과 무관한 요청"
+        assert error_code == ErrorCode.EDIT_OUT_OF_SCOPE
 
     @pytest.mark.asyncio
     async def test_run_edit_agent_timeout(self):
@@ -432,13 +458,14 @@ class TestEditAgent:
                 return_value=None,
             ),
         ):
-            result, error = await run_edit_agent(
+            result, error, error_code = await run_edit_agent(
                 resume_json='{"projects": []}',
                 message="수정 요청",
             )
 
         assert result is None
         assert "타임아웃" in error
+        assert error_code == ErrorCode.EDIT_FAILED
 
 
 class TestClassifyNode:
@@ -465,11 +492,7 @@ class TestClassifyNode:
 
         mock_llm = MagicMock()
         mock_llm.with_structured_output.return_value.ainvoke = AsyncMock(
-            return_value={
-                "raw": MagicMock(content="test"),
-                "parsed": classify_result,
-                "parsing_error": None,
-            }
+            return_value=classify_result
         )
 
         with (
@@ -506,11 +529,7 @@ class TestClassifyNode:
 
         mock_llm = MagicMock()
         mock_llm.with_structured_output.return_value.ainvoke = AsyncMock(
-            return_value={
-                "raw": MagicMock(content="test"),
-                "parsed": classify_result,
-                "parsing_error": None,
-            }
+            return_value=classify_result
         )
 
         with (
