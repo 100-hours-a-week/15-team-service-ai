@@ -82,6 +82,7 @@ def _build_callback_payload(
     job_id: str,
     edited_resume,
     error_message: str | None,
+    error_code: ErrorCode | None = None,
 ) -> dict:
     """콜백 페이로드 생성"""
     if edited_resume:
@@ -103,7 +104,7 @@ def _build_callback_payload(
         payload = EditCallbackFailurePayload(
             job_id=job_id,
             error=EditCallbackErrorData(
-                code=ErrorCode.EDIT_FAILED,
+                code=error_code or ErrorCode.EDIT_FAILED,
                 message=error_message or "이력서 수정에 실패했습니다",
             ),
         )
@@ -119,13 +120,13 @@ async def _run_edit_and_callback(
     callback_url = _build_callback_url(job_id)
 
     try:
-        edited_resume, error_message = await run_edit_agent(
+        edited_resume, error_message, error_code = await run_edit_agent(
             resume_json=resume_json,
             message=message,
             session_id=job_id,
         )
 
-        payload = _build_callback_payload(job_id, edited_resume, error_message)
+        payload = _build_callback_payload(job_id, edited_resume, error_message, error_code)
         logger.info("콜백 전송 시작", callback_url=callback_url)
 
         async with httpx.AsyncClient(timeout=settings.callback_timeout) as client:

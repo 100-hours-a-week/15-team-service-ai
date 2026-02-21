@@ -221,3 +221,5 @@ CLAUDE.md
 15-*
 .claude
 scripts/
+.langgraph_api
+.DS_Store
