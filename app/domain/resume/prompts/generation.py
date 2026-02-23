@@ -62,9 +62,10 @@ REMINDER: Follow the plans exactly. Do not add or invent content beyond what the
 RESUME_GENERATOR_HUMAN = """Create resume JSON following the generation plans below.
 
 ## STEPS
-Step 1: For each project, use its plan's bullet_plans to write description bullets
-Step 2: Use recommended_tech_stack from each plan, filter to 5-8 items
-Step 3: Verify project count is exactly {project_count}
+Step 1: For each bullet_plan, combine suggested_content + technical_detail into one bullet sentence
+Step 2: Use recommended_tech_stack from each plan as-is (Plan already validated the list)
+Step 3: Verify all bullets end with noun-form (~구현, ~개선, ~설계, ~적용, ~도입)
+Step 4: Verify project count is exactly {project_count}
 
 ## Generation Plans
 
@@ -83,8 +84,8 @@ RESUME_GENERATOR_RETRY_HUMAN = """Fix resume based on feedback. Follow the same 
 
 ## STEPS
 Step 1: Fix all feedback issues in the previous output
-Step 2: Re-check each project against its plan
-Step 3: Verify tech_stack 5-8 items, description 5-8 bullets with correct endings
+Step 2: For each bullet_plan, re-combine suggested_content + technical_detail into one bullet
+Step 3: Verify all bullets end with noun-form (~구현, ~개선, ~설계, ~적용, ~도입)
 Step 4: Verify project count is exactly {project_count}
 
 ## Generation Plans
