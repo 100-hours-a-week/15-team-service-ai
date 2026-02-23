@@ -1,6 +1,6 @@
 from typing import Literal, TypedDict
 
-from pydantic import BaseModel
+from pydantic import AliasChoices, BaseModel, Field
 
 
 class ClassifyOutput(BaseModel):
@@ -23,8 +23,8 @@ class EditProjectOutput(BaseModel):
     """LLM 구조화 출력 프로젝트"""
 
     name: str
-    repo_url: str
-    tech_stack: list[str]
+    repo_url: str = Field(validation_alias=AliasChoices("repo_url", "repoUrl"))
+    tech_stack: list[str] = Field(validation_alias=AliasChoices("tech_stack", "techStack"))
     description: str
 
 

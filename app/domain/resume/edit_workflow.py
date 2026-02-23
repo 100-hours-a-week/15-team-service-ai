@@ -4,7 +4,7 @@ import httpx
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
-from app.core.exceptions import ErrorCode
+from app.core.exceptions import ErrorCode, LLMError
 from app.core.logging import get_logger
 from app.domain.resume.error_handler import (
     handle_connection_error,
@@ -55,7 +55,7 @@ async def classify_node(state: EditState) -> EditState:
         logger.warning("classify_node API 오류, 기본 edit 경로로 폴백")
         return state
 
-    except (ValueError, KeyError, TypeError):
+    except (ValueError, KeyError, TypeError, LLMError):
         logger.warning("classify_node 데이터 오류, 기본 edit 경로로 폴백")
         return state
 
@@ -132,7 +132,7 @@ async def plan_node(state: EditState) -> EditState:
             "LLM API 오류",
         )
 
-    except (ValueError, KeyError, TypeError) as e:
+    except (ValueError, KeyError, TypeError, LLMError) as e:
         return handle_data_error(
             e,
             state,
@@ -213,7 +213,7 @@ async def edit_node(state: EditState) -> EditState:
             retry_count=retry_count,
         )
 
-    except (ValueError, KeyError, TypeError) as e:
+    except (ValueError, KeyError, TypeError, LLMError) as e:
         return handle_data_error(
             e,
             state,

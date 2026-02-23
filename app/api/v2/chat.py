@@ -11,12 +11,12 @@ from app.core.exceptions import ErrorCode
 from app.core.limiter import limiter
 from app.core.logging import get_logger
 from app.domain.interview.chat_agent import run_chat_agent
+from app.domain.interview.chat_schemas import MAX_FOLLOW_UP_TURNS
 from app.domain.interview.store import interview_context_store
 
 router = APIRouter(prefix="/interview", tags=["v2"])
 logger = get_logger(__name__)
 
-MAX_FOLLOW_UP_TURNS = 3
 SKIP_PATTERNS = ["모르겠", "잘 모르", "패스", "모릅니다", "생각이 안", "기억이 안"]
 
 

@@ -6,25 +6,45 @@ from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
+_session = aioboto3.Session()
+_s3_client = None
+_s3_client_ctx = None
 
-async def download_file(s3_key: str) -> bytes:
-    """S3에서 파일 다운로드"""
-    session = aioboto3.Session()
 
-    try:
-        async with session.client(
+async def _get_s3_client():
+    """S3 클라이언트 지연 초기화 싱글턴"""
+    global _s3_client, _s3_client_ctx
+    if _s3_client is None:
+        _s3_client_ctx = _session.client(
             "s3",
             aws_access_key_id=settings.aws_access_key_id,
             aws_secret_access_key=settings.aws_secret_access_key,
             region_name=settings.aws_region,
-        ) as client:
-            response = await client.get_object(
-                Bucket=settings.s3_bucket_name,
-                Key=s3_key,
-            )
-            data = await response["Body"].read()
-            logger.debug("S3 파일 다운로드 완료", s3_key=s3_key, size=len(data))
-            return data
+        )
+        _s3_client = await _s3_client_ctx.__aenter__()
+    return _s3_client
+
+
+async def close_s3_client() -> None:
+    """S3 클라이언트 종료 - lifespan에서 호출"""
+    global _s3_client, _s3_client_ctx
+    if _s3_client_ctx:
+        await _s3_client_ctx.__aexit__(None, None, None)
+        _s3_client = None
+        _s3_client_ctx = None
+
+
+async def download_file(s3_key: str) -> bytes:
+    """S3에서 파일 다운로드"""
+    try:
+        client = await _get_s3_client()
+        response = await client.get_object(
+            Bucket=settings.s3_bucket_name,
+            Key=s3_key,
+        )
+        data = await response["Body"].read()
+        logger.debug("S3 파일 다운로드 완료", s3_key=s3_key, size=len(data))
+        return data
     except ClientError as e:
         error_code = e.response["Error"]["Code"]
         if error_code == "NoSuchKey":

@@ -1,5 +1,4 @@
 import httpx
-from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
 from app.core.exceptions import ErrorCode
@@ -11,9 +10,8 @@ from app.domain.resume.error_handler import (
     handle_http_error,
 )
 from app.domain.resume.workflow_utils import (
+    build_gen_eval_retry_graph,
     evaluate_with_fallback,
-    make_should_retry,
-    should_evaluate,
 )
 from app.infra.llm.client import evaluate_interview, generate_interview
 
@@ -111,30 +109,9 @@ async def evaluate_node(state: InterviewState) -> InterviewState:
 
 def create_interview_workflow() -> CompiledStateGraph:
     """면접 질문 생성 워크플로우 생성"""
-    workflow = StateGraph(InterviewState)
-
-    workflow.add_node("generate", generate_node)
-    workflow.add_node("evaluate", evaluate_node)
-
-    workflow.set_entry_point("generate")
-
-    workflow.add_conditional_edges(
-        "generate",
-        should_evaluate,
-        {
-            "evaluate": "evaluate",
-            "end": END,
-        },
+    return build_gen_eval_retry_graph(
+        state_schema=InterviewState,
+        generate_node=generate_node,
+        evaluate_node=evaluate_node,
+        max_retries=MAX_INTERVIEW_RETRIES,
     )
-
-    should_retry = make_should_retry(MAX_INTERVIEW_RETRIES, "generate")
-    workflow.add_conditional_edges(
-        "evaluate",
-        should_retry,
-        {
-            "generate": "generate",
-            "end": END,
-        },
-    )
-
-    return workflow.compile()

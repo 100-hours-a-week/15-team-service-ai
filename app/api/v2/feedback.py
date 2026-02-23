@@ -22,6 +22,8 @@ from app.domain.interview.feedback_agent import (
 router = APIRouter(prefix="/interview", tags=["v2"])
 logger = get_logger(__name__)
 
+MAX_CONCURRENT_FEEDBACK = 5
+
 
 @router.post(
     "/end",
@@ -52,19 +54,22 @@ async def end_interview(
     qa_pairs = [{"question": m.question, "answer": m.answer} for m in body.messages]
     qa_pairs_json = json.dumps(qa_pairs, ensure_ascii=False, indent=2)
 
-    individual_tasks = [
-        run_feedback_agent(
-            resume_json="없음",
-            position=body.position,
-            interview_type=interview_type,
-            question_text=m.question,
-            question_intent="",
-            related_project=None,
-            answer=m.answer,
-            session_id=session_id,
-        )
-        for m in body.messages
-    ]
+    semaphore = asyncio.Semaphore(MAX_CONCURRENT_FEEDBACK)
+
+    async def run_feedback_with_semaphore(m):
+        async with semaphore:
+            return await run_feedback_agent(
+                resume_json="없음",
+                position=body.position,
+                interview_type=interview_type,
+                question_text=m.question,
+                question_intent="제공되지 않음",
+                related_project=None,
+                answer=m.answer,
+                session_id=session_id,
+            )
+
+    individual_tasks = [run_feedback_with_semaphore(m) for m in body.messages]
 
     overall_task = run_overall_feedback_agent(
         resume_json="없음",

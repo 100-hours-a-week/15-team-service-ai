@@ -40,7 +40,6 @@ class TestCollectDataNode:
             job_id="test-job-123",
         )
 
-    @pytest.mark.asyncio
     async def test_collect_data_success(self, base_state):
         """정상 데이터 수집"""
         mock_project_info = [
@@ -87,7 +86,6 @@ class TestCollectDataNode:
         assert result["retry_count"] == 0
         assert result.get("error_code") is None
 
-    @pytest.mark.asyncio
     async def test_collect_data_empty_project_info(self, base_state):
         """프로젝트 정보가 비어있을 때 에러 상태 설정"""
         with (
@@ -107,7 +105,6 @@ class TestCollectDataNode:
         assert result["error_code"] == ErrorCode.COLLECT_DATA_FAILED
         assert "프로젝트 정보 수집 실패" in result["error_message"]
 
-    @pytest.mark.asyncio
     async def test_collect_data_github_api_error(self, base_state):
         """GitHub API 오류 시 에러 상태 설정"""
         mock_response = httpx.Response(401, request=httpx.Request("GET", "test"))
@@ -125,7 +122,6 @@ class TestCollectDataNode:
         assert result["error_code"] == ErrorCode.GITHUB_UNAUTHORIZED
         assert "인증 실패" in result["error_message"]
 
-    @pytest.mark.asyncio
     async def test_collect_data_invalid_url(self, base_state):
         """잘못된 URL 시 에러 상태 설정"""
         with patch(
@@ -164,7 +160,6 @@ class TestGenerateNode:
             retry_count=0,
         )
 
-    @pytest.mark.asyncio
     async def test_generate_success(self, base_state):
         """정상 이력서 생성"""
         mock_resume = ResumeData(
@@ -179,7 +174,7 @@ class TestGenerateNode:
         )
 
         with patch(
-            "app.domain.resume.workflow._generate_in_batches",
+            "app.domain.resume.workflow.generate_resume",
             new_callable=AsyncMock,
             return_value=mock_resume,
         ):
@@ -188,7 +183,6 @@ class TestGenerateNode:
         assert result["resume_data"] == mock_resume
         assert result.get("error_code") is None
 
-    @pytest.mark.asyncio
     async def test_generate_no_project_info(self, base_state):
         """project_info가 없을 때 에러 상태 설정"""
         state_without_project = dict(base_state)
@@ -199,7 +193,6 @@ class TestGenerateNode:
         assert result["error_code"] == ErrorCode.GENERATE_ERROR
         assert "프로젝트 정보가 없습니다" in result["error_message"]
 
-    @pytest.mark.asyncio
     async def test_generate_retry_increments_count(self, base_state):
         """재시도 시 retry_count 증가"""
         state_with_fail = dict(base_state)
@@ -218,7 +211,7 @@ class TestGenerateNode:
         )
 
         with patch(
-            "app.domain.resume.workflow._generate_in_batches",
+            "app.domain.resume.workflow.generate_resume",
             new_callable=AsyncMock,
             return_value=mock_resume,
         ):
@@ -226,7 +219,6 @@ class TestGenerateNode:
 
         assert result["retry_count"] == 2
 
-    @pytest.mark.asyncio
     async def test_generate_llm_api_error(self, base_state):
         """LLM API 오류 시 에러 상태 설정"""
         mock_response = httpx.Response(500, request=httpx.Request("POST", "test"))
@@ -235,7 +227,7 @@ class TestGenerateNode:
         )
 
         with patch(
-            "app.domain.resume.workflow._generate_in_batches",
+            "app.domain.resume.workflow.generate_resume",
             new_callable=AsyncMock,
             side_effect=http_error,
         ):
@@ -244,11 +236,10 @@ class TestGenerateNode:
         assert result["error_code"] == ErrorCode.LLM_API_ERROR
         assert "HTTP 500" in result["error_message"]
 
-    @pytest.mark.asyncio
     async def test_generate_validation_error(self, base_state):
         """생성 검증 오류 시 에러 상태 설정"""
         with patch(
-            "app.domain.resume.workflow._generate_in_batches",
+            "app.domain.resume.workflow.generate_resume",
             new_callable=AsyncMock,
             side_effect=ValueError("Invalid format"),
         ):
@@ -283,7 +274,6 @@ class TestEvaluateNode:
             ),
         )
 
-    @pytest.mark.asyncio
     async def test_evaluate_pass(self, base_state):
         """평가 통과 결과 처리"""
         mock_evaluation = EvaluationOutput(
@@ -309,7 +299,6 @@ class TestEvaluateNode:
         assert result["evaluation"] == "pass"
         assert result["evaluation_feedback"] == "이력서가 모든 기준을 충족합니다"
 
-    @pytest.mark.asyncio
     async def test_evaluate_fail(self, base_state):
         """평가 실패 결과 처리"""
         mock_evaluation = EvaluationOutput(
@@ -335,7 +324,6 @@ class TestEvaluateNode:
         assert result["evaluation"] == "fail"
         assert result["evaluation_feedback"] == "기술 스택이 부족합니다"
 
-    @pytest.mark.asyncio
     async def test_evaluate_llm_error_returns_pass(self, base_state):
         """LLM 오류 시 관용적으로 pass 처리"""
         mock_response = httpx.Response(500, request=httpx.Request("POST", "test"))
@@ -359,7 +347,6 @@ class TestEvaluateNode:
         assert result["evaluation"] == "pass"
         assert result["evaluation_feedback"] == ""
 
-    @pytest.mark.asyncio
     async def test_evaluate_value_error_returns_pass(self, base_state):
         """ValueError 시 관용적으로 pass 처리"""
         with (
@@ -378,7 +365,6 @@ class TestEvaluateNode:
         assert result["evaluation"] == "pass"
         assert result["evaluation_feedback"] == ""
 
-    @pytest.mark.asyncio
     async def test_evaluate_format_violation_returns_fail(self, base_state):
         """코드 검증 위반 시 fail 처리"""
         mock_violations = [
@@ -417,8 +403,8 @@ class TestShouldContinue:
 
         assert result == "end"
 
-    def test_returns_generate_when_no_error(self):
-        """에러 없을 때 generate 반환"""
+    def test_returns_plan_when_no_error(self):
+        """에러 없을 때 plan 반환"""
         state = ResumeState(
             request=ResumeRequest(
                 repo_urls=["https://github.com/test/repo"],
@@ -428,7 +414,7 @@ class TestShouldContinue:
 
         result = should_continue(state)
 
-        assert result == "generate"
+        assert result == "plan"
 
 
 class TestShouldEvaluate:

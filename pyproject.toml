@@ -15,6 +15,7 @@ dependencies = [
     "langchain-openai>=0.3.0",
     "langchain-google-genai>=2.1.0",
     "langgraph>=1.0.6",
+    "langgraph-checkpoint-sqlite>=2.0.0",
     "langfuse>=3.12.0",
     "slowapi>=0.1.9",
     "structlog>=24.1.0",
@@ -30,6 +31,7 @@ dev = [
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+exclude = ["notebook/"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W", "B", "C90"]
@@ -41,6 +43,9 @@ ignore = []
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
 
 [dependency-groups]
 dev = [

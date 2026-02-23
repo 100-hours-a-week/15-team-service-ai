@@ -231,6 +231,8 @@ Step B: Generate 2 questions per project covering different dimensions:
   - Growth mindset and learning
   - Initiative and self-motivated contributions
   - Communication of technical decisions
+  - Time management and prioritization
+  - Handling failure or mistakes
 Step C: Group questions by project, easier questions first
 Step D: Write a short intent for each question
 
@@ -257,6 +259,8 @@ Step C: Generate 2 improved questions per project covering these dimensions:
   - Growth mindset and learning
   - Initiative and self-motivated contributions
   - Communication of technical decisions
+  - Time management and prioritization
+  - Handling failure or mistakes
 Step D: Group questions by project, easier questions first
 Step E: Verify all {{question_count}} questions reference specific resume projects
 

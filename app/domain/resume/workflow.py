@@ -2,8 +2,10 @@ import asyncio
 from typing import Literal
 
 import httpx
+from langgraph.cache.memory import InMemoryCache
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
+from langgraph.types import CachePolicy
 
 from app.core.config import settings
 from app.core.exceptions import ErrorCode, PositionMismatchError
@@ -16,12 +18,9 @@ from app.domain.resume.error_handler import (
 )
 from app.domain.resume.schemas import (
     ProjectInfoDict,
-    RepoContext,
-    ResumeData,
-    ResumeRequest,
     ResumeState,
-    UserStats,
 )
+from app.domain.resume.schemas.plan import BulletPlan, ProjectPlan
 from app.domain.resume.service import (
     collect_project_info,
     collect_repo_contexts,
@@ -36,7 +35,7 @@ from app.domain.resume.workflow_utils import (
     should_evaluate,
 )
 from app.infra.github.client import parse_repo_url
-from app.infra.llm.client import evaluate_resume, generate_resume
+from app.infra.llm.client import evaluate_resume, generate_resume, plan_resume
 
 logger = get_logger(__name__)
 
@@ -111,8 +110,128 @@ async def collect_data_node(state: ResumeState) -> ResumeState:
         )
 
 
+async def plan_node(state: ResumeState) -> ResumeState:
+    """Plan 노드: Gemini가 프로젝트별로 병렬 분석하여 불릿 작성 계획 생성"""
+    project_info = state.get("project_info", [])
+    repo_contexts = state.get("repo_contexts", {})
+    request = state["request"]
+    session_id = state.get("session_id")
+
+    logger.info("plan_node 시작", projects=len(project_info))
+
+    async def _plan_single_project(project: ProjectInfoDict) -> ProjectPlan:
+        repo_name = project.get("repo_name", "")
+        repo_context = repo_contexts.get(repo_name)
+        context_dict = None
+        if repo_context:
+            context_dict = {
+                "languages": (
+                    repo_context.languages
+                    if hasattr(repo_context, "languages")
+                    else repo_context.get("languages", {})
+                ),
+                "description": (
+                    repo_context.description
+                    if hasattr(repo_context, "description")
+                    else repo_context.get("description")
+                ),
+                "readme_summary": (
+                    repo_context.readme_summary
+                    if hasattr(repo_context, "readme_summary")
+                    else repo_context.get("readme_summary")
+                ),
+            }
+
+        return await plan_resume(
+            project_info=project,
+            position=request.position,
+            repo_context=context_dict,
+            session_id=session_id,
+        )
+
+    tasks = [_plan_single_project(p) for p in project_info]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    plans = []
+    for i, result in enumerate(results):
+        if isinstance(result, Exception):
+            repo_name = project_info[i].get("repo_name", "unknown")
+            logger.warning("plan 실패, 폴백 생성", repo=repo_name, error=str(result))
+            fallback = _create_fallback_plan(project_info[i])
+            plans.append(fallback)
+        else:
+            plans.append(result)
+
+    logger.info("plan_node 완료", plans=len(plans))
+
+    return {
+        **state,
+        "project_plans": plans,
+    }
+
+
+def _create_fallback_plan(project: ProjectInfoDict) -> ProjectPlan:
+    """Plan 실패 시 커밋 메시지를 그대로 사용하는 폴백 plan 생성"""
+    messages = project.get("messages", [])
+    feature_messages = [m for m in messages if "feat" in m.lower() or "PR #" in m]
+    if not feature_messages:
+        feature_messages = messages[:8]
+
+    bullet_plans = []
+    for msg in feature_messages[:8]:
+        clean_msg = msg.replace("commit: ", "").split(" | ")[0]
+        bullet_plans.append(
+            BulletPlan(
+                source_commits=[msg],
+                suggested_content=clean_msg,
+                technical_detail="폴백 - 원본 커밋 메시지 사용",
+            )
+        )
+
+    if len(bullet_plans) < 5:
+        for msg in messages:
+            if msg not in feature_messages:
+                clean_msg = msg.replace("commit: ", "").split(" | ")[0]
+                bullet_plans.append(
+                    BulletPlan(
+                        source_commits=[msg],
+                        suggested_content=clean_msg,
+                        technical_detail="폴백 - 원본 커밋 메시지 사용",
+                    )
+                )
+            if len(bullet_plans) >= 5:
+                break
+
+    return ProjectPlan(
+        project_name=project.get("repo_name", ""),
+        repo_url=project.get("repo_url", ""),
+        recommended_tech_stack=project.get("dependencies", [])[:8],
+        bullet_plans=bullet_plans,
+        skipped_commits=[],
+    )
+
+
+def _format_plans_for_generator(plans: list[ProjectPlan]) -> str:
+    """ProjectPlan 리스트를 vLLM 프롬프트용 텍스트로 변환"""
+    sections = []
+    for plan in plans:
+        lines = [
+            f"[프로젝트: {plan.project_name}]",
+            f"URL: {plan.repo_url}",
+            f"tech_stack: {', '.join(plan.recommended_tech_stack)}",
+            "",
+        ]
+        for j, bp in enumerate(plan.bullet_plans, 1):
+            lines.append(f"불릿 {j}: {bp.suggested_content}")
+            lines.append(f"  근거: {', '.join(bp.source_commits[:3])}")
+            if bp.technical_detail and bp.technical_detail != "폴백 - 원본 커밋 메시지 사용":
+                lines.append(f"  기술: {bp.technical_detail}")
+        sections.append("\n".join(lines))
+    return "\n\n".join(sections)
+
+
 async def generate_node(state: ResumeState) -> ResumeState:
-    """이력서 생성 노드: 배치 처리로 이력서 생성"""
+    """이력서 생성 노드: Plan 기반으로 이력서 JSON 생성"""
     retry_count = state.get("retry_count", 0)
     evaluation = state.get("evaluation")
 
@@ -133,21 +252,22 @@ async def generate_node(state: ResumeState) -> ResumeState:
         )
 
     request = state["request"]
-    repo_contexts = state.get("repo_contexts", {})
-    user_stats = state.get("user_stats")
     session_id = state.get("session_id")
     feedback = state.get("evaluation_feedback")
     previous_resume = state.get("resume_data") if feedback else None
+    project_plans = state.get("project_plans", [])
+
+    generation_plans = _format_plans_for_generator(project_plans) if project_plans else ""
 
     try:
-        resume_data = await _generate_in_batches(
+        resume_data = await generate_resume(
             project_info=project_info,
-            request=request,
-            repo_contexts=repo_contexts,
-            user_stats=user_stats,
+            position=request.position,
+            repo_urls=request.repo_urls,
             feedback=feedback,
             session_id=session_id,
             previous_resume=previous_resume,
+            generation_plans=generation_plans,
         )
 
         for project in resume_data.projects:
@@ -246,16 +366,26 @@ async def evaluate_node(state: ResumeState) -> ResumeState:
     return await evaluate_with_fallback(state, _evaluate)
 
 
-def should_continue(state: ResumeState) -> Literal["generate", "end"]:
-    """에러 상태 확인: 에러 있으면 종료, 없으면 다음 노드로"""
-    return "end" if has_error(state, "should_continue") else "generate"
+def should_continue(state: ResumeState) -> Literal["plan", "end"]:
+    """에러 상태 확인: 에러 있으면 종료, 없으면 plan 노드로"""
+    return "end" if has_error(state, "should_continue") else "plan"
+
+
+def _should_continue_after_plan(state: ResumeState) -> Literal["generate", "end"]:
+    """plan 후 에러 확인"""
+    return "end" if has_error(state, "_should_continue_after_plan") else "generate"
+
+
+_node_cache = InMemoryCache()
 
 
 def create_resume_workflow() -> CompiledStateGraph:
-    """이력서 생성 워크플로우 생성"""
+    """이력서 생성 워크플로우 생성 - Planner-Executor 패턴"""
     workflow = StateGraph(ResumeState)
 
-    workflow.add_node("collect_data", collect_data_node)
+    collect_data_cache_policy = CachePolicy(ttl=3600)
+    workflow.add_node("collect_data", collect_data_node, cache_policy=collect_data_cache_policy)
+    workflow.add_node("plan", plan_node)
     workflow.add_node("generate", generate_node)
     workflow.add_node("evaluate", evaluate_node)
 
@@ -264,6 +394,15 @@ def create_resume_workflow() -> CompiledStateGraph:
     workflow.add_conditional_edges(
         "collect_data",
         should_continue,
+        {
+            "plan": "plan",
+            "end": END,
+        },
+    )
+
+    workflow.add_conditional_edges(
+        "plan",
+        _should_continue_after_plan,
         {
             "generate": "generate",
             "end": END,
@@ -289,67 +428,4 @@ def create_resume_workflow() -> CompiledStateGraph:
         },
     )
 
-    return workflow.compile()
-
-
-async def _generate_in_batches(
-    project_info: list[ProjectInfoDict],
-    request: ResumeRequest,
-    repo_contexts: dict[str, RepoContext],
-    user_stats: UserStats | None = None,
-    feedback: str | None = None,
-    session_id: str | None = None,
-    previous_resume: ResumeData | None = None,
-) -> ResumeData:
-    """프로젝트를 배치로 나누어 이력서 생성 후 병합"""
-    if len(project_info) <= settings.workflow_batch_size:
-        return await generate_resume(
-            project_info=project_info,
-            position=request.position,
-            repo_urls=request.repo_urls,
-            repo_contexts=repo_contexts,
-            user_stats=user_stats,
-            feedback=feedback,
-            session_id=session_id,
-            previous_resume=previous_resume,
-        )
-
-    batches = [
-        project_info[i : i + settings.workflow_batch_size]
-        for i in range(0, len(project_info), settings.workflow_batch_size)
-    ]
-    logger.info("배치 처리 시작", total=len(project_info), batches=len(batches))
-
-    tasks = []
-    for batch_idx, batch in enumerate(batches):
-        batch_repo_urls = [p["repo_url"] for p in batch]
-        batch_repo_names = [p["repo_name"] for p in batch]
-        batch_contexts = {
-            name: ctx for name, ctx in repo_contexts.items() if name in batch_repo_names
-        }
-
-        task = generate_resume(
-            project_info=batch,
-            position=request.position,
-            repo_urls=batch_repo_urls,
-            repo_contexts=batch_contexts,
-            user_stats=user_stats if batch_idx == 0 else None,
-            feedback=feedback,
-            session_id=session_id,
-            previous_resume=previous_resume,
-        )
-        tasks.append(task)
-
-    results = await asyncio.gather(*tasks)
-
-    return _merge_resume_results(results)
-
-
-def _merge_resume_results(results: list[ResumeData]) -> ResumeData:
-    """여러 ResumeData를 하나로 병합"""
-    all_projects = []
-
-    for result in results:
-        all_projects.extend(result.projects)
-
-    return ResumeData(projects=all_projects)
+    return workflow.compile(cache=_node_cache)

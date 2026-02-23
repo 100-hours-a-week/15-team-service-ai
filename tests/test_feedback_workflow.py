@@ -51,7 +51,6 @@ SAMPLE_OVERALL_OUTPUT = OverallFeedbackOutput(
 class TestGenerateFeedbackNode:
     """개별 피드백 생성 노드 테스트"""
 
-    @pytest.mark.asyncio
     async def test_generate_success(self):
         """정상 생성"""
         from app.domain.interview.feedback_workflow import (
@@ -68,7 +67,6 @@ class TestGenerateFeedbackNode:
         assert result["feedback_result"] == SAMPLE_FEEDBACK_OUTPUT
         assert result["retry_count"] == 0
 
-    @pytest.mark.asyncio
     async def test_generate_retry_increments_count(self):
         """평가 실패 후 재시도 시 retry_count 증가"""
         from app.domain.interview.feedback_workflow import (
@@ -91,7 +89,6 @@ class TestGenerateFeedbackNode:
         assert result["retry_count"] == 1
         assert result["feedback_result"] == SAMPLE_FEEDBACK_OUTPUT
 
-    @pytest.mark.asyncio
     async def test_generate_connection_error(self):
         """연결 오류 시 에러 상태 반환"""
         from app.domain.interview.feedback_workflow import (
@@ -107,7 +104,6 @@ class TestGenerateFeedbackNode:
 
         assert result.get("error_code") == ErrorCode.LLM_API_ERROR
 
-    @pytest.mark.asyncio
     async def test_generate_value_error(self):
         """파싱 오류 시 에러 상태 반환"""
         from app.domain.interview.feedback_workflow import (
@@ -127,7 +123,6 @@ class TestGenerateFeedbackNode:
 class TestEvaluateFeedbackNode:
     """개별 피드백 평가 노드 테스트"""
 
-    @pytest.mark.asyncio
     async def test_evaluate_pass(self):
         """평가 통과"""
         from app.domain.interview.feedback_workflow import (
@@ -153,7 +148,6 @@ class TestEvaluateFeedbackNode:
 
         assert result["evaluation"] == "pass"
 
-    @pytest.mark.asyncio
     async def test_evaluate_fail(self):
         """평가 실패"""
         from app.domain.interview.feedback_workflow import (
@@ -180,7 +174,6 @@ class TestEvaluateFeedbackNode:
         assert result["evaluation"] == "fail"
         assert result["evaluation_feedback"] == "점수와 피드백이 불일치"
 
-    @pytest.mark.asyncio
     async def test_evaluate_fallback_on_error(self):
         """평가 실패 시 pass로 폴백"""
         from app.domain.interview.feedback_workflow import (
@@ -205,7 +198,6 @@ class TestEvaluateFeedbackNode:
 class TestGenerateOverallNode:
     """종합 피드백 생성 노드 테스트"""
 
-    @pytest.mark.asyncio
     async def test_generate_overall_success(self):
         """종합 피드백 정상 생성"""
         from app.domain.interview.feedback_workflow import (
@@ -221,7 +213,6 @@ class TestGenerateOverallNode:
 
         assert result["feedback_result"] == SAMPLE_OVERALL_OUTPUT
 
-    @pytest.mark.asyncio
     async def test_generate_overall_connection_error(self):
         """종합 피드백 연결 오류"""
         from app.domain.interview.feedback_workflow import (
@@ -241,7 +232,6 @@ class TestGenerateOverallNode:
 class TestEvaluateOverallNode:
     """종합 피드백 평가 노드 테스트"""
 
-    @pytest.mark.asyncio
     async def test_evaluate_overall_pass(self):
         """종합 피드백 평가 통과"""
         from app.domain.interview.feedback_workflow import (
@@ -271,7 +261,6 @@ class TestEvaluateOverallNode:
 class TestFeedbackAgent:
     """개별 피드백 에이전트 테스트"""
 
-    @pytest.mark.asyncio
     async def test_agent_success(self):
         """에이전트 정상 실행"""
         from app.domain.interview.feedback_agent import run_feedback_agent
@@ -308,7 +297,6 @@ class TestFeedbackAgent:
         assert result == SAMPLE_FEEDBACK_OUTPUT
         assert error is None
 
-    @pytest.mark.asyncio
     async def test_agent_workflow_error(self):
         """워크플로우 에러 상태 반환"""
         from app.domain.interview.feedback_agent import run_feedback_agent
@@ -344,7 +332,6 @@ class TestFeedbackAgent:
         assert result is None
         assert error == "피드백 생성 실패"
 
-    @pytest.mark.asyncio
     async def test_agent_timeout(self):
         """에이전트 타임아웃"""
         from app.domain.interview.feedback_agent import run_feedback_agent
@@ -379,7 +366,6 @@ class TestFeedbackAgent:
 class TestOverallFeedbackAgent:
     """종합 피드백 에이전트 테스트"""
 
-    @pytest.mark.asyncio
     async def test_overall_agent_success(self):
         """종합 피드백 에이전트 정상 실행"""
         from app.domain.interview.feedback_agent import (
@@ -415,7 +401,6 @@ class TestOverallFeedbackAgent:
         assert result == SAMPLE_OVERALL_OUTPUT
         assert error is None
 
-    @pytest.mark.asyncio
     async def test_overall_agent_error(self):
         """종합 피드백 에이전트 에러 반환"""
         from app.domain.interview.feedback_agent import (
@@ -471,7 +456,6 @@ class TestFeedbackEndpoint:
         ],
     }
 
-    @pytest.mark.asyncio
     async def test_endpoint_all_success(self, async_client):
         """전체 성공 시 success 응답"""
         with (
@@ -498,7 +482,6 @@ class TestFeedbackEndpoint:
         assert data["feedbacks"][0]["score"] == 7
         assert data["overallFeedback"]["overallScore"] == 7
 
-    @pytest.mark.asyncio
     async def test_endpoint_partial_success(self, async_client):
         """개별 피드백 실패 + 종합 성공 시 success 응답"""
         with (
@@ -524,7 +507,6 @@ class TestFeedbackEndpoint:
         assert data["feedbacks"] is None
         assert data["overallFeedback"] is not None
 
-    @pytest.mark.asyncio
     async def test_endpoint_all_failure(self, async_client):
         """전체 실패 시 failed 응답"""
         with (
@@ -549,7 +531,6 @@ class TestFeedbackEndpoint:
         assert data["status"] == "failed"
         assert data["error"] is not None
 
-    @pytest.mark.asyncio
     async def test_endpoint_messages_max_length(self, async_client):
         """messages 21개 초과 시 422"""
         messages = [

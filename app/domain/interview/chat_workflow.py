@@ -130,7 +130,11 @@ def create_chat_workflow(
     """멀티턴 채팅 워크플로우 생성
 
     checkpointer가 없으면 interrupt가 동작하지 않습니다
+    LangGraph Studio에서 dict를 전달하는 경우 None으로 폴백합니다
     """
+    if checkpointer is not None and not isinstance(checkpointer, BaseCheckpointSaver):
+        checkpointer = None
+
     workflow = StateGraph(ChatState)
 
     workflow.add_node("respond", respond_node)

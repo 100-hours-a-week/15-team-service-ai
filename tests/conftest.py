@@ -142,7 +142,10 @@ def mock_langfuse_get_prompt():
         return f"mock-prompt-{name}"
 
     with (
-        patch("app.infra.llm.client.get_prompt", side_effect=fake),
+        patch("app.infra.llm.resume.get_prompt", side_effect=fake),
+        patch("app.infra.llm.interview.get_prompt", side_effect=fake),
+        patch("app.infra.llm.chat.get_prompt", side_effect=fake),
+        patch("app.infra.llm.feedback.get_prompt", side_effect=fake),
         patch("app.domain.resume.prompts.builder.get_prompt", side_effect=fake),
     ):
         yield

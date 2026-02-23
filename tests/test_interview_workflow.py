@@ -26,7 +26,6 @@ class TestInterviewGenerateNode:
             question_count=5,
         )
 
-    @pytest.mark.asyncio
     async def test_generate_success(self, base_state):
         """정상 면접 질문 생성"""
         mock_questions = InterviewQuestionsOutput(
@@ -49,7 +48,6 @@ class TestInterviewGenerateNode:
         assert result["questions"] == mock_questions
         assert result.get("error_code") is None
 
-    @pytest.mark.asyncio
     async def test_generate_retry_increments_count(self, base_state):
         """재시도 시 retry_count 증가"""
         state_with_fail = dict(base_state)
@@ -74,7 +72,6 @@ class TestInterviewGenerateNode:
 
         assert result["retry_count"] == 2
 
-    @pytest.mark.asyncio
     async def test_generate_connect_error(self, base_state):
         """LLM 서버 연결 실패 시 에러 상태"""
         with patch(
@@ -87,7 +84,6 @@ class TestInterviewGenerateNode:
         assert result["error_code"] == ErrorCode.LLM_API_ERROR
         assert "연결 실패" in result["error_message"]
 
-    @pytest.mark.asyncio
     async def test_generate_timeout_error(self, base_state):
         """LLM 요청 타임아웃 시 에러 상태"""
         with patch(
@@ -100,7 +96,6 @@ class TestInterviewGenerateNode:
         assert result["error_code"] == ErrorCode.LLM_API_ERROR
         assert "타임아웃" in result["error_message"]
 
-    @pytest.mark.asyncio
     async def test_generate_http_error(self, base_state):
         """LLM HTTP 오류 시 에러 상태"""
         mock_response = httpx.Response(500, request=httpx.Request("POST", "test"))
@@ -118,7 +113,6 @@ class TestInterviewGenerateNode:
         assert result["error_code"] == ErrorCode.LLM_API_ERROR
         assert "HTTP 500" in result["error_message"]
 
-    @pytest.mark.asyncio
     async def test_generate_value_error(self, base_state):
         """데이터 오류 시 에러 상태"""
         with patch(
@@ -155,7 +149,6 @@ class TestInterviewEvaluateNode:
             retry_count=0,
         )
 
-    @pytest.mark.asyncio
     async def test_evaluate_pass(self, base_state):
         """평가 통과"""
         eval_result = InterviewEvaluationOutput(
@@ -174,7 +167,6 @@ class TestInterviewEvaluateNode:
 
         assert result["evaluation"] == "pass"
 
-    @pytest.mark.asyncio
     async def test_evaluate_fail(self, base_state):
         """평가 실패 - 재시도 유도"""
         eval_result = InterviewEvaluationOutput(
@@ -194,7 +186,6 @@ class TestInterviewEvaluateNode:
         assert result["evaluation"] == "fail"
         assert "인접하지 않음" in result["evaluation_feedback"]
 
-    @pytest.mark.asyncio
     async def test_evaluate_fallback_on_connection_error(self, base_state):
         """Gemini 연결 실패 시 pass로 폴백"""
         with patch(
@@ -206,7 +197,6 @@ class TestInterviewEvaluateNode:
 
         assert result["evaluation"] == "pass"
 
-    @pytest.mark.asyncio
     async def test_evaluate_fallback_on_timeout(self, base_state):
         """Gemini 타임아웃 시 pass로 폴백"""
         with patch(
@@ -218,7 +208,6 @@ class TestInterviewEvaluateNode:
 
         assert result["evaluation"] == "pass"
 
-    @pytest.mark.asyncio
     async def test_evaluate_fallback_on_parse_error(self, base_state):
         """파싱 오류 시 pass로 폴백"""
         with patch(

@@ -3,6 +3,8 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 import httpx
+from langgraph.graph import END, StateGraph
+from langgraph.graph.state import CompiledStateGraph
 
 from app.core.logging import get_logger
 
@@ -69,61 +71,97 @@ async def evaluate_with_fallback(
     logger.info("평가 노드 시작", node=node_name)
     start_time = time.monotonic()
 
-    try:
-        evaluation = await evaluate_fn()
+    last_error = None
+    for attempt in range(2):
+        try:
+            evaluation = await evaluate_fn()
 
-        elapsed = time.monotonic() - start_time
-        logger.info(
-            "평가 노드 완료",
-            node=node_name,
-            result=evaluation.result,
-            elapsed_s=round(elapsed, 1),
-        )
+            elapsed = time.monotonic() - start_time
+            logger.info(
+                "평가 노드 완료",
+                node=node_name,
+                result=evaluation.result,
+                elapsed_s=round(elapsed, 1),
+            )
 
-        return {
-            **state,
-            "evaluation": evaluation.result,
-            "evaluation_feedback": evaluation.feedback,
-        }
+            return {
+                **state,
+                "evaluation": evaluation.result,
+                "evaluation_feedback": evaluation.feedback,
+            }
 
-    except httpx.TimeoutException as e:
-        elapsed = time.monotonic() - start_time
-        logger.error(
-            "타임아웃으로 평가 건너뜀",
-            node=node_name,
-            error=str(e),
-            elapsed_s=round(elapsed, 1),
-        )
+        except (httpx.TimeoutException, httpx.ConnectError, httpx.HTTPStatusError) as e:
+            last_error = e
+            if attempt == 0:
+                logger.warning(
+                    "평가 실패, 1회 재시도",
+                    node=node_name,
+                    attempt=attempt + 1,
+                    error=str(e),
+                )
+                continue
 
-    except httpx.ConnectError as e:
-        elapsed = time.monotonic() - start_time
-        logger.error(
-            "Gemini 연결 실패로 평가 건너뜀",
-            node=node_name,
-            error=str(e),
-            elapsed_s=round(elapsed, 1),
-        )
+        except (ValueError, KeyError, TypeError) as e:
+            last_error = e
+            break
 
-    except httpx.HTTPStatusError as e:
-        elapsed = time.monotonic() - start_time
-        logger.error(
-            "Gemini API 오류로 평가 건너뜀",
-            node=node_name,
-            status=e.response.status_code,
-            elapsed_s=round(elapsed, 1),
-        )
-
-    except (ValueError, KeyError, TypeError) as e:
-        elapsed = time.monotonic() - start_time
-        logger.error(
-            "데이터 파싱 오류로 평가 건너뜀",
-            node=node_name,
-            error=str(e),
-            elapsed_s=round(elapsed, 1),
-        )
+    elapsed = time.monotonic() - start_time
+    logger.error(
+        "평가 실패로 건너뜀",
+        node=node_name,
+        error=str(last_error),
+        elapsed_s=round(elapsed, 1),
+    )
 
     return {
         **state,
         "evaluation": "pass",
         "evaluation_feedback": "",
     }
+
+
+def build_gen_eval_retry_graph(
+    state_schema: type,
+    generate_node: Callable,
+    evaluate_node: Callable,
+    max_retries: int,
+    generate_node_name: str = "generate",
+    evaluate_node_name: str = "evaluate",
+) -> CompiledStateGraph:
+    """생성-평가-재시도 패턴 워크플로우 빌더
+
+    Args:
+        state_schema: 워크플로우에 사용할 TypedDict 상태 클래스
+        generate_node: 생성 노드 함수
+        evaluate_node: 평가 노드 함수
+        max_retries: 최대 재시도 횟수
+        generate_node_name: 그래프에 등록할 생성 노드 이름
+        evaluate_node_name: 그래프에 등록할 평가 노드 이름
+    """
+    workflow = StateGraph(state_schema)
+
+    workflow.add_node(generate_node_name, generate_node)
+    workflow.add_node(evaluate_node_name, evaluate_node)
+
+    workflow.set_entry_point(generate_node_name)
+
+    workflow.add_conditional_edges(
+        generate_node_name,
+        should_evaluate,
+        {
+            "evaluate": evaluate_node_name,
+            "end": END,
+        },
+    )
+
+    should_retry = make_should_retry(max_retries, generate_node_name)
+    workflow.add_conditional_edges(
+        evaluate_node_name,
+        should_retry,
+        {
+            generate_node_name: generate_node_name,
+            "end": END,
+        },
+    )
+
+    return workflow.compile()

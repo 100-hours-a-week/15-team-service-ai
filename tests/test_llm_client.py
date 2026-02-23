@@ -185,7 +185,6 @@ class TestGenerateResume:
             }
         ]
 
-    @pytest.mark.asyncio
     async def test_generate_resume_success(self, sample_project_info):
         """정상 이력서 생성"""
         expected_result = ResumeData(
@@ -204,7 +203,7 @@ class TestGenerateResume:
             return_value=expected_result
         )
 
-        with patch("app.infra.llm.client.get_generator_llm", return_value=mock_llm):
+        with patch("app.infra.llm.resume.get_generator_llm", return_value=mock_llm):
             result = await generate_resume(
                 project_info=sample_project_info,
                 position="백엔드 개발자",
@@ -215,7 +214,6 @@ class TestGenerateResume:
         assert len(result.projects) == 1
         assert result.projects[0].name == "Test Project"
 
-    @pytest.mark.asyncio
     async def test_generate_resume_with_feedback(self, sample_project_info):
         """피드백 포함 재시도 생성"""
         expected_result = ResumeData(
@@ -234,7 +232,7 @@ class TestGenerateResume:
             return_value=expected_result
         )
 
-        with patch("app.infra.llm.client.get_generator_llm", return_value=mock_llm):
+        with patch("app.infra.llm.resume.get_generator_llm", return_value=mock_llm):
             result = await generate_resume(
                 project_info=sample_project_info,
                 position="백엔드 개발자",
@@ -244,7 +242,6 @@ class TestGenerateResume:
 
         assert result == expected_result
 
-    @pytest.mark.asyncio
     async def test_generate_resume_with_repo_contexts(self, sample_project_info):
         """레포지토리 컨텍스트 포함 생성"""
         repo_contexts = {
@@ -272,7 +269,7 @@ class TestGenerateResume:
             return_value=expected_result
         )
 
-        with patch("app.infra.llm.client.get_generator_llm", return_value=mock_llm):
+        with patch("app.infra.llm.resume.get_generator_llm", return_value=mock_llm):
             result = await generate_resume(
                 project_info=sample_project_info,
                 position="백엔드 개발자",
@@ -282,7 +279,6 @@ class TestGenerateResume:
 
         assert result == expected_result
 
-    @pytest.mark.asyncio
     async def test_generate_resume_with_user_stats(self, sample_project_info):
         """사용자 통계 포함 생성"""
         user_stats = UserStats(total_commits=100, total_prs=20, total_issues=10)
@@ -302,7 +298,7 @@ class TestGenerateResume:
             return_value=expected_result
         )
 
-        with patch("app.infra.llm.client.get_generator_llm", return_value=mock_llm):
+        with patch("app.infra.llm.resume.get_generator_llm", return_value=mock_llm):
             result = await generate_resume(
                 project_info=sample_project_info,
                 position="백엔드 개발자",
@@ -330,7 +326,6 @@ class TestEvaluateResume:
             ]
         )
 
-    @pytest.mark.asyncio
     async def test_evaluate_resume_pass(self, sample_resume_data):
         """평가 통과 결과 파싱"""
         expected_result = EvaluationOutput(
@@ -345,7 +340,7 @@ class TestEvaluateResume:
             return_value=expected_result
         )
 
-        with patch("app.infra.llm.client.get_evaluator_llm", return_value=mock_llm):
+        with patch("app.infra.llm.resume.get_evaluator_llm", return_value=mock_llm):
             result = await evaluate_resume(
                 resume_data=sample_resume_data,
                 position="백엔드 개발자",
@@ -355,7 +350,6 @@ class TestEvaluateResume:
         assert result.violated_rule is None
         assert result.feedback == "모든 기준을 충족합니다"
 
-    @pytest.mark.asyncio
     async def test_evaluate_resume_fail(self, sample_resume_data):
         """평가 실패 결과 및 피드백 파싱"""
         expected_result = EvaluationOutput(
@@ -370,7 +364,7 @@ class TestEvaluateResume:
             return_value=expected_result
         )
 
-        with patch("app.infra.llm.client.get_evaluator_llm", return_value=mock_llm):
+        with patch("app.infra.llm.resume.get_evaluator_llm", return_value=mock_llm):
             result = await evaluate_resume(
                 resume_data=sample_resume_data,
                 position="백엔드 개발자",
@@ -381,7 +375,6 @@ class TestEvaluateResume:
         assert result.violated_item == "description"
         assert result.feedback == "설명이 너무 짧습니다"
 
-    @pytest.mark.asyncio
     async def test_evaluate_resume_with_session_id(self, sample_resume_data):
         """세션 ID 포함 평가"""
         expected_result = EvaluationOutput(
@@ -396,7 +389,7 @@ class TestEvaluateResume:
             return_value=expected_result
         )
 
-        with patch("app.infra.llm.client.get_evaluator_llm", return_value=mock_llm):
+        with patch("app.infra.llm.resume.get_evaluator_llm", return_value=mock_llm):
             result = await evaluate_resume(
                 resume_data=sample_resume_data,
                 position="백엔드 개발자",

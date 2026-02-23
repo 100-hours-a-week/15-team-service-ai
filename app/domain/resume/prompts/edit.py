@@ -75,13 +75,17 @@ All output MUST be in Korean.
 
 ### description
 - 5-8 bullets, format: "- [내용]"
-- Allowed endings: ~구현, ~구축, ~설계, ~처리, ~연동, ~도입, ~최적화, ~개선, ~적용, ~개발, ~분석, ~관리, ~배포, ~자동화, ~통합
-- Forbidden endings: ~했습니다, ~하였습니다, ~입니다, ~했음, ~함
+- Must end with noun-form: ~구현, ~구축, ~설계, ~개선, ~적용, ~도입 등 명사형 어미 사용
+- FORBIDDEN endings: ~했습니다, ~하였습니다, ~입니다, ~했음, ~함, ~합니다, ~됩니다
 
-### Minimum bullets after deletion
-When deletion drops bullets below 5:
+### Minimum bullets enforcement
+If the input description has FEWER than 5 bullets (regardless of edit type):
+- You MUST bring the total up to 5 bullets as part of this edit
 - Split one existing bullet into two more specific bullets, OR
 - Add one new bullet describing a closely related technical detail
+
+When deletion drops bullets below 5:
+- Same rule applies - always perform the deletion AND compensate
 - NEVER refuse the deletion - always perform it AND compensate
 
 ## OUTPUT FORMAT
@@ -113,7 +117,7 @@ RESUME_EDIT_HUMAN = """Edit this resume according to the [수정 계획] in the 
 [ ] 계획에 명시되지 않은 필드는 변경하지 않았는가
 [ ] tech_stack: 1-20개, 제외 항목 없음
 [ ] description: "- "로 시작, 5-8 불릿
-[ ] 불릿 어미: ~구현, ~구축, ~설계 계열만 사용
+[ ] 불릿 어미: 명사형 종결, ~했습니다/~입니다 등 문장체 금지
 
 Return the complete modified resume."""
 
@@ -134,7 +138,7 @@ RESUME_EDIT_RETRY_HUMAN = """Fix the resume edit based on evaluation feedback.
 [ ] 계획에 명시되지 않은 필드는 변경하지 않았는가
 [ ] tech_stack: 1-20개, 제외 항목 없음
 [ ] description: "- "로 시작, 5-8 불릿
-[ ] 불릿 어미: ~구현, ~구축, ~설계 계열만 사용
+[ ] 불릿 어미: 명사형 종결, ~했습니다/~입니다 등 문장체 금지
 
 Return the complete modified resume."""
 
@@ -163,9 +167,10 @@ FAIL if contains ANY of these:
 - FAIL if first line NOT starting with "- "
 
 ### Rule 4: Forbidden endings
-FAIL if bullet ends with: ~했습니다, ~하였습니다, ~입니다, ~했음, ~함
+FAIL if bullet ends with sentence-style endings: ~했습니다, ~하였습니다, ~입니다, ~했음, ~함, ~합니다, ~됩니다
 
-ALLOWED only: ~구현, ~구축, ~설계, ~처리, ~연동, ~도입, ~최적화, ~개선, ~적용, ~개발, ~분석, ~관리, ~배포, ~자동화, ~통합
+Bullets MUST end with noun-form endings. Examples of VALID endings: ~구현, ~구축, ~향상, ~통일, ~검증, ~달성, ~개선, ~적용 등
+The key rule: NO sentence endings, only noun-form endings
 
 ### Rule 5: Trivial content
 FAIL if contains: CSS 수정, 오타 수정, README 수정, 패키지 설치

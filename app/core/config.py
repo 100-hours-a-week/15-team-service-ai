@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     vllm_api_key: str = ""
     vllm_base_url: str = ""
     vllm_model: str = ""
-    vllm_timeout: float = 300.0
+    vllm_timeout: float = 600.0
 
     # Gemini 평가용 설정
     gemini_api_key: str = ""
@@ -19,9 +19,10 @@ class Settings(BaseSettings):
     gemini_timeout: float = 60.0
 
     # Callback
-    backend_callback_url: str = ""
+    generate_callback_url: str = ""
+    edit_callback_url: str = ""
+    chat_callback_url: str = ""
     ai_callback_secret: str = ""
-    edit_callback_base_url: str = ""
 
     # Timeout 설정
     github_timeout: float = 60.0
@@ -87,12 +88,14 @@ class Settings(BaseSettings):
             errors.append("VLLM_BASE_URL")
         if not self.gemini_api_key:
             errors.append("GEMINI_API_KEY")
-        if not self.backend_callback_url:
-            errors.append("BACKEND_CALLBACK_URL")
+        if not self.generate_callback_url:
+            errors.append("GENERATE_CALLBACK_URL")
+        if not self.edit_callback_url:
+            errors.append("EDIT_CALLBACK_URL")
+        if not self.chat_callback_url:
+            errors.append("CHAT_CALLBACK_URL")
         if not self.ai_callback_secret:
             errors.append("AI_CALLBACK_SECRET")
-        if not self.edit_callback_base_url:
-            errors.append("EDIT_CALLBACK_BASE_URL")
         return errors
 
     @model_validator(mode="after")
