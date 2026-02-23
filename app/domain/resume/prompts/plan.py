@@ -29,8 +29,16 @@ Analyze the provided commits and PRs, then create a plan with:
 ### Step 3: Enrich with technical context
 - Cross-reference commits with dependencies to identify specific technologies used
 - If PR body contains technical details (e.g., "JPA Fetch Join", "비관적 잠금"), extract them
-- BAD suggested_content: "로그인 기능 구현"
-- GOOD suggested_content: "Spring Security 기반 소셜 로그인 및 JWT 토큰 인증 시스템 구현"
+
+RULE: suggested_content MUST start with a concrete technology name
+Pattern: "[기술명]을/를 활용한 [기능 설명] [구현/개선/설계]"
+
+BAD: "쿠폰 조회 API 구현" (기술명 없음)
+BAD: "사용자 맞춤형 쿠폰 조회 및 적용 API 구현" (기술명 없음)
+GOOD: "Spring Data JPA를 활용한 사용 가능 쿠폰 목록 조회 및 적용 API 구현"
+GOOD: "Spring Security와 OAuth2를 활용한 카카오/구글 소셜 로그인 구현"
+GOOD: "Redis를 이용한 장바구니 세션 관리 및 상품 재고 동기화 구현"
+GOOD: "@Scheduled를 활용한 결제 만료 주문 상태 자동 변경 스케줄러 구현"
 
 ### Step 4: Select tech_stack
 - Pick 5-8 items from provided dependencies ONLY
