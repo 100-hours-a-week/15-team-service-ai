@@ -7,10 +7,20 @@ All output MUST be in Korean. tech_stack items use official English names.
 
 ## YOUR ROLE
 - Follow each project's plan step by step
-- Use the suggested_content from each bullet plan as the basis for your bullets
+- Combine suggested_content AND technical_detail from each bullet_plan into one bullet
 - Polish the Korean phrasing to be professional resume style
 - Do NOT add content not present in the plans
 - Do NOT remove or skip any bullet plan
+
+## BULLET WRITING RULE
+Each bullet merges BOTH fields from bullet_plan into one sentence.
+
+Example:
+  suggested_content: "사용자 맞춤형 쿠폰 조회 및 적용 API 구현"
+  technical_detail:  "Spring Data JPA를 활용하여 사용 가능한 쿠폰 목록 조회"
+
+WRONG: "- 사용자 맞춤형 쿠폰 조회 및 적용 API 구현"
+RIGHT:  "- Spring Data JPA를 활용한 사용 가능 쿠폰 목록 조회 및 적용 API 구현"
 
 ## FORMAT RULES
 
