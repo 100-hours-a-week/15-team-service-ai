@@ -2,8 +2,6 @@ from app.core.logging import get_logger
 from app.domain.resume.prompts.builder import (
     build_evaluator_system_prompt,
     build_generator_system_prompt,
-    format_project_info,
-    format_repo_contexts,
 )
 from app.domain.resume.schemas import (
     EvaluationOutput,
@@ -13,6 +11,7 @@ from app.domain.resume.schemas import (
     UserStats,
 )
 from app.domain.resume.schemas.edit import ClassifyOutput, EditPlanOutput
+from app.domain.resume.schemas.plan import ProjectPlan
 from app.infra.langfuse.prompt_manager import get_prompt
 from app.infra.llm.base import (
     _build_langfuse_config,
@@ -33,23 +32,10 @@ async def generate_resume(
     user_stats: UserStats | None = None,
     session_id: str | None = None,
     previous_resume: ResumeData | None = None,
+    generation_plans: str = "",
 ) -> ResumeData:
-    """프로젝트 정보 기반 이력서 생성"""
+    """Plan 기반 이력서 생성 - generation_plans 텍스트를 vLLM에 전달"""
     logger.debug("이력서 생성 요청", position=position, projects=len(project_info))
-
-    project_info_text = format_project_info(project_info)
-    repo_urls_text = "\n".join(repo_urls)
-
-    contexts_text = format_repo_contexts(repo_contexts)
-
-    if user_stats:
-        user_stats_text = (
-            f"총 커밋: {user_stats.total_commits}개, "
-            f"총 PR: {user_stats.total_prs}개, "
-            f"총 이슈: {user_stats.total_issues}개"
-        )
-    else:
-        user_stats_text = "없음"
 
     project_count = len(project_info)
 
@@ -59,24 +45,16 @@ async def generate_resume(
         )
         human_content = get_prompt(
             "resume-generator-retry-human",
-            position=position,
-            project_info=project_info_text,
-            repo_urls=repo_urls_text,
             feedback=feedback,
-            repo_contexts=contexts_text,
-            user_stats=user_stats_text,
             project_count=str(project_count),
             previous_resume_json=previous_resume_json,
+            generation_plans=generation_plans,
         )
     else:
         human_content = get_prompt(
             "resume-generator-human",
-            position=position,
-            project_info=project_info_text,
-            repo_urls=repo_urls_text,
-            repo_contexts=contexts_text,
-            user_stats=user_stats_text,
             project_count=str(project_count),
+            generation_plans=generation_plans,
         )
 
     config = _build_langfuse_config(session_id, ["resume", "generate", position])
@@ -205,6 +183,68 @@ async def plan_edit(
         "수정 계획 생성 완료",
         edit_type=result.edit_type,
         target=result.target_summary,
+    )
+    return result
+
+
+async def plan_resume(
+    project_info: dict,
+    position: str,
+    repo_context: dict | None = None,
+    session_id: str | None = None,
+) -> ProjectPlan:
+    """Gemini로 프로젝트 1개의 이력서 생성 계획 수행"""
+    logger.debug("이력서 Plan 요청", project=project_info.get("repo_name"), position=position)
+
+    from app.domain.resume.prompts.positions import get_position_rules
+
+    position_rules = get_position_rules(position)
+
+    system_prompt = get_prompt(
+        "resume-plan-system",
+        position=position,
+        position_rules=position_rules,
+    )
+
+    messages_text = "\n".join(project_info.get("messages", []))
+    dependencies_text = ", ".join(project_info.get("dependencies", []))
+
+    languages = ""
+    description = ""
+    readme_summary = ""
+    if repo_context:
+        languages = str(repo_context.get("languages", ""))
+        description = repo_context.get("description", "") or ""
+        readme_summary = repo_context.get("readme_summary", "") or ""
+
+    human_content = get_prompt(
+        "resume-plan-human",
+        position=position,
+        project_name=project_info.get("repo_name", ""),
+        repo_url=project_info.get("repo_url", ""),
+        messages=messages_text,
+        dependencies=dependencies_text,
+        languages=languages,
+        description=description,
+        readme_summary=readme_summary,
+    )
+
+    config = _build_langfuse_config(session_id, ["resume", "plan", position])
+
+    result = await _invoke_llm(
+        llm=get_evaluator_llm(),
+        output_type=ProjectPlan,
+        system_prompt=system_prompt,
+        human_content=human_content,
+        config=config,
+        structured_output_method="json_mode",
+    )
+
+    logger.debug(
+        "이력서 Plan 완료",
+        project=result.project_name,
+        bullets=len(result.bullet_plans),
+        tech_stack=len(result.recommended_tech_stack),
     )
     return result
 

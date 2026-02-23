@@ -1,5 +1,4 @@
 import httpx
-from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
 from app.core.exceptions import ErrorCode
@@ -14,9 +13,8 @@ from app.domain.resume.error_handler import (
     handle_http_error,
 )
 from app.domain.resume.workflow_utils import (
+    build_gen_eval_retry_graph,
     evaluate_with_fallback,
-    make_should_retry,
-    should_evaluate,
 )
 from app.infra.llm.client import (
     evaluate_feedback,
@@ -195,61 +193,19 @@ async def evaluate_overall_node(
 
 def create_feedback_workflow() -> CompiledStateGraph:
     """개별 피드백 워크플로우 생성"""
-    workflow = StateGraph(FeedbackState)
-
-    workflow.add_node("generate", generate_feedback_node)
-    workflow.add_node("evaluate", evaluate_feedback_node)
-
-    workflow.set_entry_point("generate")
-
-    workflow.add_conditional_edges(
-        "generate",
-        should_evaluate,
-        {
-            "evaluate": "evaluate",
-            "end": END,
-        },
+    return build_gen_eval_retry_graph(
+        state_schema=FeedbackState,
+        generate_node=generate_feedback_node,
+        evaluate_node=evaluate_feedback_node,
+        max_retries=MAX_FEEDBACK_RETRIES,
     )
-
-    should_retry = make_should_retry(MAX_FEEDBACK_RETRIES, "generate")
-    workflow.add_conditional_edges(
-        "evaluate",
-        should_retry,
-        {
-            "generate": "generate",
-            "end": END,
-        },
-    )
-
-    return workflow.compile()
 
 
 def create_overall_feedback_workflow() -> CompiledStateGraph:
     """종합 피드백 워크플로우 생성"""
-    workflow = StateGraph(OverallFeedbackState)
-
-    workflow.add_node("generate", generate_overall_node)
-    workflow.add_node("evaluate", evaluate_overall_node)
-
-    workflow.set_entry_point("generate")
-
-    workflow.add_conditional_edges(
-        "generate",
-        should_evaluate,
-        {
-            "evaluate": "evaluate",
-            "end": END,
-        },
+    return build_gen_eval_retry_graph(
+        state_schema=OverallFeedbackState,
+        generate_node=generate_overall_node,
+        evaluate_node=evaluate_overall_node,
+        max_retries=MAX_FEEDBACK_RETRIES,
     )
-
-    should_retry = make_should_retry(MAX_FEEDBACK_RETRIES, "generate")
-    workflow.add_conditional_edges(
-        "evaluate",
-        should_retry,
-        {
-            "generate": "generate",
-            "end": END,
-        },
-    )
-
-    return workflow.compile()

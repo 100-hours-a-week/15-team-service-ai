@@ -9,30 +9,7 @@ from app.domain.resume.schemas import ProjectInfo, ResumeData
 
 logger = get_logger(__name__)
 
-ALLOWED_ENDINGS = [
-    "구현",
-    "구축",
-    "설계",
-    "처리",
-    "연동",
-    "도입",
-    "최적화",
-    "개선",
-    "적용",
-    "개발",
-    "분석",
-    "관리",
-    "배포",
-    "자동화",
-    "통합",
-    "활용",
-    "해결",
-    "수행",
-    "제공",
-    "변경",
-]
-
-FORBIDDEN_ENDINGS = ["했습니다", "하였습니다", "입니다", "했음", "함"]
+FORBIDDEN_ENDINGS = ["했습니다", "하였습니다", "입니다", "했음", "함", "합니다", "됩니다"]
 
 TRIVIAL_CONTENT = ["CSS 수정", "오타 수정", "README 수정", "패키지 설치"]
 

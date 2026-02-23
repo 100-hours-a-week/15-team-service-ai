@@ -12,12 +12,18 @@ from app.domain.resume.schemas.github import (
     RepoContext,
     UserStats,
 )
+from app.domain.resume.schemas.plan import (
+    BulletPlan,
+    ProjectPlan,
+)
 
 __all__ = [
     "CommitInfo",
     "PRInfoExtended",
     "RepoContext",
     "UserStats",
+    "BulletPlan",
+    "ProjectPlan",
     "ResumeRequest",
     "ProjectInfo",
     "ProjectInfoDict",

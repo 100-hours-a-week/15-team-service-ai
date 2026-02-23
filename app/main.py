@@ -17,6 +17,7 @@ from app.core.logging import get_logger, setup_logging
 from app.core.middleware import RequestLoggingMiddleware
 from app.infra.github.client import close_client as close_github_client
 from app.infra.llm.client import setup_langfuse_env
+from app.infra.s3.client import close_s3_client
 
 setup_logging()
 setup_langfuse_env()
@@ -44,6 +45,7 @@ async def lifespan(app: FastAPI):
             except TimeoutError:
                 logger.warning("작업 종료 타임아웃 - 30초 초과")
         await close_github_client()
+        await close_s3_client()
 
 
 app = FastAPI(

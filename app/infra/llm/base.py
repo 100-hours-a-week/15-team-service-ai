@@ -8,6 +8,7 @@ from langchain_openai import ChatOpenAI
 from langfuse.langchain import CallbackHandler
 
 from app.core.config import settings
+from app.core.exceptions import LLMError
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -40,7 +41,7 @@ def get_generator_llm() -> ChatOpenAI:
         base_url=settings.vllm_base_url,
         timeout=settings.vllm_timeout,
         temperature=0.1,
-        max_tokens=4096,
+        max_tokens=16384,
     )
 
 
@@ -88,4 +89,4 @@ async def _invoke_llm[T](
         return await structured_llm.ainvoke(messages, config=config)
     except Exception as e:
         logger.error("LLM 출력 파싱 실패", output_type=output_type.__name__, error=str(e))
-        raise ValueError(f"LLM 출력 파싱 실패: {e}") from e
+        raise LLMError(detail=f"LLM 출력 파싱 실패: {e}") from e

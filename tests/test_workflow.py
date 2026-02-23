@@ -174,7 +174,7 @@ class TestGenerateNode:
         )
 
         with patch(
-            "app.domain.resume.workflow._generate_in_batches",
+            "app.domain.resume.workflow.generate_resume",
             new_callable=AsyncMock,
             return_value=mock_resume,
         ):
@@ -211,7 +211,7 @@ class TestGenerateNode:
         )
 
         with patch(
-            "app.domain.resume.workflow._generate_in_batches",
+            "app.domain.resume.workflow.generate_resume",
             new_callable=AsyncMock,
             return_value=mock_resume,
         ):
@@ -227,7 +227,7 @@ class TestGenerateNode:
         )
 
         with patch(
-            "app.domain.resume.workflow._generate_in_batches",
+            "app.domain.resume.workflow.generate_resume",
             new_callable=AsyncMock,
             side_effect=http_error,
         ):
@@ -239,7 +239,7 @@ class TestGenerateNode:
     async def test_generate_validation_error(self, base_state):
         """생성 검증 오류 시 에러 상태 설정"""
         with patch(
-            "app.domain.resume.workflow._generate_in_batches",
+            "app.domain.resume.workflow.generate_resume",
             new_callable=AsyncMock,
             side_effect=ValueError("Invalid format"),
         ):
@@ -403,8 +403,8 @@ class TestShouldContinue:
 
         assert result == "end"
 
-    def test_returns_generate_when_no_error(self):
-        """에러 없을 때 generate 반환"""
+    def test_returns_plan_when_no_error(self):
+        """에러 없을 때 plan 반환"""
         state = ResumeState(
             request=ResumeRequest(
                 repo_urls=["https://github.com/test/repo"],
@@ -414,7 +414,7 @@ class TestShouldContinue:
 
         result = should_continue(state)
 
-        assert result == "generate"
+        assert result == "plan"
 
 
 class TestShouldEvaluate:

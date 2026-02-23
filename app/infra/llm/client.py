@@ -22,6 +22,7 @@ from app.infra.llm.resume import (
     evaluate_resume,
     generate_resume,
     plan_edit,
+    plan_resume,
 )
 
 __all__ = [
@@ -45,6 +46,7 @@ __all__ = [
     "evaluate_resume",
     "generate_resume",
     "plan_edit",
+    "plan_resume",
     "format_project_info",
     "format_repo_contexts",
 ]

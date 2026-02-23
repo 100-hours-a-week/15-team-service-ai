@@ -1,3 +1,4 @@
+import asyncio
 import re
 
 import httpx
@@ -30,6 +31,8 @@ __all__ = [
 ]
 
 logger = get_logger(__name__)
+
+GITHUB_API_SEMAPHORE_LIMIT = 5
 
 MEANINGFUL_EXTENSIONS = frozenset(
     [
@@ -222,6 +225,75 @@ def _filter_and_sort_dependencies(deps: list[str]) -> list[str]:
     return sorted_deps
 
 
+async def _collect_single_project(
+    repo_url: str,
+    token: str | None,
+    username: str | None,
+    author_name: str | None,
+    semaphore: asyncio.Semaphore,
+) -> ProjectInfoDict | None:
+    """단일 레포지토리의 프로젝트 정보 수집
+
+    Args:
+        repo_url: GitHub 레포지토리 URL
+        token: GitHub OAuth 토큰
+        username: 인증된 사용자명
+        author_name: 인증된 사용자 실명
+        semaphore: GitHub API 동시 요청 제한 세마포어
+
+    Returns:
+        프로젝트 정보 딕셔너리, 수집 실패 또는 빈 레포이면 None
+    """
+    _, repo_name = parse_repo_url(repo_url)
+
+    async with semaphore:
+        try:
+            project_info = await get_project_info(
+                repo_url,
+                token,
+                author=username,
+                author_name=author_name,
+            )
+            file_tree = project_info["file_tree"]
+            commits = _filter_noise_commits(project_info["commits"])
+            pulls = project_info["pulls"]
+
+            if _is_empty_repository(file_tree):
+                logger.info("빈 레포지토리 스킵", repo=repo_name)
+                return None
+
+            dependencies = await _parse_dependencies(repo_url, file_tree, token)
+            messages = _format_messages(commits, pulls)
+
+            logger.info(
+                "프로젝트 정보 수집 완료",
+                repo=repo_name,
+                files=len(file_tree),
+                deps=len(dependencies),
+                messages=len(messages),
+            )
+
+            return {
+                "repo_name": repo_name,
+                "repo_url": repo_url,
+                "file_tree": _summarize_file_tree(file_tree),
+                "dependencies": dependencies,
+                "messages": messages,
+            }
+
+        except httpx.HTTPStatusError as e:
+            logger.error(
+                "프로젝트 정보 수집 실패 - HTTP 오류",
+                repo=repo_name,
+                status=e.response.status_code,
+            )
+            return None
+
+        except Exception as e:
+            logger.error("프로젝트 정보 수집 실패", repo=repo_name, error=str(e), exc_info=True)
+            return None
+
+
 async def collect_project_info(request: ResumeRequest) -> list[ProjectInfoDict]:
     """파일 목록 + 의존성 파일 기반으로 프로젝트 정보 수집
 
@@ -242,56 +314,13 @@ async def collect_project_info(request: ResumeRequest) -> list[ProjectInfoDict]:
         if username:
             logger.info("인증된 사용자로 필터링", username=username, name=author_name)
 
-    results = []
-
-    for repo_url in unique_urls:
-        _, repo_name = parse_repo_url(repo_url)
-
-        try:
-            project_info = await get_project_info(
-                repo_url,
-                request.github_token,
-                author=username,
-                author_name=author_name,
-            )
-            file_tree = project_info["file_tree"]
-            commits = _filter_noise_commits(project_info["commits"])
-            pulls = project_info["pulls"]
-
-            if _is_empty_repository(file_tree):
-                logger.info("빈 레포지토리 스킵", repo=repo_name)
-                continue
-
-            dependencies = await _parse_dependencies(repo_url, file_tree, request.github_token)
-            messages = _format_messages(commits, pulls)
-
-            results.append(
-                {
-                    "repo_name": repo_name,
-                    "repo_url": repo_url,
-                    "file_tree": _summarize_file_tree(file_tree),
-                    "dependencies": dependencies,
-                    "messages": messages,
-                }
-            )
-
-            logger.info(
-                "프로젝트 정보 수집 완료",
-                repo=repo_name,
-                files=len(file_tree),
-                deps=len(dependencies),
-                messages=len(messages),
-            )
-
-        except httpx.HTTPStatusError as e:
-            logger.error(
-                "프로젝트 정보 수집 실패 - HTTP 오류",
-                repo=repo_name,
-                status=e.response.status_code,
-            )
-
-        except Exception as e:
-            logger.error("프로젝트 정보 수집 실패", repo=repo_name, error=str(e), exc_info=True)
+    semaphore = asyncio.Semaphore(GITHUB_API_SEMAPHORE_LIMIT)
+    tasks = [
+        _collect_single_project(repo_url, request.github_token, username, author_name, semaphore)
+        for repo_url in unique_urls
+    ]
+    gathered = await asyncio.gather(*tasks)
+    results = [item for item in gathered if item is not None]
 
     if unique_urls and not results:
         logger.warning("모든 레포지토리에서 프로젝트 정보 수집 실패", total=len(unique_urls))
@@ -415,6 +444,44 @@ def _format_messages(commits: list, pulls: list) -> list[str]:
     return messages
 
 
+async def _collect_single_context(
+    repo_url: str,
+    token: str | None,
+    semaphore: asyncio.Semaphore,
+) -> tuple[str, RepoContext]:
+    """단일 레포지토리의 컨텍스트 정보 수집
+
+    Args:
+        repo_url: GitHub 레포지토리 URL
+        token: GitHub OAuth 토큰
+        semaphore: GitHub API 동시 요청 제한 세마포어
+
+    Returns:
+        레포 이름과 RepoContext 튜플
+    """
+    _, repo_name = parse_repo_url(repo_url)
+
+    async with semaphore:
+        try:
+            context = await get_repo_context(repo_url, token)
+            return repo_name, RepoContext(
+                name=repo_name,
+                languages=context["languages"],
+                description=context["description"],
+                topics=context["topics"],
+                readme_summary=context["readme"],
+            )
+        except Exception as e:
+            logger.warning("컨텍스트 수집 실패", repo=repo_name, error=str(e))
+            return repo_name, RepoContext(
+                name=repo_name,
+                languages={},
+                description=None,
+                topics=[],
+                readme_summary=None,
+            )
+
+
 async def collect_repo_contexts(request: ResumeRequest) -> dict[str, RepoContext]:
     """각 레포지토리의 컨텍스트 정보 수집.
 
@@ -424,31 +491,14 @@ async def collect_repo_contexts(request: ResumeRequest) -> dict[str, RepoContext
     Returns:
         레포 이름을 키로 하는 RepoContext 딕셔너리
     """
-    contexts = {}
     unique_urls = list(dict.fromkeys(request.repo_urls))
-
-    for repo_url in unique_urls:
-        _, repo_name = parse_repo_url(repo_url)
-
-        try:
-            context = await get_repo_context(repo_url, request.github_token)
-
-            contexts[repo_name] = RepoContext(
-                name=repo_name,
-                languages=context["languages"],
-                description=context["description"],
-                topics=context["topics"],
-                readme_summary=context["readme"],
-            )
-        except Exception as e:
-            logger.warning("컨텍스트 수집 실패", repo=repo_name, error=str(e))
-            contexts[repo_name] = RepoContext(
-                name=repo_name,
-                languages={},
-                description=None,
-                topics=[],
-                readme_summary=None,
-            )
+    semaphore = asyncio.Semaphore(GITHUB_API_SEMAPHORE_LIMIT)
+    tasks = [
+        _collect_single_context(repo_url, request.github_token, semaphore)
+        for repo_url in unique_urls
+    ]
+    results = await asyncio.gather(*tasks)
+    contexts = dict(results)
 
     logger.info("컨텍스트 수집 완료", repos=len(contexts))
     return contexts

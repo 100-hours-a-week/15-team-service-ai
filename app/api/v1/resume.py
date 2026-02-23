@@ -104,7 +104,7 @@ async def generate_resume(
     분당 5회 요청 제한이 적용됩니다
     """
     job_id = str(uuid.uuid4())
-    callback_url = settings.backend_callback_url
+    callback_url = settings.generate_callback_url
 
     resume_request = ResumeRequest(
         repo_urls=body.repo_urls,

@@ -94,6 +94,7 @@ class EditCallbackSuccessPayload(BaseModel):
     job_id: str = Field(alias="jobId")
     status: Literal["success"] = "success"
     content: EditCallbackContentData
+    message: str | None = None
 
 
 class EditCallbackFailurePayload(BaseModel):

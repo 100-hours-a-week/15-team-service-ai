@@ -17,6 +17,7 @@ from app.api.v2.schemas.resume_edit import (
 )
 from app.api.v2.utils import build_resume_json
 from app.core.config import settings
+from app.core.context import set_job_id
 from app.core.exceptions import ErrorCode
 from app.core.limiter import limiter
 from app.core.logging import get_logger
@@ -30,7 +31,7 @@ _background_tasks: set[asyncio.Task] = set()
 
 def _build_callback_url(job_id: str) -> str:
     """콜백 URL 생성 - /api/resume/{jobId}/callback 형태"""
-    base = settings.edit_callback_base_url.rstrip("/")
+    base = settings.edit_callback_url.rstrip("/")
     return f"{base}/{job_id}/callback"
 
 
@@ -55,6 +56,7 @@ def _build_callback_payload(
                     for p in edited_resume.projects
                 ],
             ),
+            message=getattr(edited_resume, "message", None),
         )
     else:
         payload = EditCallbackFailurePayload(
@@ -73,6 +75,7 @@ async def _run_edit_and_callback(
     message: str,
 ) -> None:
     """수정 에이전트 실행 후 콜백 전송"""
+    set_job_id(job_id)
     callback_url = _build_callback_url(job_id)
 
     try:

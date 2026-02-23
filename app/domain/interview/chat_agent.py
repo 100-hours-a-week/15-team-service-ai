@@ -10,6 +10,7 @@ from app.domain.interview.chat_workflow import create_chat_workflow
 from app.infra.llm.client import generate_chat_response, get_langfuse_handler
 
 logger = get_logger(__name__)
+_chat_workflow_cache: dict[int, object] = {}
 
 
 async def _run_single_call(
@@ -96,7 +97,10 @@ async def run_chat_agent(
         )
 
     try:
-        workflow = create_chat_workflow(checkpointer=checkpointer)
+        cp_id = id(checkpointer)
+        if cp_id not in _chat_workflow_cache:
+            _chat_workflow_cache[cp_id] = create_chat_workflow(checkpointer=checkpointer)
+        workflow = _chat_workflow_cache[cp_id]
         langfuse_handler = get_langfuse_handler()
         config = {
             "configurable": {"thread_id": thread_id},
