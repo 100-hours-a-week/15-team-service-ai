@@ -15,6 +15,8 @@ from app.infra.llm.base import (
 
 logger = get_logger(__name__)
 
+_VALID_INTERVIEW_TYPES = frozenset({"technical", "behavioral"})
+
 
 async def generate_feedback(
     resume_json: str,
@@ -28,6 +30,8 @@ async def generate_feedback(
     session_id: str | None = None,
 ) -> FeedbackOutput:
     """면접 피드백 생성 - vLLM 사용"""
+    if interview_type not in _VALID_INTERVIEW_TYPES:
+        raise ValueError(f"지원하지 않는 면접 유형: {interview_type}")
     logger.debug("피드백 생성 요청", interview_type=interview_type, position=position)
 
     related_project_text = related_project or "없음"
@@ -113,6 +117,8 @@ async def generate_overall_feedback(
     session_id: str | None = None,
 ) -> OverallFeedbackOutput:
     """종합 면접 피드백 생성 - vLLM 사용"""
+    if interview_type not in _VALID_INTERVIEW_TYPES:
+        raise ValueError(f"지원하지 않는 면접 유형: {interview_type}")
     logger.debug("종합 피드백 생성 요청", interview_type=interview_type, position=position)
 
     if feedback:

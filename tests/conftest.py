@@ -115,9 +115,6 @@ def sample_resume_state(
         repo_contexts={},
         user_stats=None,
         resume_data=sample_resume_data,
-        evaluation="",
-        evaluation_feedback="",
-        retry_count=0,
         error_code="",
         error_message="",
     )

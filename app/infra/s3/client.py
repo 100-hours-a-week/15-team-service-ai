@@ -1,3 +1,5 @@
+import asyncio
+
 import aioboto3
 from botocore.exceptions import ClientError
 
@@ -9,19 +11,23 @@ logger = get_logger(__name__)
 _session = aioboto3.Session()
 _s3_client = None
 _s3_client_ctx = None
+_s3_lock = asyncio.Lock()
 
 
 async def _get_s3_client():
     """S3 클라이언트 지연 초기화 싱글턴"""
     global _s3_client, _s3_client_ctx
-    if _s3_client is None:
-        _s3_client_ctx = _session.client(
-            "s3",
-            aws_access_key_id=settings.aws_access_key_id,
-            aws_secret_access_key=settings.aws_secret_access_key,
-            region_name=settings.aws_region,
-        )
-        _s3_client = await _s3_client_ctx.__aenter__()
+    if _s3_client is not None:
+        return _s3_client
+    async with _s3_lock:
+        if _s3_client is None:
+            _s3_client_ctx = _session.client(
+                "s3",
+                region_name=settings.aws_region,
+                aws_access_key_id=settings.aws_access_key_id,
+                aws_secret_access_key=settings.aws_secret_access_key,
+            )
+            _s3_client = await _s3_client_ctx.__aenter__()
     return _s3_client
 
 

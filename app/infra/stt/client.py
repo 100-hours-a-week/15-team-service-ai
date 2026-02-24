@@ -15,6 +15,14 @@ def _get_client() -> httpx.AsyncClient:
     return _client
 
 
+async def close_client() -> None:
+    """STT httpx 클라이언트 종료 - lifespan에서 호출"""
+    global _client
+    if _client is not None:
+        await _client.aclose()
+        _client = None
+
+
 async def transcribe_audio(
     file_content: bytes,
     filename: str,

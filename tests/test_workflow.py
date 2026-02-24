@@ -5,7 +5,6 @@ import pytest
 
 from app.core.exceptions import ErrorCode
 from app.domain.resume.schemas import (
-    EvaluationOutput,
     ProjectInfo,
     RepoContext,
     ResumeData,
@@ -15,13 +14,9 @@ from app.domain.resume.schemas import (
 )
 from app.domain.resume.workflow import (
     collect_data_node,
-    evaluate_node,
+    finalize_node,
     generate_node,
     should_continue,
-)
-from app.domain.resume.workflow_utils import (
-    make_should_retry,
-    should_evaluate,
 )
 
 
@@ -83,7 +78,6 @@ class TestCollectDataNode:
         assert result["project_info"] == mock_project_info
         assert result["repo_contexts"] == mock_repo_contexts
         assert result["user_stats"] == mock_user_stats
-        assert result["retry_count"] == 0
         assert result.get("error_code") is None
 
     async def test_collect_data_empty_project_info(self, base_state):
@@ -157,7 +151,6 @@ class TestGenerateNode:
                 }
             ],
             repo_contexts={},
-            retry_count=0,
         )
 
     async def test_generate_success(self, base_state):
@@ -193,32 +186,6 @@ class TestGenerateNode:
         assert result["error_code"] == ErrorCode.GENERATE_ERROR
         assert "프로젝트 정보가 없습니다" in result["error_message"]
 
-    async def test_generate_retry_increments_count(self, base_state):
-        """재시도 시 retry_count 증가"""
-        state_with_fail = dict(base_state)
-        state_with_fail["evaluation"] = "fail"
-        state_with_fail["retry_count"] = 1
-
-        mock_resume = ResumeData(
-            projects=[
-                ProjectInfo(
-                    name="Test",
-                    repo_url="https://github.com/testuser/testrepo",
-                    description="Test",
-                    tech_stack=["Python"],
-                )
-            ]
-        )
-
-        with patch(
-            "app.domain.resume.workflow.generate_resume",
-            new_callable=AsyncMock,
-            return_value=mock_resume,
-        ):
-            result = await generate_node(state_with_fail)
-
-        assert result["retry_count"] == 2
-
     async def test_generate_llm_api_error(self, base_state):
         """LLM API 오류 시 에러 상태 설정"""
         mock_response = httpx.Response(500, request=httpx.Request("POST", "test"))
@@ -249,8 +216,8 @@ class TestGenerateNode:
         assert "검증 오류" in result["error_message"]
 
 
-class TestEvaluateNode:
-    """evaluate_node 함수 테스트"""
+class TestFinalizeNode:
+    """finalize_node 함수 테스트"""
 
     @pytest.fixture
     def base_state(self) -> ResumeState:
@@ -262,25 +229,37 @@ class TestEvaluateNode:
                 github_token="test-token",
             ),
             job_id="test-job-123",
+            project_info=[
+                {
+                    "repo_name": "testrepo",
+                    "repo_url": "https://github.com/testuser/testrepo",
+                    "dependencies": ["fastapi"],
+                    "messages": ["feat: init"],
+                }
+            ],
             resume_data=ResumeData(
                 projects=[
                     ProjectInfo(
                         name="Test",
                         repo_url="https://github.com/testuser/testrepo",
-                        description="Test",
-                        tech_stack=["Python"],
+                        description="- 테스트 기능 구현",
+                        tech_stack=["Python", "FastAPI", "PostgreSQL"],
                     )
                 ]
             ),
         )
 
-    async def test_evaluate_pass(self, base_state):
-        """평가 통과 결과 처리"""
-        mock_evaluation = EvaluationOutput(
-            result="pass",
-            violated_rule=None,
-            violated_item=None,
-            feedback="이력서가 모든 기준을 충족합니다",
+    async def test_finalize_success(self, base_state):
+        """정상 윤문 - 정제된 ResumeData 반환"""
+        polished_resume = ResumeData(
+            projects=[
+                ProjectInfo(
+                    name="Test",
+                    repo_url="https://github.com/testuser/testrepo",
+                    description="- FastAPI 기반 테스트 기능 설계 및 구현",
+                    tech_stack=["Python", "FastAPI", "PostgreSQL"],
+                )
+            ]
         )
 
         with (
@@ -289,24 +268,18 @@ class TestEvaluateNode:
                 return_value=[],
             ),
             patch(
-                "app.domain.resume.workflow.evaluate_resume",
+                "app.domain.resume.workflow.finalize_resume",
                 new_callable=AsyncMock,
-                return_value=mock_evaluation,
+                return_value=polished_resume,
             ),
         ):
-            result = await evaluate_node(base_state)
+            result = await finalize_node(base_state)
 
-        assert result["evaluation"] == "pass"
-        assert result["evaluation_feedback"] == "이력서가 모든 기준을 충족합니다"
+        assert result["resume_data"] == polished_resume
 
-    async def test_evaluate_fail(self, base_state):
-        """평가 실패 결과 처리"""
-        mock_evaluation = EvaluationOutput(
-            result="fail",
-            violated_rule=2,
-            violated_item="tech_stack",
-            feedback="기술 스택이 부족합니다",
-        )
+    async def test_finalize_llm_error_graceful(self, base_state):
+        """LLM 실패 시 원본 ResumeData 유지"""
+        original_resume = base_state["resume_data"]
 
         with (
             patch(
@@ -314,75 +287,115 @@ class TestEvaluateNode:
                 return_value=[],
             ),
             patch(
-                "app.domain.resume.workflow.evaluate_resume",
+                "app.domain.resume.workflow.finalize_resume",
                 new_callable=AsyncMock,
-                return_value=mock_evaluation,
+                side_effect=Exception("LLM 호출 실패"),
             ),
         ):
-            result = await evaluate_node(base_state)
+            result = await finalize_node(base_state)
 
-        assert result["evaluation"] == "fail"
-        assert result["evaluation_feedback"] == "기술 스택이 부족합니다"
+        assert result["resume_data"] == original_resume
 
-    async def test_evaluate_llm_error_returns_pass(self, base_state):
-        """LLM 오류 시 관용적으로 pass 처리"""
-        mock_response = httpx.Response(500, request=httpx.Request("POST", "test"))
-        http_error = httpx.HTTPStatusError(
-            "Server Error", request=mock_response.request, response=mock_response
-        )
-
-        with (
-            patch(
-                "app.domain.resume.validators.validate_resume_format",
-                return_value=[],
-            ),
-            patch(
-                "app.domain.resume.workflow.evaluate_resume",
-                new_callable=AsyncMock,
-                side_effect=http_error,
-            ),
-        ):
-            result = await evaluate_node(base_state)
-
-        assert result["evaluation"] == "pass"
-        assert result["evaluation_feedback"] == ""
-
-    async def test_evaluate_value_error_returns_pass(self, base_state):
-        """ValueError 시 관용적으로 pass 처리"""
-        with (
-            patch(
-                "app.domain.resume.validators.validate_resume_format",
-                return_value=[],
-            ),
-            patch(
-                "app.domain.resume.workflow.evaluate_resume",
-                new_callable=AsyncMock,
-                side_effect=ValueError("Parse error"),
-            ),
-        ):
-            result = await evaluate_node(base_state)
-
-        assert result["evaluation"] == "pass"
-        assert result["evaluation_feedback"] == ""
-
-    async def test_evaluate_format_violation_returns_fail(self, base_state):
-        """코드 검증 위반 시 fail 처리"""
+    async def test_finalize_with_format_violations(self, base_state):
+        """포맷 위반이 있어도 Finalizer가 수정하여 반환"""
         mock_violations = [
             {
                 "project": "Test",
-                "rule": "기술 스택 최소 개수",
-                "detail": "기술 스택이 3개 미만",
+                "rule": "forbidden_ending",
+                "detail": "금지 어미 '~했습니다' 사용",
             }
         ]
+        polished_resume = ResumeData(
+            projects=[
+                ProjectInfo(
+                    name="Test",
+                    repo_url="https://github.com/testuser/testrepo",
+                    description="- FastAPI 기반 테스트 기능 구현",
+                    tech_stack=["Python", "FastAPI", "PostgreSQL"],
+                )
+            ]
+        )
 
-        with patch(
-            "app.domain.resume.validators.validate_resume_format",
-            return_value=mock_violations,
+        with (
+            patch(
+                "app.domain.resume.validators.validate_resume_format",
+                return_value=mock_violations,
+            ),
+            patch(
+                "app.domain.resume.workflow.finalize_resume",
+                new_callable=AsyncMock,
+                return_value=polished_resume,
+            ) as mock_finalize,
         ):
-            result = await evaluate_node(base_state)
+            result = await finalize_node(base_state)
 
-        assert result["evaluation"] == "fail"
-        assert "기술 스택이 3개 미만" in result["evaluation_feedback"]
+        assert result["resume_data"] == polished_resume
+        call_kwargs = mock_finalize.call_args[1]
+        assert "금지 어미" in call_kwargs["violations"]
+
+    async def test_finalize_hallucinated_repo_url_keeps_original(self, base_state):
+        """Finalizer가 repo_url을 바꾸면 원본 유지"""
+        original_resume = base_state["resume_data"]
+        hallucinated = ResumeData(
+            projects=[
+                ProjectInfo(
+                    name="Sample Project",
+                    repo_url="https://github.com/sample/repo",
+                    description="- RESTful API 기반의 백엔드 서버 설계",
+                    tech_stack=["Java", "Spring Boot"],
+                )
+            ]
+        )
+
+        with (
+            patch(
+                "app.domain.resume.validators.validate_resume_format",
+                return_value=[],
+            ),
+            patch(
+                "app.domain.resume.workflow.finalize_resume",
+                new_callable=AsyncMock,
+                return_value=hallucinated,
+            ),
+        ):
+            result = await finalize_node(base_state)
+
+        assert result["resume_data"] == original_resume
+
+    async def test_finalize_wrong_project_count_keeps_original(self, base_state):
+        """Finalizer가 프로젝트 수를 바꾸면 원본 유지"""
+        original_resume = base_state["resume_data"]
+        wrong_count = ResumeData(
+            projects=[
+                ProjectInfo(
+                    name="Test",
+                    repo_url="https://github.com/testuser/testrepo",
+                    description="- 기능 구현",
+                    tech_stack=["Python"],
+                ),
+                ProjectInfo(
+                    name="Extra",
+                    repo_url="https://github.com/extra/repo",
+                    description="- 추가 프로젝트",
+                    tech_stack=["Java"],
+                ),
+            ]
+        )
+
+        with (
+            patch(
+                "app.domain.resume.validators.validate_resume_format",
+                return_value=[],
+            ),
+            patch(
+                "app.domain.resume.workflow.finalize_resume",
+                new_callable=AsyncMock,
+                return_value=wrong_count,
+            ),
+        ):
+            result = await finalize_node(base_state)
+
+        assert result["resume_data"] == original_resume
 
 
 class TestShouldContinue:
@@ -415,93 +428,3 @@ class TestShouldContinue:
         result = should_continue(state)
 
         assert result == "plan"
-
-
-class TestShouldEvaluate:
-    """should_evaluate 조건 함수 테스트"""
-
-    def test_returns_end_when_error(self):
-        """에러 있을 때 end 반환"""
-        state = ResumeState(
-            request=ResumeRequest(
-                repo_urls=["https://github.com/test/repo"],
-                position="개발자",
-            ),
-            error_code=ErrorCode.LLM_API_ERROR,
-        )
-
-        result = should_evaluate(state)
-
-        assert result == "end"
-
-    def test_returns_evaluate_when_no_error(self):
-        """에러 없을 때 evaluate 반환"""
-        state = ResumeState(
-            request=ResumeRequest(
-                repo_urls=["https://github.com/test/repo"],
-                position="개발자",
-            ),
-        )
-
-        result = should_evaluate(state)
-
-        assert result == "evaluate"
-
-
-class TestShouldRetry:
-    """should_retry 조건 함수 테스트"""
-
-    def setup_method(self):
-        """각 테스트 전에 should_retry 함수 생성"""
-        self.should_retry = make_should_retry(max_retries=2, retry_node="generate")
-
-    def test_returns_end_when_error(self):
-        """에러 있을 때 end 반환"""
-        state = ResumeState(
-            request=ResumeRequest(
-                repo_urls=["https://github.com/test/repo"],
-                position="개발자",
-            ),
-            error_code=ErrorCode.GENERATE_ERROR,
-        )
-
-        assert self.should_retry(state) == "end"
-
-    def test_returns_end_when_pass(self):
-        """평가 통과 시 end 반환"""
-        state = ResumeState(
-            request=ResumeRequest(
-                repo_urls=["https://github.com/test/repo"],
-                position="개발자",
-            ),
-            evaluation="pass",
-            retry_count=0,
-        )
-
-        assert self.should_retry(state) == "end"
-
-    def test_returns_generate_when_fail_and_can_retry(self):
-        """평가 실패 + 재시도 가능 시 generate 반환"""
-        state = ResumeState(
-            request=ResumeRequest(
-                repo_urls=["https://github.com/test/repo"],
-                position="개발자",
-            ),
-            evaluation="fail",
-            retry_count=0,
-        )
-
-        assert self.should_retry(state) == "generate"
-
-    def test_returns_end_when_max_retries_reached(self):
-        """최대 재시도 도달 시 end 반환"""
-        state = ResumeState(
-            request=ResumeRequest(
-                repo_urls=["https://github.com/test/repo"],
-                position="개발자",
-            ),
-            evaluation="fail",
-            retry_count=2,
-        )
-
-        assert self.should_retry(state) == "end"

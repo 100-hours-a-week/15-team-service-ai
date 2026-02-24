@@ -88,7 +88,13 @@ async def end_interview(
     for idx, result in enumerate(individual_results):
         msg = body.messages[idx]
         if isinstance(result, Exception):
-            individual_errors.append(f"턴 {msg.turn_no}: {result}")
+            logger.error(
+                "개별 피드백 생성 실패",
+                turn_no=msg.turn_no,
+                error=str(result),
+                exc_info=result,
+            )
+            individual_errors.append(f"턴 {msg.turn_no}: 피드백 생성에 실패했습니다")
             continue
         feedback_result, error_message = result
         if error_message or not feedback_result:
@@ -109,7 +115,8 @@ async def end_interview(
     overall_error = None
 
     if isinstance(overall_entry, Exception):
-        overall_error = str(overall_entry)
+        logger.error("종합 피드백 생성 실패", error=str(overall_entry), exc_info=overall_entry)
+        overall_error = "종합 피드백 생성에 실패했습니다"
     else:
         overall_result, overall_err_msg = overall_entry
         if overall_err_msg or not overall_result:

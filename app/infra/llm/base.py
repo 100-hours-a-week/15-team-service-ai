@@ -1,6 +1,7 @@
 import functools
 import os
 
+import httpx
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -34,25 +35,28 @@ def get_langfuse_handler() -> CallbackHandler | None:
 
 @functools.cache
 def get_generator_llm() -> ChatOpenAI:
-    """이력서 생성용 vLLM 클라이언트 반환"""
+    """vLLM 클라이언트 반환"""
     return ChatOpenAI(
         model=settings.vllm_model,
         api_key=settings.vllm_api_key or "EMPTY",
         base_url=settings.vllm_base_url,
         timeout=settings.vllm_timeout,
-        temperature=0.1,
+        max_retries=2,
+        temperature=0.2,
         max_tokens=16384,
     )
 
 
 @functools.cache
 def get_evaluator_llm() -> ChatGoogleGenerativeAI:
-    """이력서 평가용 Gemini 클라이언트 반환"""
+    """Gemini 클라이언트 반환"""
     return ChatGoogleGenerativeAI(
         model=settings.gemini_evaluator_model,
         google_api_key=settings.gemini_api_key,
         timeout=settings.gemini_timeout,
-        temperature=0.09,
+        max_retries=2,
+        temperature=1.0,
+        thinking_budget=2048,
     )
 
 
@@ -87,6 +91,14 @@ async def _invoke_llm[T](
     ]
     try:
         return await structured_llm.ainvoke(messages, config=config)
+    except (httpx.TimeoutException, httpx.ConnectError, httpx.HTTPStatusError):
+        raise
     except Exception as e:
-        logger.error("LLM 출력 파싱 실패", output_type=output_type.__name__, error=str(e))
-        raise LLMError(detail=f"LLM 출력 파싱 실패: {e}") from e
+        logger.error(
+            "LLM 출력 파싱 실패",
+            output_type=output_type.__name__,
+            error_type=type(e).__name__,
+            error=str(e),
+            exc_info=True,
+        )
+        raise LLMError(detail=f"LLM 출력 파싱 실패 [{type(e).__name__}]: {e}") from e
