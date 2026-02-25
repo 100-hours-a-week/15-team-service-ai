@@ -52,18 +52,36 @@ fi
 
 echo "Environment variables loaded into $ENV_FILE"
 
-# 3. Pull Docker Image
+# 3. Fetch config.alloy from SSM Parameter Store
+ALLOY_CONFIG_DIR="$DEPLOY_DIR/alloy"
+ALLOY_CONFIG_FILE="$ALLOY_CONFIG_DIR/config.alloy"
+ALLOY_SSM_PARAM="$SSM_PATH/alloy-config"
+
+echo "Fetching Alloy config from SSM: $ALLOY_SSM_PARAM..."
+mkdir -p "$ALLOY_CONFIG_DIR"
+aws ssm get-parameter \
+    --name "$ALLOY_SSM_PARAM" \
+    --with-decryption \
+    --query "Parameter.Value" \
+    --output text \
+    --region "$REGION" > "$ALLOY_CONFIG_FILE"
+
+if [ ! -s "$ALLOY_CONFIG_FILE" ]; then
+    echo "Error: Failed to fetch Alloy config from SSM!"
+    exit 1
+fi
+echo "Alloy config saved to $ALLOY_CONFIG_FILE"
+
+# 4. Pull Docker Image
 echo "Pulling image..."
 docker pull "$IMAGE_URI"
 
-# 4. Run Container
-echo "Starting container..."
-# Adjust -p host:container ports as needed. User mentioned internal logic maps to 8000.
-docker run -d \
-    --name "$CONTAINER_NAME" \
-    --restart unless-stopped \
-    -p 8000:8000 \
-    --env-file "$ENV_FILE" \
-    "$IMAGE_URI"
+# 5. Run Containers with docker compose
+echo "Starting containers..."
+# Export IMAGE_URI so docker compose can use it
+export IMAGE_URI="$IMAGE_URI"
 
-echo "Container started successfully."
+cd "$DEPLOY_DIR"
+docker compose up -d
+
+echo "Containers started successfully."
