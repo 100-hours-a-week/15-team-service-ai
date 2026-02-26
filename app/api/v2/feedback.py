@@ -1,6 +1,5 @@
 import asyncio
 import json
-import uuid
 
 from fastapi import APIRouter, Request
 
@@ -39,7 +38,6 @@ async def end_interview(
 
     분당 10회 요청 제한이 적용됩니다
     """
-    session_id = str(uuid.uuid4())
     interview_type = body.interview_type.lower()
 
     logger.info(
@@ -48,7 +46,6 @@ async def end_interview(
         interview_type=interview_type,
         position=body.position,
         message_count=len(body.messages),
-        session_id=session_id,
     )
 
     qa_pairs = [{"question": m.question, "answer": m.answer} for m in body.messages]
@@ -66,7 +63,7 @@ async def end_interview(
                 question_intent="제공되지 않음",
                 related_project=None,
                 answer=m.answer,
-                session_id=session_id,
+                session_id=body.ai_session_id,
             )
 
     individual_tasks = [run_feedback_with_semaphore(m) for m in body.messages]
@@ -76,7 +73,7 @@ async def end_interview(
         position=body.position,
         interview_type=interview_type,
         qa_pairs_json=qa_pairs_json,
-        session_id=session_id,
+        session_id=body.ai_session_id,
     )
 
     all_results = await asyncio.gather(*individual_tasks, overall_task, return_exceptions=True)

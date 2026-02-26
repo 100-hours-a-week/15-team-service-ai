@@ -105,6 +105,9 @@ async def run_chat_agent(
         config = {
             "configurable": {"thread_id": thread_id},
             "callbacks": [langfuse_handler] if langfuse_handler else [],
+            "metadata": {
+                "langfuse_session_id": session_id,
+            },
         }
 
         existing_state = await workflow.aget_state(config)
