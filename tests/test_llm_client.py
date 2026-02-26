@@ -1,18 +1,14 @@
-"""LLM 클라이언트 테스트"""
-
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from app.domain.resume.schemas import (
-    EvaluationOutput,
     ProjectInfo,
     RepoContext,
     ResumeData,
-    UserStats,
 )
 from app.infra.llm.client import (
-    evaluate_resume,
+    finalize_resume,
     format_project_info,
     format_repo_contexts,
     generate_resume,
@@ -187,7 +183,6 @@ class TestGenerateResume:
             }
         ]
 
-    @pytest.mark.asyncio
     async def test_generate_resume_success(self, sample_project_info):
         """정상 이력서 생성"""
         expected_result = ResumeData(
@@ -206,18 +201,16 @@ class TestGenerateResume:
             return_value=expected_result
         )
 
-        with patch("app.infra.llm.client.get_llm", return_value=mock_llm):
+        with patch("app.infra.llm.resume.get_generator_llm", return_value=mock_llm):
             result = await generate_resume(
                 project_info=sample_project_info,
                 position="백엔드 개발자",
-                repo_urls=["https://github.com/user/test-repo"],
             )
 
         assert result == expected_result
         assert len(result.projects) == 1
         assert result.projects[0].name == "Test Project"
 
-    @pytest.mark.asyncio
     async def test_generate_resume_with_feedback(self, sample_project_info):
         """피드백 포함 재시도 생성"""
         expected_result = ResumeData(
@@ -236,28 +229,16 @@ class TestGenerateResume:
             return_value=expected_result
         )
 
-        with patch("app.infra.llm.client.get_llm", return_value=mock_llm):
+        with patch("app.infra.llm.resume.get_generator_llm", return_value=mock_llm):
             result = await generate_resume(
                 project_info=sample_project_info,
                 position="백엔드 개발자",
-                repo_urls=["https://github.com/user/test-repo"],
-                feedback="기술 스택을 더 추가해주세요",
             )
 
         assert result == expected_result
 
-    @pytest.mark.asyncio
     async def test_generate_resume_with_repo_contexts(self, sample_project_info):
         """레포지토리 컨텍스트 포함 생성"""
-        repo_contexts = {
-            "test-repo": RepoContext(
-                name="test-repo",
-                languages={"Python": 10000},
-                description="테스트",
-                topics=["python"],
-                readme_summary="README",
-            )
-        }
         expected_result = ResumeData(
             projects=[
                 ProjectInfo(
@@ -274,20 +255,16 @@ class TestGenerateResume:
             return_value=expected_result
         )
 
-        with patch("app.infra.llm.client.get_llm", return_value=mock_llm):
+        with patch("app.infra.llm.resume.get_generator_llm", return_value=mock_llm):
             result = await generate_resume(
                 project_info=sample_project_info,
                 position="백엔드 개발자",
-                repo_urls=["https://github.com/user/test-repo"],
-                repo_contexts=repo_contexts,
             )
 
         assert result == expected_result
 
-    @pytest.mark.asyncio
     async def test_generate_resume_with_user_stats(self, sample_project_info):
         """사용자 통계 포함 생성"""
-        user_stats = UserStats(total_commits=100, total_prs=20, total_issues=10)
         expected_result = ResumeData(
             projects=[
                 ProjectInfo(
@@ -304,19 +281,17 @@ class TestGenerateResume:
             return_value=expected_result
         )
 
-        with patch("app.infra.llm.client.get_llm", return_value=mock_llm):
+        with patch("app.infra.llm.resume.get_generator_llm", return_value=mock_llm):
             result = await generate_resume(
                 project_info=sample_project_info,
                 position="백엔드 개발자",
-                repo_urls=["https://github.com/user/test-repo"],
-                user_stats=user_stats,
             )
 
         assert result == expected_result
 
 
-class TestEvaluateResume:
-    """evaluate_resume 함수 테스트"""
+class TestFinalizeResume:
+    """finalize_resume 함수 테스트"""
 
     @pytest.fixture
     def sample_resume_data(self) -> ResumeData:
@@ -326,83 +301,59 @@ class TestEvaluateResume:
                 ProjectInfo(
                     name="Test Project",
                     repo_url="https://github.com/user/test-repo",
-                    description="테스트 프로젝트입니다",
+                    description="- 테스트 기능 구현",
                     tech_stack=["Python", "FastAPI", "PostgreSQL"],
                 )
             ]
         )
 
-    @pytest.mark.asyncio
-    async def test_evaluate_resume_pass(self, sample_resume_data):
-        """평가 통과 결과 파싱"""
-        expected_result = EvaluationOutput(
-            result="pass",
-            violated_rule=None,
-            violated_item=None,
-            feedback="모든 기준을 충족합니다",
+    async def test_finalize_resume_success(self, sample_resume_data):
+        """정상 윤문 - ResumeData 반환"""
+        polished = ResumeData(
+            projects=[
+                ProjectInfo(
+                    name="Test Project",
+                    repo_url="https://github.com/user/test-repo",
+                    description="- FastAPI 기반 테스트 API 설계 및 구현",
+                    tech_stack=["Python", "FastAPI", "PostgreSQL"],
+                )
+            ]
         )
 
         mock_llm = MagicMock()
-        mock_llm.with_structured_output.return_value.ainvoke = AsyncMock(
-            return_value=expected_result
-        )
+        mock_llm.with_structured_output.return_value.ainvoke = AsyncMock(return_value=polished)
 
-        with patch("app.infra.llm.client.get_llm", return_value=mock_llm):
-            result = await evaluate_resume(
+        with patch("app.infra.llm.resume.get_evaluator_llm", return_value=mock_llm):
+            result = await finalize_resume(
                 resume_data=sample_resume_data,
                 position="백엔드 개발자",
             )
 
-        assert result.result == "pass"
-        assert result.violated_rule is None
-        assert result.feedback == "모든 기준을 충족합니다"
+        assert isinstance(result, ResumeData)
+        assert len(result.projects) == 1
+        assert result.projects[0].description == "- FastAPI 기반 테스트 API 설계 및 구현"
 
-    @pytest.mark.asyncio
-    async def test_evaluate_resume_fail(self, sample_resume_data):
-        """평가 실패 결과 및 피드백 파싱"""
-        expected_result = EvaluationOutput(
-            result="fail",
-            violated_rule=2,
-            violated_item="description",
-            feedback="설명이 너무 짧습니다",
+    async def test_finalize_resume_with_session_id(self, sample_resume_data):
+        """세션 ID 포함 윤문"""
+        polished = ResumeData(
+            projects=[
+                ProjectInfo(
+                    name="Test Project",
+                    repo_url="https://github.com/user/test-repo",
+                    description="- 정제된 설명 구현",
+                    tech_stack=["Python", "FastAPI", "PostgreSQL"],
+                )
+            ]
         )
 
         mock_llm = MagicMock()
-        mock_llm.with_structured_output.return_value.ainvoke = AsyncMock(
-            return_value=expected_result
-        )
+        mock_llm.with_structured_output.return_value.ainvoke = AsyncMock(return_value=polished)
 
-        with patch("app.infra.llm.client.get_llm", return_value=mock_llm):
-            result = await evaluate_resume(
-                resume_data=sample_resume_data,
-                position="백엔드 개발자",
-            )
-
-        assert result.result == "fail"
-        assert result.violated_rule == 2
-        assert result.violated_item == "description"
-        assert result.feedback == "설명이 너무 짧습니다"
-
-    @pytest.mark.asyncio
-    async def test_evaluate_resume_with_session_id(self, sample_resume_data):
-        """세션 ID 포함 평가"""
-        expected_result = EvaluationOutput(
-            result="pass",
-            violated_rule=None,
-            violated_item=None,
-            feedback="좋습니다",
-        )
-
-        mock_llm = MagicMock()
-        mock_llm.with_structured_output.return_value.ainvoke = AsyncMock(
-            return_value=expected_result
-        )
-
-        with patch("app.infra.llm.client.get_llm", return_value=mock_llm):
-            result = await evaluate_resume(
+        with patch("app.infra.llm.resume.get_evaluator_llm", return_value=mock_llm):
+            result = await finalize_resume(
                 resume_data=sample_resume_data,
                 position="백엔드 개발자",
                 session_id="test-session-123",
             )
 
-        assert result.result == "pass"
+        assert isinstance(result, ResumeData)

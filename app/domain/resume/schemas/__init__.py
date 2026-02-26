@@ -1,41 +1,33 @@
 from app.domain.resume.schemas.base import (
     EvaluationOutput,
     ProjectInfo,
+    ProjectInfoDict,
     ResumeData,
     ResumeRequest,
     ResumeState,
-    SkippedRepo,
 )
 from app.domain.resume.schemas.github import (
-    CommitDetail,
     CommitInfo,
-    PRInfo,
     PRInfoExtended,
     RepoContext,
     UserStats,
 )
-from app.domain.resume.schemas.tools import (
-    CollectProjectInfoInput,
-    CollectRepoContextInput,
-    EvaluateResumeInput,
-    GenerateResumeInput,
+from app.domain.resume.schemas.plan import (
+    BulletPlan,
+    ProjectPlan,
 )
 
 __all__ = [
     "CommitInfo",
-    "CommitDetail",
-    "PRInfo",
     "PRInfoExtended",
     "RepoContext",
     "UserStats",
+    "BulletPlan",
+    "ProjectPlan",
     "ResumeRequest",
     "ProjectInfo",
+    "ProjectInfoDict",
     "ResumeData",
     "EvaluationOutput",
     "ResumeState",
-    "SkippedRepo",
-    "CollectProjectInfoInput",
-    "CollectRepoContextInput",
-    "GenerateResumeInput",
-    "EvaluateResumeInput",
 ]
