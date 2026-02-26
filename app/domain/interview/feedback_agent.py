@@ -16,7 +16,6 @@ _overall_feedback_workflow = create_overall_feedback_workflow()
 
 
 async def run_feedback_agent(
-    resume_json: str,
     position: str,
     interview_type: str,
     question_text: str,
@@ -25,7 +24,7 @@ async def run_feedback_agent(
     answer: str,
     session_id: str | None = None,
 ) -> tuple[FeedbackOutput | None, str | None]:
-    """개별 피드백 생성 - 평가 없이 LLM 직접 호출
+    """개별 피드백 생성 - LLM 직접 호출
 
     Returns:
         feedback_result, error_message 튜플
@@ -35,7 +34,6 @@ async def run_feedback_agent(
     try:
         feedback_result = await asyncio.wait_for(
             generate_feedback(
-                resume_json=resume_json,
                 position=position,
                 interview_type=interview_type,
                 question_text=question_text,
@@ -60,7 +58,6 @@ async def run_feedback_agent(
 
 
 async def run_overall_feedback_agent(
-    resume_json: str,
     position: str,
     interview_type: str,
     qa_pairs_json: str,
@@ -75,7 +72,6 @@ async def run_overall_feedback_agent(
 
     try:
         initial_state: OverallFeedbackState = {
-            "resume_json": resume_json,
             "position": position,
             "interview_type": interview_type,
             "qa_pairs_json": qa_pairs_json,
@@ -84,7 +80,13 @@ async def run_overall_feedback_agent(
         }
 
         langfuse_handler = get_langfuse_handler()
-        config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+        config = {
+            "callbacks": [langfuse_handler] if langfuse_handler else [],
+            "metadata": {
+                "langfuse_session_id": session_id,
+                "langfuse_tags": ["feedback", "overall", interview_type, position],
+            },
+        }
 
         final_state = await asyncio.wait_for(
             _overall_feedback_workflow.ainvoke(initial_state, config=config),

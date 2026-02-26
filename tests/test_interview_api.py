@@ -356,6 +356,7 @@ class TestFeedbackEndpointIntegration:
                 new_callable=AsyncMock,
                 return_value=(SAMPLE_OVERALL_OUTPUT, None),
             ),
+            patch("app.api.v2.feedback.interview_context_store"),
         ):
             response = await async_client.post(
                 "/api/v2/interview/end",
@@ -385,6 +386,7 @@ class TestFeedbackEndpointIntegration:
                 new_callable=AsyncMock,
                 return_value=(SAMPLE_OVERALL_OUTPUT, None),
             ),
+            patch("app.api.v2.feedback.interview_context_store"),
         ):
             response = await async_client.post(
                 "/api/v2/interview/end",
@@ -410,6 +412,7 @@ class TestFeedbackEndpointIntegration:
                 new_callable=AsyncMock,
                 return_value=(None, "종합 피드백 실패"),
             ),
+            patch("app.api.v2.feedback.interview_context_store"),
         ):
             response = await async_client.post(
                 "/api/v2/interview/end",
@@ -466,6 +469,7 @@ class TestFeedbackEndpointIntegration:
                 new_callable=AsyncMock,
                 return_value=(SAMPLE_OVERALL_OUTPUT, None),
             ),
+            patch("app.api.v2.feedback.interview_context_store"),
         ):
             response = await async_client.post(
                 "/api/v2/interview/end",

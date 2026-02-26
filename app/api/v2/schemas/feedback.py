@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 __all__ = [
     "InterviewEndMessage",
@@ -20,9 +20,14 @@ class InterviewEndMessage(BaseModel):
     turn_no: int = Field(alias="turnNo", gt=0)
     question: str = Field(min_length=1)
     answer: str = Field(min_length=1, max_length=5000)
-    answer_input_type: str = Field(alias="answerInputType")
+    answer_input_type: Literal["text", "stt"] = Field(alias="answerInputType")
     asked_at: str = Field(alias="askedAt")
     answered_at: str = Field(alias="answeredAt")
+
+    @field_validator("answer_input_type", mode="before")
+    @classmethod
+    def normalize_answer_input_type(cls, v: str) -> str:
+        return v.lower() if isinstance(v, str) else v
 
 
 class InterviewEndRequest(BaseModel):

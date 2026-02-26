@@ -55,6 +55,15 @@ Provide constructive, specific feedback based on the resume context and question
 - Score must align with the strengths and improvements
 - Do NOT give inflated scores for weak answers
 
+### Rule 5: Grounding requirement
+- This is a TEXT-BASED interview
+- NEVER comment on voice, pronunciation, posture, facial expressions, or any non-verbal elements
+- ONLY provide feedback based on the actual content provided in the Q&A
+- NEVER fabricate or hallucinate content that was not in the candidate's answer
+- If answer_input_type is "stt", the answer was transcribed from speech
+- Still evaluate only the textual content regardless of input type
+- Do NOT contradict the actual answer length or detail level
+
 ## OUTPUT FORMAT
 
 ```json
@@ -74,11 +83,6 @@ FEEDBACK_TECHNICAL_HUMAN = """Evaluate the candidate's answer to this technical 
 - Question Intent: {{question_intent}}
 - Related Project: {{related_project}}
 
-## Candidate's Resume
-<resume>
-{{resume_json}}
-</resume>
-
 ## Candidate's Answer
 <answer>
 {{answer}}
@@ -96,11 +100,6 @@ FEEDBACK_TECHNICAL_RETRY_HUMAN = """Re-evaluate with improvements based on feedb
 - Question: {{question_text}}
 - Question Intent: {{question_intent}}
 - Related Project: {{related_project}}
-
-## Candidate's Resume
-<resume>
-{{resume_json}}
-</resume>
 
 ## Candidate's Answer
 <answer>
@@ -140,6 +139,15 @@ Assess communication skills, teamwork, problem-solving approach, and growth mind
 ### Rule 4: Fair scoring
 - Score must align with the strengths and improvements
 
+### Rule 5: Grounding requirement
+- This is a TEXT-BASED interview
+- NEVER comment on voice, pronunciation, posture, facial expressions, or any non-verbal elements
+- ONLY provide feedback based on the actual content provided in the Q&A
+- NEVER fabricate or hallucinate content that was not in the candidate's answer
+- If answer_input_type is "stt", the answer was transcribed from speech
+- Still evaluate only the textual content regardless of input type
+- Do NOT contradict the actual answer length or detail level
+
 ## OUTPUT FORMAT
 
 ```json
@@ -160,11 +168,6 @@ Evaluate the candidate's answer to this behavioral interview question.
 - Question Intent: {{question_intent}}
 - Related Project: {{related_project}}
 
-## Candidate's Resume
-<resume>
-{{resume_json}}
-</resume>
-
 ## Candidate's Answer
 <answer>
 {{answer}}
@@ -182,11 +185,6 @@ FEEDBACK_BEHAVIORAL_RETRY_HUMAN = """Re-evaluate with improvements based on feed
 - Question: {{question_text}}
 - Question Intent: {{question_intent}}
 - Related Project: {{related_project}}
-
-## Candidate's Resume
-<resume>
-{{resume_json}}
-</resume>
 
 ## Candidate's Answer
 <answer>
@@ -268,6 +266,15 @@ Identify patterns across answers to give holistic assessment.
 - Key strengths should be themes that appear across multiple answers
 - Key improvements should be prioritized by impact
 
+### Rule 4: Grounding requirement
+- This is a TEXT-BASED interview
+- NEVER comment on voice, pronunciation, posture, facial expressions, or any non-verbal elements
+- ONLY provide feedback based on the actual content provided in the Q&A
+- NEVER fabricate or hallucinate content that was not in the candidate's answer
+- If answer_input_type is "stt", the answer was transcribed from speech
+- Still evaluate only the textual content regardless of input type
+- Do NOT contradict the actual answer length or detail level
+
 ## OUTPUT FORMAT
 
 ```json
@@ -284,11 +291,6 @@ FEEDBACK_OVERALL_TECHNICAL_HUMAN = """Provide overall assessment for this techni
 ## Context
 - Position: {{position}}
 
-## Candidate's Resume
-<resume>
-{{resume_json}}
-</resume>
-
 ## Interview Q&A Pairs
 {{qa_pairs_json}}
 
@@ -301,11 +303,6 @@ FEEDBACK_OVERALL_TECHNICAL_RETRY_HUMAN = """Re-assess with improvements based on
 
 ## Context
 - Position: {{position}}
-
-## Candidate's Resume
-<resume>
-{{resume_json}}
-</resume>
 
 ## Interview Q&A Pairs
 {{qa_pairs_json}}
@@ -341,6 +338,15 @@ Assess overall soft skills, communication, and growth mindset.
 - Focus on behavioral themes, not technical details
 - Prioritize improvements by relevance to the position
 
+### Rule 4: Grounding requirement
+- This is a TEXT-BASED interview
+- NEVER comment on voice, pronunciation, posture, facial expressions, or any non-verbal elements
+- ONLY provide feedback based on the actual content provided in the Q&A
+- NEVER fabricate or hallucinate content that was not in the candidate's answer
+- If answer_input_type is "stt", the answer was transcribed from speech
+- Still evaluate only the textual content regardless of input type
+- Do NOT contradict the actual answer length or detail level
+
 ## OUTPUT FORMAT
 
 ```json
@@ -357,11 +363,6 @@ FEEDBACK_OVERALL_BEHAVIORAL_HUMAN = """Provide overall assessment for this behav
 ## Context
 - Position: {{position}}
 
-## Candidate's Resume
-<resume>
-{{resume_json}}
-</resume>
-
 ## Interview Q&A Pairs
 {{qa_pairs_json}}
 
@@ -374,11 +375,6 @@ FEEDBACK_OVERALL_BEHAVIORAL_RETRY_HUMAN = """Re-assess with improvements based o
 
 ## Context
 - Position: {{position}}
-
-## Candidate's Resume
-<resume>
-{{resume_json}}
-</resume>
 
 ## Interview Q&A Pairs
 {{qa_pairs_json}}
