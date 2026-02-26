@@ -220,7 +220,7 @@ CLAUDE.md
 .serena
 15-*
 .claude
-scripts/
+# scripts/
 .langgraph_api
 .DS_Store
 data/checkpoints.db*
