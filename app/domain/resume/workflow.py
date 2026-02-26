@@ -60,6 +60,7 @@ async def collect_data_node(state: ResumeState) -> ResumeState:
             "collect_data_node 완료", projects=len(project_info), contexts=len(repo_contexts)
         )
 
+        matched_projects = []
         for project in project_info:
             is_valid, error_msg = validate_position_match(
                 request.position,
@@ -67,20 +68,24 @@ async def collect_data_node(state: ResumeState) -> ResumeState:
             )
             if not is_valid:
                 logger.warning(
-                    "포지션 불일치",
+                    "포지션 불일치 스킵",
                     repo=project.get("repo_name"),
                     position=request.position,
                     error=error_msg,
                 )
-                return create_error_state(
-                    state,
-                    ErrorCode.POSITION_MISMATCH,
-                    f"{project.get('repo_name')}: {error_msg}",
-                )
+                continue
+            matched_projects.append(project)
+
+        if not matched_projects:
+            return create_error_state(
+                state,
+                ErrorCode.POSITION_MISMATCH,
+                "모든 프로젝트에서 포지션에 맞는 기술 스택을 찾지 못했습니다",
+            )
 
         return {
             **state,
-            "project_info": project_info,
+            "project_info": matched_projects,
             "repo_contexts": repo_contexts,
             "user_stats": user_stats,
         }

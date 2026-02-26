@@ -265,24 +265,10 @@ class TestFeedbackAgent:
         """에이전트 정상 실행"""
         from app.domain.interview.feedback_agent import run_feedback_agent
 
-        mock_workflow = MagicMock()
-        mock_workflow.ainvoke = AsyncMock(
-            return_value={
-                "feedback_result": SAMPLE_FEEDBACK_OUTPUT,
-                "evaluation": "pass",
-                "retry_count": 0,
-            }
-        )
-
-        with (
-            patch(
-                "app.domain.interview.feedback_agent._feedback_workflow",
-                mock_workflow,
-            ),
-            patch(
-                "app.domain.interview.feedback_agent.get_langfuse_handler",
-                return_value=None,
-            ),
+        with patch(
+            "app.domain.interview.feedback_agent.generate_feedback",
+            new_callable=AsyncMock,
+            return_value=SAMPLE_FEEDBACK_OUTPUT,
         ):
             result, error = await run_feedback_agent(
                 resume_json="없음",
@@ -297,27 +283,14 @@ class TestFeedbackAgent:
         assert result == SAMPLE_FEEDBACK_OUTPUT
         assert error is None
 
-    async def test_agent_workflow_error(self):
-        """워크플로우 에러 상태 반환"""
+    async def test_agent_generate_error(self):
+        """LLM 호출 실패 시 에러 반환"""
         from app.domain.interview.feedback_agent import run_feedback_agent
 
-        mock_workflow = MagicMock()
-        mock_workflow.ainvoke = AsyncMock(
-            return_value={
-                "error_code": ErrorCode.FEEDBACK_GENERATE_ERROR,
-                "error_message": "피드백 생성 실패",
-            }
-        )
-
-        with (
-            patch(
-                "app.domain.interview.feedback_agent._feedback_workflow",
-                mock_workflow,
-            ),
-            patch(
-                "app.domain.interview.feedback_agent.get_langfuse_handler",
-                return_value=None,
-            ),
+        with patch(
+            "app.domain.interview.feedback_agent.generate_feedback",
+            new_callable=AsyncMock,
+            side_effect=Exception("LLM 오류"),
         ):
             result, error = await run_feedback_agent(
                 resume_json="없음",
@@ -330,24 +303,16 @@ class TestFeedbackAgent:
             )
 
         assert result is None
-        assert error == "피드백 생성 실패"
+        assert error == "피드백 생성에 실패했습니다"
 
     async def test_agent_timeout(self):
         """에이전트 타임아웃"""
         from app.domain.interview.feedback_agent import run_feedback_agent
 
-        mock_workflow = MagicMock()
-        mock_workflow.ainvoke = AsyncMock(side_effect=asyncio.TimeoutError())
-
-        with (
-            patch(
-                "app.domain.interview.feedback_agent._feedback_workflow",
-                mock_workflow,
-            ),
-            patch(
-                "app.domain.interview.feedback_agent.get_langfuse_handler",
-                return_value=None,
-            ),
+        with patch(
+            "app.domain.interview.feedback_agent.generate_feedback",
+            new_callable=AsyncMock,
+            side_effect=asyncio.TimeoutError(),
         ):
             result, error = await run_feedback_agent(
                 resume_json="없음",

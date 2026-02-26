@@ -29,15 +29,15 @@ async def transcribe_audio(
     language: str = "ko",
 ) -> str:
     """음성 파일을 텍스트로 변환"""
-    url = settings.stt_base_url + "/v1/audio/transcriptions"
+    url = "https://api.elevenlabs.io/v1/speech-to-text"
     client = _get_client()
 
     try:
         response = await client.post(
             url,
-            headers={"Authorization": f"Bearer {settings.stt_api_key}"},
+            headers={"xi-api-key": settings.elevenlabs_api_key},
             files={"file": (filename, file_content)},
-            data={"model": settings.stt_model, "language": language},
+            data={"model_id": settings.elevenlabs_stt_model, "language_code": language},
         )
         response.raise_for_status()
         result = response.json()

@@ -57,10 +57,9 @@ class Settings(BaseSettings):
     langfuse_secret_key: str = ""
     langfuse_base_url: str = "https://cloud.langfuse.com"
 
-    # STT 설정
-    stt_base_url: str = ""
-    stt_api_key: str = ""
-    stt_model: str = "large-v3"
+    # ElevenLabs STT 설정
+    elevenlabs_api_key: str = ""
+    elevenlabs_stt_model: str = "scribe_v2"
     stt_timeout: float = 30.0
 
     # AWS S3 설정
