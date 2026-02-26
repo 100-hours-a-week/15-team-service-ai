@@ -1,3 +1,5 @@
+import re
+
 import httpx
 
 from app.core.config import settings
@@ -42,7 +44,8 @@ async def transcribe_audio(
         response.raise_for_status()
         result = response.json()
         logger.debug("STT 변환 완료", filename=filename, language=language)
-        return result["text"]
+        text = re.sub(r"\[.*?\]", "", result["text"]).strip()
+        return text
     except httpx.TimeoutException:
         logger.warning("STT 요청 타임아웃", filename=filename)
         raise
