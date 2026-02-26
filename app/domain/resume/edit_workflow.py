@@ -266,6 +266,10 @@ async def evaluate_node(state: EditState) -> EditState:
     return await evaluate_with_fallback(state, _evaluate)
 
 
+def _should_continue_after_plan(state: EditState) -> str:
+    return "end" if state.get("error_code") else "edit"
+
+
 def create_edit_workflow() -> CompiledStateGraph:
     """이력서 수정 워크플로우 생성
 
@@ -291,7 +295,11 @@ def create_edit_workflow() -> CompiledStateGraph:
     )
 
     workflow.add_edge("reject", END)
-    workflow.add_edge("plan", "edit")
+    workflow.add_conditional_edges(
+        "plan",
+        _should_continue_after_plan,
+        {"edit": "edit", "end": END},
+    )
 
     workflow.add_conditional_edges(
         "edit",

@@ -5,6 +5,8 @@ from app.infra.llm.base import _build_langfuse_config, _invoke_llm, get_generato
 
 logger = get_logger(__name__)
 
+_VALID_INTERVIEW_TYPES = frozenset({"technical", "behavioral"})
+
 
 async def generate_chat_response(
     resume_json: str,
@@ -17,6 +19,8 @@ async def generate_chat_response(
     session_id: str | None = None,
 ) -> ChatOutput:
     """면접 채팅 응답 생성 - vLLM 사용"""
+    if interview_type not in _VALID_INTERVIEW_TYPES:
+        raise ValueError(f"지원하지 않는 면접 유형: {interview_type}")
     logger.debug(
         "채팅 응답 생성 요청",
         interview_type=interview_type,
@@ -65,6 +69,8 @@ async def generate_chat_response_with_history(
     session_id: str | None = None,
 ) -> ChatOutput:
     """멀티턴 면접 채팅 응답 생성 - 대화 이력 포함, vLLM 사용"""
+    if interview_type not in _VALID_INTERVIEW_TYPES:
+        raise ValueError(f"지원하지 않는 면접 유형: {interview_type}")
     logger.debug(
         "멀티턴 채팅 응답 생성 요청",
         interview_type=interview_type,

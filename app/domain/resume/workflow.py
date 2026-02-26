@@ -7,7 +7,6 @@ from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import CachePolicy
 
-from app.core.config import settings
 from app.core.exceptions import ErrorCode, PositionMismatchError
 from app.core.logging import get_logger
 from app.domain.resume.error_handler import (
@@ -18,6 +17,7 @@ from app.domain.resume.error_handler import (
 )
 from app.domain.resume.schemas import (
     ProjectInfoDict,
+    ResumeData,
     ResumeState,
 )
 from app.domain.resume.schemas.plan import BulletPlan, ProjectPlan
@@ -28,14 +28,9 @@ from app.domain.resume.service import (
     filter_tech_stack_by_position,
     validate_position_match,
 )
-from app.domain.resume.workflow_utils import (
-    evaluate_with_fallback,
-    has_error,
-    make_should_retry,
-    should_evaluate,
-)
+from app.domain.resume.workflow_utils import has_error
 from app.infra.github.client import parse_repo_url
-from app.infra.llm.client import evaluate_resume, generate_resume, plan_resume
+from app.infra.llm.client import finalize_resume, generate_resume, plan_resume
 
 logger = get_logger(__name__)
 
@@ -65,6 +60,7 @@ async def collect_data_node(state: ResumeState) -> ResumeState:
             "collect_data_node 완료", projects=len(project_info), contexts=len(repo_contexts)
         )
 
+        matched_projects = []
         for project in project_info:
             is_valid, error_msg = validate_position_match(
                 request.position,
@@ -72,23 +68,26 @@ async def collect_data_node(state: ResumeState) -> ResumeState:
             )
             if not is_valid:
                 logger.warning(
-                    "포지션 불일치",
+                    "포지션 불일치 스킵",
                     repo=project.get("repo_name"),
                     position=request.position,
                     error=error_msg,
                 )
-                return create_error_state(
-                    state,
-                    ErrorCode.POSITION_MISMATCH,
-                    f"{project.get('repo_name')}: {error_msg}",
-                )
+                continue
+            matched_projects.append(project)
+
+        if not matched_projects:
+            return create_error_state(
+                state,
+                ErrorCode.POSITION_MISMATCH,
+                "모든 프로젝트에서 포지션에 맞는 기술 스택을 찾지 못했습니다",
+            )
 
         return {
             **state,
-            "project_info": project_info,
+            "project_info": matched_projects,
             "repo_contexts": repo_contexts,
             "user_stats": user_stats,
-            "retry_count": 0,
         }
 
     except httpx.HTTPStatusError as e:
@@ -232,14 +231,7 @@ def _format_plans_for_generator(plans: list[ProjectPlan]) -> str:
 
 async def generate_node(state: ResumeState) -> ResumeState:
     """이력서 생성 노드: Plan 기반으로 이력서 JSON 생성"""
-    retry_count = state.get("retry_count", 0)
-    evaluation = state.get("evaluation")
-
-    if evaluation == "fail":
-        retry_count += 1
-        logger.info("generate_node 재시도", retry_count=retry_count)
-    else:
-        logger.info("generate_node 시작", retry_count=retry_count)
+    logger.info("generate_node 시작")
 
     project_info = state.get("project_info")
     if not project_info:
@@ -248,13 +240,10 @@ async def generate_node(state: ResumeState) -> ResumeState:
             state,
             ErrorCode.GENERATE_ERROR,
             "프로젝트 정보가 없습니다",
-            retry_count=retry_count,
         )
 
     request = state["request"]
     session_id = state.get("session_id")
-    feedback = state.get("evaluation_feedback")
-    previous_resume = state.get("resume_data") if feedback else None
     project_plans = state.get("project_plans", [])
 
     generation_plans = _format_plans_for_generator(project_plans) if project_plans else ""
@@ -263,10 +252,7 @@ async def generate_node(state: ResumeState) -> ResumeState:
         resume_data = await generate_resume(
             project_info=project_info,
             position=request.position,
-            repo_urls=request.repo_urls,
-            feedback=feedback,
             session_id=session_id,
-            previous_resume=previous_resume,
             generation_plans=generation_plans,
         )
 
@@ -280,7 +266,6 @@ async def generate_node(state: ResumeState) -> ResumeState:
 
         return {
             **state,
-            "retry_count": retry_count,
             "resume_data": resume_data,
         }
 
@@ -290,7 +275,6 @@ async def generate_node(state: ResumeState) -> ResumeState:
             state,
             "generate_node",
             ErrorCode.LLM_API_ERROR,
-            retry_count=retry_count,
         )
 
     except httpx.HTTPStatusError as e:
@@ -300,7 +284,6 @@ async def generate_node(state: ResumeState) -> ResumeState:
             "generate_node",
             ErrorCode.LLM_API_ERROR,
             "LLM API 오류",
-            retry_count=retry_count,
         )
 
     except PositionMismatchError as e:
@@ -309,7 +292,6 @@ async def generate_node(state: ResumeState) -> ResumeState:
             state,
             ErrorCode.POSITION_MISMATCH,
             e.detail or e.message,
-            retry_count=retry_count,
         )
 
     except ValueError as e:
@@ -318,7 +300,6 @@ async def generate_node(state: ResumeState) -> ResumeState:
             state,
             ErrorCode.GENERATE_VALIDATION_ERROR,
             f"이력서 생성 검증 오류: {e}",
-            retry_count=retry_count,
         )
 
     except (KeyError, TypeError) as e:
@@ -328,42 +309,72 @@ async def generate_node(state: ResumeState) -> ResumeState:
             "generate_node",
             ErrorCode.GENERATE_PARSE_ERROR,
             "이력서 생성 중 데이터 오류",
-            retry_count=retry_count,
         )
 
 
-async def evaluate_node(state: ResumeState) -> ResumeState:
-    """이력서 평가 노드: 코드 검증 후 LLM 품질 평가"""
+def _validate_finalized_resume(original: ResumeData, finalized: ResumeData) -> str | None:
+    """Finalizer 결과가 원본과 구조적으로 일치하는지 검증
+
+    반환: 검증 실패 사유 문자열 또는 None
+    """
+    if len(finalized.projects) != len(original.projects):
+        return (
+            f"프로젝트 수 불일치: 원본 {len(original.projects)}개, 결과 {len(finalized.projects)}개"
+        )
+
+    for i, (orig, final) in enumerate(zip(original.projects, finalized.projects, strict=True)):
+        if final.repo_url != orig.repo_url:
+            return f"프로젝트 {i + 1} repo_url 변경됨: {orig.repo_url} → {final.repo_url}"
+        if final.name != orig.name:
+            return f"프로젝트 {i + 1} name 변경됨: {orig.name} → {final.name}"
+
+    return None
+
+
+async def finalize_node(state: ResumeState) -> ResumeState:
+    """이력서 윤문 노드: 포맷 검증 후 Gemini로 1회 정제, 실패 시 원본 유지"""
     resume_data = state["resume_data"]
     request = state["request"]
     session_id = state.get("session_id")
     project_info = state.get("project_info", [])
 
+    logger.info("finalize_node 시작")
+
     from app.domain.resume.validators import format_violations_as_feedback, validate_resume_format
 
     violations = validate_resume_format(resume_data, request.position)
+    violations_text = format_violations_as_feedback(violations) if violations else ""
+
     if violations:
-        feedback = format_violations_as_feedback(violations)
-        logger.info("코드 검증 실패", violations=len(violations))
-        return {
-            **state,
-            "evaluation": "fail",
-            "evaluation_feedback": feedback,
-        }
+        logger.info("포맷 위반 발견, Finalizer에 전달", count=len(violations))
 
     all_commits: list[str] = []
     for project in project_info:
         all_commits.extend(project.get("messages", []))
 
-    async def _evaluate():
-        return await evaluate_resume(
+    try:
+        finalized = await finalize_resume(
             resume_data=resume_data,
             position=request.position,
             commit_messages=all_commits,
+            violations=violations_text,
             session_id=session_id,
         )
 
-    return await evaluate_with_fallback(state, _evaluate)
+        validation_error = _validate_finalized_resume(resume_data, finalized)
+        if validation_error:
+            logger.warning("finalize_node 검증 실패, 원본 유지", reason=validation_error)
+            return state
+
+        logger.info("finalize_node 완료", projects=len(finalized.projects))
+        return {
+            **state,
+            "resume_data": finalized,
+        }
+
+    except Exception:
+        logger.warning("finalize_node LLM 실패, 원본 유지", exc_info=True)
+        return state
 
 
 def should_continue(state: ResumeState) -> Literal["plan", "end"]:
@@ -379,15 +390,20 @@ def _should_continue_after_plan(state: ResumeState) -> Literal["generate", "end"
 _node_cache = InMemoryCache()
 
 
+def _should_continue_after_generate(state: ResumeState) -> Literal["finalize", "end"]:
+    """generate 후 에러 확인: 에러 있으면 종료, 없으면 finalize로"""
+    return "end" if has_error(state, "_should_continue_after_generate") else "finalize"
+
+
 def create_resume_workflow() -> CompiledStateGraph:
-    """이력서 생성 워크플로우 생성 - Planner-Executor 패턴"""
+    """이력서 생성 워크플로우 생성 - Planner-Executor-Finalizer 패턴"""
     workflow = StateGraph(ResumeState)
 
     collect_data_cache_policy = CachePolicy(ttl=3600)
     workflow.add_node("collect_data", collect_data_node, cache_policy=collect_data_cache_policy)
     workflow.add_node("plan", plan_node)
     workflow.add_node("generate", generate_node)
-    workflow.add_node("evaluate", evaluate_node)
+    workflow.add_node("finalize", finalize_node)
 
     workflow.set_entry_point("collect_data")
 
@@ -411,21 +427,13 @@ def create_resume_workflow() -> CompiledStateGraph:
 
     workflow.add_conditional_edges(
         "generate",
-        should_evaluate,
+        _should_continue_after_generate,
         {
-            "evaluate": "evaluate",
+            "finalize": "finalize",
             "end": END,
         },
     )
 
-    should_retry = make_should_retry(settings.workflow_max_retries, "generate")
-    workflow.add_conditional_edges(
-        "evaluate",
-        should_retry,
-        {
-            "generate": "generate",
-            "end": END,
-        },
-    )
+    workflow.add_edge("finalize", END)
 
     return workflow.compile(cache=_node_cache)

@@ -79,8 +79,5 @@ class ResumeState(TypedDict, total=False):
     user_stats: UserStats | None
     project_plans: list[ProjectPlan]
     resume_data: ResumeData
-    evaluation: str
-    evaluation_feedback: str
-    retry_count: int
     error_code: str
     error_message: str

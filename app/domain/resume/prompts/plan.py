@@ -29,25 +29,46 @@ Analyze the provided commits and PRs, then create a plan with:
 ### Step 3: Enrich with technical context
 - Cross-reference commits with dependencies to identify specific technologies used
 - If PR body contains technical details (e.g., "JPA Fetch Join", "비관적 잠금"), extract them
-- BAD suggested_content: "로그인 기능 구현"
-- GOOD suggested_content: "Spring Security 기반 소셜 로그인 및 JWT 토큰 인증 시스템 구현"
+
+RULE: suggested_content MUST start with a concrete technology name
+Pattern: "[기술명]을/를 활용한 [기능 설명] [구현/개선/설계]"
+
+BAD: "쿠폰 조회 API 구현" (기술명 없음)
+BAD: "사용자 맞춤형 쿠폰 조회 및 적용 API 구현" (기술명 없음)
+GOOD: "Spring Data JPA를 활용한 사용 가능 쿠폰 목록 조회 및 적용 API 구현"
+GOOD: "Spring Security와 OAuth2를 활용한 카카오/구글 소셜 로그인 구현"
+GOOD: "Redis를 이용한 장바구니 세션 관리 및 상품 재고 동기화 구현"
+GOOD: "@Scheduled를 활용한 결제 만료 주문 상태 자동 변경 스케줄러 구현"
 
 ### Step 4: Select tech_stack
 - Pick 5-8 items from provided dependencies ONLY
-- ALWAYS convert artifact IDs to official product names:
-  - javax.servlet-api, jakarta.servlet-api → Java Servlet
-  - ojdbc8, ojdbc11 → Oracle JDBC
-  - commons-dbcp2, commons-dbcp → Apache Commons DBCP
-  - jackson-databind, jackson-core → Jackson
-  - commons-fileupload → Apache Commons FileUpload
-  - spring-boot-starter-* → Spring Boot (and specific module e.g. Spring Security)
-  - mybatis-spring-boot-starter → MyBatis
-  - thymeleaf-spring5, thymeleaf-extras-* → Thymeleaf
-  - lettuce-core, jedis → Redis
-- NEVER use raw artifact IDs (e.g. javax.servlet-api, ojdbc8) directly
-- EXCLUDE: utilities, AI services, dev tools, package managers
-- EXCLUDE: Pydantic, Lombok, uvicorn, ESLint, Prettier, Jest, pytest, Swagger, JUnit
-- EXCLUDE: OpenAI, Whisper, GPT, Claude, Gemini, npm, pip, yarn, Git, GitHub
+
+MANDATORY FRAMEWORK RULE (최우선 적용):
+- spring-boot-starter-* 존재 → "Spring Boot" MUST be item #1 in tech_stack
+- django* 존재 → "Django" MUST be included
+- fastapi 존재 → "FastAPI" MUST be included
+- express*, @nestjs/* 존재 → "Express.js" or "NestJS" MUST be included
+
+Artifact ID → Official name mapping (프레임워크 이후 추가):
+- spring-boot-starter-security → Spring Security
+- spring-boot-starter-data-jpa → Spring Data JPA
+- spring-boot-starter-data-redis, lettuce-core, jedis → Redis
+- spring-boot-starter-oauth2-client → OAuth2
+- querydsl-jpa → QueryDSL
+- spring-cloud-starter-aws → AWS S3
+- spring-boot-starter-webflux → Spring WebFlux
+- jjwt-*, java-jwt → JWT
+- mybatis-spring-boot-starter → MyBatis
+- thymeleaf-spring5, thymeleaf-extras-* → Thymeleaf
+- jackson-databind, jackson-core → Jackson
+- javax.servlet-api, jakarta.servlet-api → Java Servlet
+- ojdbc8, ojdbc11 → Oracle JDBC
+- commons-dbcp2, commons-dbcp → Apache Commons DBCP
+- commons-fileupload → Apache Commons FileUpload
+
+- NEVER use raw artifact IDs directly
+- EXCLUDE: Lombok, Swagger, JUnit, pytest, ESLint, Prettier
+- EXCLUDE: OpenAI, Whisper, GPT, Claude, Gemini, npm, pip, yarn, Git
 
 ### Step 5: Record skipped commits
 - For every commit NOT included in any bullet plan, record it with a reason

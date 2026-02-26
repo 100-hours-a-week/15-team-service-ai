@@ -90,7 +90,7 @@ async def respond_node(state: ChatState) -> ChatState:
     except Exception as e:
         logger.error("respond_node 실패", error=str(e), exc_info=True)
         return {
-            "error_message": f"채팅 응답 생성 실패: {e}",
+            "error_message": "채팅 응답 생성에 실패했습니다",
             "turn_count": turn_count,
         }
 

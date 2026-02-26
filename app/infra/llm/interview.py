@@ -11,6 +11,8 @@ from app.infra.llm.base import (
 
 logger = get_logger(__name__)
 
+_VALID_INTERVIEW_TYPES = frozenset({"technical", "behavioral"})
+
 
 async def generate_interview(
     resume_json: str,
@@ -21,6 +23,8 @@ async def generate_interview(
     session_id: str | None = None,
 ) -> InterviewQuestionsOutput:
     """면접 질문 생성 - vLLM 사용"""
+    if interview_type not in _VALID_INTERVIEW_TYPES:
+        raise ValueError(f"지원하지 않는 면접 유형: {interview_type}")
     logger.debug("면접 질문 생성 요청", interview_type=interview_type, position=position)
 
     if feedback:

@@ -1,6 +1,5 @@
 from app.core.config import settings
 from app.domain.resume.prompts import get_position_rules
-from app.domain.resume.prompts.positions import get_position_config
 from app.domain.resume.schemas import ProjectInfoDict, RepoContext
 from app.infra.langfuse.prompt_manager import get_prompt
 
@@ -82,24 +81,12 @@ def build_generator_system_prompt(position: str) -> str:
     )
 
 
-def build_evaluator_system_prompt(position: str) -> str:
-    """포지션별 규칙을 주입한 평가 시스템 프롬프트 생성"""
-    position_rules = _get_evaluator_position_rules(position)
+def build_finalizer_system_prompt(position: str) -> str:
+    """포지션별 규칙을 주입한 Finalizer 시스템 프롬프트 생성"""
+    position_rules = get_position_rules(position)
 
     return get_prompt(
-        "resume-evaluator-system",
+        "resume-finalizer-system",
         position=position,
         position_rules=position_rules,
     )
-
-
-def _get_evaluator_position_rules(position: str) -> str:
-    """평가용 포지션별 제외 규칙 반환"""
-    config = get_position_config(position)
-    name_ko = config["name_ko"]
-
-    if not config["tech_exclude"]:
-        return f"- {name_ko}: 모든 기술 허용"
-
-    exclude_list = ", ".join(config["tech_exclude"])
-    return f"- {name_ko} FAIL if has: {exclude_list}"
