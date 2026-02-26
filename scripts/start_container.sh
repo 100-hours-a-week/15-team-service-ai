@@ -8,6 +8,11 @@ CONTAINER_NAME="ai-server"
 REGION="ap-northeast-2"
 SSM_PATH="/commitme/v2/prod/ai-server"
 
+# ECR Registry (NAT Gateway 비용 절감을 위해 모든 이미지를 ECR에서 pull)
+ECR_REGISTRY="248312021437.dkr.ecr.ap-northeast-2.amazonaws.com"
+ALLOY_IMAGE_URI="${ECR_REGISTRY}/commitme/alloy:latest"
+CADVISOR_IMAGE_URI="${ECR_REGISTRY}/commitme/cadvisor:latest"
+
 echo "Reading image info from $IMAGE_INFO_FILE..."
 if [ ! -f "$IMAGE_INFO_FILE" ]; then
     echo "Error: $IMAGE_INFO_FILE not found!"
@@ -72,14 +77,19 @@ if [ ! -s "$ALLOY_CONFIG_FILE" ]; then
 fi
 echo "Alloy config saved to $ALLOY_CONFIG_FILE"
 
-# 4. Pull Docker Image
-echo "Pulling image..."
+# 4. Pull Docker Images (모든 이미지를 ECR에서 pull - NAT Gateway 비용 절감)
+echo "Pulling images from ECR..."
 docker pull "$IMAGE_URI"
+docker pull "$ALLOY_IMAGE_URI"
+docker pull "$CADVISOR_IMAGE_URI"
+echo "All images pulled successfully."
 
 # 5. Run Containers with docker compose
 echo "Starting containers..."
-# Export IMAGE_URI so docker compose can use it
+# Export IMAGE URIs so docker compose can use them
 export IMAGE_URI="$IMAGE_URI"
+export ALLOY_IMAGE_URI="$ALLOY_IMAGE_URI"
+export CADVISOR_IMAGE_URI="$CADVISOR_IMAGE_URI"
 
 cd "$DEPLOY_DIR"
 docker compose up -d

@@ -17,7 +17,7 @@ services:
         max-file: "3"
 
   grafana-alloy:
-    image: grafana/alloy:latest
+    image: ${ALLOY_IMAGE_URI:-248312021437.dkr.ecr.ap-northeast-2.amazonaws.com/commitme/alloy:latest}
     container_name: grafana-alloy
     restart: unless-stopped
     ports:
@@ -29,3 +29,19 @@ services:
       - run
       - --server.http.listen-addr=0.0.0.0:12345
       - /etc/alloy/config.alloy
+
+  cadvisor:
+    image: ${CADVISOR_IMAGE_URI:-248312021437.dkr.ecr.ap-northeast-2.amazonaws.com/commitme/cadvisor:latest}
+    container_name: cadvisor
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    privileged: true
+    devices:
+      - /dev/kmsg
