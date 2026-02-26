@@ -60,16 +60,34 @@ def get_evaluator_llm() -> ChatGoogleGenerativeAI:
     )
 
 
-def _build_langfuse_config(session_id: str | None, tags: list[str]) -> dict:
-    """Langfuse 콜백 설정 생성"""
+def _build_langfuse_config(
+    session_id: str | None,
+    tags: list[str],
+    callbacks: list | None = None,
+) -> dict:
+    """Langfuse 콜백 설정 생성
+
+    callbacks가 전달되면 상위 워크플로우의 핸들러를 재사용합니다
+    전달되지 않으면 새 핸들러를 생성합니다
+    """
+    if callbacks is not None:
+        return {
+            "callbacks": callbacks,
+            "metadata": {
+                "langfuse_session_id": session_id,
+                "langfuse_tags": tags,
+            },
+        }
+
     langfuse_handler = get_langfuse_handler()
-    return {
+    config: dict = {
         "callbacks": [langfuse_handler] if langfuse_handler else [],
         "metadata": {
             "langfuse_session_id": session_id,
             "langfuse_tags": tags,
         },
     }
+    return config
 
 
 async def _invoke_llm[T](

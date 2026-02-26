@@ -28,7 +28,7 @@ logger = get_logger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """앱 시작/종료 이벤트 관리"""
-    async with AsyncSqliteSaver.from_conn_string("checkpoints.db") as checkpointer:
+    async with AsyncSqliteSaver.from_conn_string("data/checkpoints.db") as checkpointer:
         app.state.checkpointer = checkpointer
         logger.info("AsyncSqliteSaver 체크포인터 초기화 완료")
         yield

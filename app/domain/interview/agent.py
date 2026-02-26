@@ -36,7 +36,13 @@ async def run_interview_agent(
         }
 
         langfuse_handler = get_langfuse_handler()
-        config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+        config = {
+            "callbacks": [langfuse_handler] if langfuse_handler else [],
+            "metadata": {
+                "langfuse_session_id": session_id,
+                "langfuse_tags": ["interview", interview_type, position],
+            },
+        }
 
         final_state = await asyncio.wait_for(
             _interview_workflow.ainvoke(initial_state, config=config),
