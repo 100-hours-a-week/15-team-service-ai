@@ -40,7 +40,7 @@ async def generate_interview(
     )
 
     resume_json = build_resume_json(body.content)
-    question_count = min(len(body.content.projects) * 2, 10)
+    question_count = max(min(len(body.content.projects) * 2, 10), 4)
 
     questions, error_message = await run_interview_agent(
         resume_json=resume_json,

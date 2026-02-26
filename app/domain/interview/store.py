@@ -51,7 +51,8 @@ class InterviewContextStore:
     def save_session_meta(self, session_id: str, meta: SessionMeta) -> None:
         """면접 세션 메타데이터 저장"""
         self._meta_store[session_id] = meta
-        self._timestamps[session_id] = time.time()
+        if session_id not in self._timestamps:
+            self._timestamps[session_id] = time.time()
 
     def get_session_meta(self, session_id: str) -> SessionMeta | None:
         """면접 세션 메타데이터 조회"""

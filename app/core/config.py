@@ -41,8 +41,8 @@ class Settings(BaseSettings):
     workflow_batch_size: int = 1
 
     # README 설정
-    readme_max_length_github: int = 4000
-    readme_max_length_prompt: int = 3000
+    readme_max_length_github: int = 8000
+    readme_max_length_prompt: int = 6000
 
     # 프롬프트 포맷 설정
     prompt_messages_max_count: int = 50

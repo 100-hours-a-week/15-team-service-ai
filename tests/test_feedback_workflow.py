@@ -6,23 +6,11 @@ import pytest
 
 from app.core.exceptions import ErrorCode
 from app.domain.interview.feedback_schemas import (
-    FeedbackEvaluationOutput,
     FeedbackOutput,
-    OverallFeedbackEvaluationOutput,
     OverallFeedbackOutput,
 )
 
-SAMPLE_FEEDBACK_STATE = {
-    "resume_json": "없음",
-    "position": "백엔드 개발자",
-    "interview_type": "technical",
-    "question_text": "FastAPI에서 비동기 처리의 장점은?",
-    "question_intent": "비동기 프로그래밍 이해도",
-    "related_project": "test-project",
-    "answer": "FastAPI는 async/await를 지원합니다",
-    "session_id": "test-session",
-    "retry_count": 0,
-}
+EMPTY_CONFIG = {"callbacks": []}
 
 SAMPLE_FEEDBACK_OUTPUT = FeedbackOutput(
     score=7,
@@ -32,7 +20,6 @@ SAMPLE_FEEDBACK_OUTPUT = FeedbackOutput(
 )
 
 SAMPLE_OVERALL_STATE = {
-    "resume_json": "없음",
     "position": "백엔드 개발자",
     "interview_type": "technical",
     "qa_pairs_json": '[{"question": "Q1", "answer": "A1"}]',
@@ -46,153 +33,6 @@ SAMPLE_OVERALL_OUTPUT = OverallFeedbackOutput(
     key_strengths=["기술 이해도 양호"],
     key_improvements=["실무 경험 부족"],
 )
-
-
-class TestGenerateFeedbackNode:
-    """개별 피드백 생성 노드 테스트"""
-
-    async def test_generate_success(self):
-        """정상 생성"""
-        from app.domain.interview.feedback_workflow import (
-            generate_feedback_node,
-        )
-
-        with patch(
-            "app.domain.interview.feedback_workflow.generate_feedback",
-            new_callable=AsyncMock,
-            return_value=SAMPLE_FEEDBACK_OUTPUT,
-        ):
-            result = await generate_feedback_node(SAMPLE_FEEDBACK_STATE)
-
-        assert result["feedback_result"] == SAMPLE_FEEDBACK_OUTPUT
-        assert result["retry_count"] == 0
-
-    async def test_generate_retry_increments_count(self):
-        """평가 실패 후 재시도 시 retry_count 증가"""
-        from app.domain.interview.feedback_workflow import (
-            generate_feedback_node,
-        )
-
-        retry_state = {
-            **SAMPLE_FEEDBACK_STATE,
-            "evaluation": "fail",
-            "retry_count": 0,
-        }
-
-        with patch(
-            "app.domain.interview.feedback_workflow.generate_feedback",
-            new_callable=AsyncMock,
-            return_value=SAMPLE_FEEDBACK_OUTPUT,
-        ):
-            result = await generate_feedback_node(retry_state)
-
-        assert result["retry_count"] == 1
-        assert result["feedback_result"] == SAMPLE_FEEDBACK_OUTPUT
-
-    async def test_generate_connection_error(self):
-        """연결 오류 시 에러 상태 반환"""
-        from app.domain.interview.feedback_workflow import (
-            generate_feedback_node,
-        )
-
-        with patch(
-            "app.domain.interview.feedback_workflow.generate_feedback",
-            new_callable=AsyncMock,
-            side_effect=httpx.ConnectError("연결 실패"),
-        ):
-            result = await generate_feedback_node(SAMPLE_FEEDBACK_STATE)
-
-        assert result.get("error_code") == ErrorCode.LLM_API_ERROR
-
-    async def test_generate_value_error(self):
-        """파싱 오류 시 에러 상태 반환"""
-        from app.domain.interview.feedback_workflow import (
-            generate_feedback_node,
-        )
-
-        with patch(
-            "app.domain.interview.feedback_workflow.generate_feedback",
-            new_callable=AsyncMock,
-            side_effect=ValueError("파싱 실패"),
-        ):
-            result = await generate_feedback_node(SAMPLE_FEEDBACK_STATE)
-
-        assert result.get("error_code") == ErrorCode.FEEDBACK_GENERATE_ERROR
-
-
-class TestEvaluateFeedbackNode:
-    """개별 피드백 평가 노드 테스트"""
-
-    async def test_evaluate_pass(self):
-        """평가 통과"""
-        from app.domain.interview.feedback_workflow import (
-            evaluate_feedback_node,
-        )
-
-        state = {
-            **SAMPLE_FEEDBACK_STATE,
-            "feedback_result": SAMPLE_FEEDBACK_OUTPUT,
-        }
-
-        eval_result = FeedbackEvaluationOutput(
-            result="pass",
-            feedback="피드백이 적절합니다",
-        )
-
-        with patch(
-            "app.domain.interview.feedback_workflow.evaluate_feedback",
-            new_callable=AsyncMock,
-            return_value=eval_result,
-        ):
-            result = await evaluate_feedback_node(state)
-
-        assert result["evaluation"] == "pass"
-
-    async def test_evaluate_fail(self):
-        """평가 실패"""
-        from app.domain.interview.feedback_workflow import (
-            evaluate_feedback_node,
-        )
-
-        state = {
-            **SAMPLE_FEEDBACK_STATE,
-            "feedback_result": SAMPLE_FEEDBACK_OUTPUT,
-        }
-
-        eval_result = FeedbackEvaluationOutput(
-            result="fail",
-            feedback="점수와 피드백이 불일치",
-        )
-
-        with patch(
-            "app.domain.interview.feedback_workflow.evaluate_feedback",
-            new_callable=AsyncMock,
-            return_value=eval_result,
-        ):
-            result = await evaluate_feedback_node(state)
-
-        assert result["evaluation"] == "fail"
-        assert result["evaluation_feedback"] == "점수와 피드백이 불일치"
-
-    async def test_evaluate_fallback_on_error(self):
-        """평가 실패 시 pass로 폴백"""
-        from app.domain.interview.feedback_workflow import (
-            evaluate_feedback_node,
-        )
-
-        state = {
-            **SAMPLE_FEEDBACK_STATE,
-            "feedback_result": SAMPLE_FEEDBACK_OUTPUT,
-        }
-
-        with patch(
-            "app.domain.interview.feedback_workflow.evaluate_feedback",
-            new_callable=AsyncMock,
-            side_effect=httpx.ConnectError("Gemini 연결 실패"),
-        ):
-            result = await evaluate_feedback_node(state)
-
-        assert result["evaluation"] == "pass"
 
 
 class TestGenerateOverallNode:
@@ -209,7 +49,7 @@ class TestGenerateOverallNode:
             new_callable=AsyncMock,
             return_value=SAMPLE_OVERALL_OUTPUT,
         ):
-            result = await generate_overall_node(SAMPLE_OVERALL_STATE)
+            result = await generate_overall_node(SAMPLE_OVERALL_STATE, EMPTY_CONFIG)
 
         assert result["feedback_result"] == SAMPLE_OVERALL_OUTPUT
 
@@ -224,38 +64,9 @@ class TestGenerateOverallNode:
             new_callable=AsyncMock,
             side_effect=httpx.ConnectError("연결 실패"),
         ):
-            result = await generate_overall_node(SAMPLE_OVERALL_STATE)
+            result = await generate_overall_node(SAMPLE_OVERALL_STATE, EMPTY_CONFIG)
 
         assert result.get("error_code") == ErrorCode.LLM_API_ERROR
-
-
-class TestEvaluateOverallNode:
-    """종합 피드백 평가 노드 테스트"""
-
-    async def test_evaluate_overall_pass(self):
-        """종합 피드백 평가 통과"""
-        from app.domain.interview.feedback_workflow import (
-            evaluate_overall_node,
-        )
-
-        state = {
-            **SAMPLE_OVERALL_STATE,
-            "feedback_result": SAMPLE_OVERALL_OUTPUT,
-        }
-
-        eval_result = OverallFeedbackEvaluationOutput(
-            result="pass",
-            feedback="종합 피드백이 적절합니다",
-        )
-
-        with patch(
-            "app.domain.interview.feedback_workflow.evaluate_overall_feedback",
-            new_callable=AsyncMock,
-            return_value=eval_result,
-        ):
-            result = await evaluate_overall_node(state)
-
-        assert result["evaluation"] == "pass"
 
 
 class TestFeedbackAgent:
@@ -271,7 +82,6 @@ class TestFeedbackAgent:
             return_value=SAMPLE_FEEDBACK_OUTPUT,
         ):
             result, error = await run_feedback_agent(
-                resume_json="없음",
                 position="백엔드 개발자",
                 interview_type="technical",
                 question_text="질문",
@@ -293,7 +103,6 @@ class TestFeedbackAgent:
             side_effect=Exception("LLM 오류"),
         ):
             result, error = await run_feedback_agent(
-                resume_json="없음",
                 position="백엔드 개발자",
                 interview_type="technical",
                 question_text="질문",
@@ -315,7 +124,6 @@ class TestFeedbackAgent:
             side_effect=asyncio.TimeoutError(),
         ):
             result, error = await run_feedback_agent(
-                resume_json="없음",
                 position="백엔드 개발자",
                 interview_type="technical",
                 question_text="질문",
@@ -341,7 +149,6 @@ class TestOverallFeedbackAgent:
         mock_workflow.ainvoke = AsyncMock(
             return_value={
                 "feedback_result": SAMPLE_OVERALL_OUTPUT,
-                "evaluation": "pass",
                 "retry_count": 0,
             }
         )
@@ -357,7 +164,6 @@ class TestOverallFeedbackAgent:
             ),
         ):
             result, error = await run_overall_feedback_agent(
-                resume_json="없음",
                 position="백엔드 개발자",
                 interview_type="technical",
                 qa_pairs_json='[{"question": "Q", "answer": "A"}]',
@@ -391,7 +197,6 @@ class TestOverallFeedbackAgent:
             ),
         ):
             result, error = await run_overall_feedback_agent(
-                resume_json="없음",
                 position="백엔드 개발자",
                 interview_type="technical",
                 qa_pairs_json='[{"question": "Q", "answer": "A"}]',
@@ -434,6 +239,9 @@ class TestFeedbackEndpoint:
                 new_callable=AsyncMock,
                 return_value=(SAMPLE_OVERALL_OUTPUT, None),
             ),
+            patch(
+                "app.api.v2.feedback.interview_context_store",
+            ),
         ):
             response = await async_client.post(
                 "/api/v2/interview/end",
@@ -460,6 +268,9 @@ class TestFeedbackEndpoint:
                 new_callable=AsyncMock,
                 return_value=(SAMPLE_OVERALL_OUTPUT, None),
             ),
+            patch(
+                "app.api.v2.feedback.interview_context_store",
+            ),
         ):
             response = await async_client.post(
                 "/api/v2/interview/end",
@@ -484,6 +295,9 @@ class TestFeedbackEndpoint:
                 "app.api.v2.feedback.run_overall_feedback_agent",
                 new_callable=AsyncMock,
                 return_value=(None, "종합 피드백 실패"),
+            ),
+            patch(
+                "app.api.v2.feedback.interview_context_store",
             ),
         ):
             response = await async_client.post(
@@ -510,6 +324,29 @@ class TestFeedbackEndpoint:
             for i in range(1, 22)
         ]
         request = {**self.SAMPLE_REQUEST, "messages": messages}
+
+        response = await async_client.post(
+            "/api/v2/interview/end",
+            json=request,
+        )
+
+        assert response.status_code == 422
+
+    async def test_endpoint_invalid_answer_input_type(self, async_client):
+        """잘못된 answerInputType 시 422"""
+        request = {
+            **self.SAMPLE_REQUEST,
+            "messages": [
+                {
+                    "turnNo": 1,
+                    "question": "질문",
+                    "answer": "답변",
+                    "answerInputType": "invalid",
+                    "askedAt": "2026-02-20T10:00:00",
+                    "answeredAt": "2026-02-20T10:01:00",
+                },
+            ],
+        }
 
         response = await async_client.post(
             "/api/v2/interview/end",

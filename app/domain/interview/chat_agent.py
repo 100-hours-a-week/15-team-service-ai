@@ -10,7 +10,7 @@ from app.domain.interview.chat_workflow import create_chat_workflow
 from app.infra.llm.client import generate_chat_response, get_langfuse_handler
 
 logger = get_logger(__name__)
-_chat_workflow_cache: dict[int, object] = {}
+_chat_workflow: object | None = None
 
 
 async def _run_single_call(
@@ -97,21 +97,22 @@ async def run_chat_agent(
         )
 
     try:
-        cp_id = id(checkpointer)
-        if cp_id not in _chat_workflow_cache:
-            _chat_workflow_cache[cp_id] = create_chat_workflow(checkpointer=checkpointer)
-        workflow = _chat_workflow_cache[cp_id]
+        global _chat_workflow
+        if _chat_workflow is None:
+            _chat_workflow = create_chat_workflow(checkpointer=checkpointer)
+        workflow = _chat_workflow
         langfuse_handler = get_langfuse_handler()
         config = {
             "configurable": {"thread_id": thread_id},
             "callbacks": [langfuse_handler] if langfuse_handler else [],
             "metadata": {
                 "langfuse_session_id": session_id,
+                "langfuse_tags": ["chat", interview_type, position],
             },
         }
 
         existing_state = await workflow.aget_state(config)
-        has_checkpoint = existing_state.values.get("messages") is not None
+        has_checkpoint = bool(existing_state.next)
 
         if has_checkpoint:
             logger.info("기존 대화 이어서 진행", thread_id=thread_id)

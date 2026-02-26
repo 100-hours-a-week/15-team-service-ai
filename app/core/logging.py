@@ -123,6 +123,7 @@ def setup_logging(level: str | None = None) -> None:
         "langgraph",
         "openai",
         "anyio",
+        "aiosqlite",
     ]
     for logger_name in noisy_loggers:
         logging.getLogger(logger_name).setLevel(logging.WARNING)
