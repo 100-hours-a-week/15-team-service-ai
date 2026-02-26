@@ -60,7 +60,7 @@ echo "Environment variables loaded into $ENV_FILE"
 # 3. Fetch config.alloy from SSM Parameter Store
 ALLOY_CONFIG_DIR="$DEPLOY_DIR/alloy"
 ALLOY_CONFIG_FILE="$ALLOY_CONFIG_DIR/config.alloy"
-ALLOY_SSM_PARAM="$SSM_PATH/alloy-config"
+ALLOY_SSM_PARAM="$SSM_PATH-alloy/alloy-config"
 
 echo "Fetching Alloy config from SSM: $ALLOY_SSM_PARAM..."
 mkdir -p "$ALLOY_CONFIG_DIR"
