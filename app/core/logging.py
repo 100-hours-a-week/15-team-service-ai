@@ -81,7 +81,7 @@ def setup_logging(level: str | None = None) -> None:
 
     if settings.is_production:
         shared_processors.append(structlog.processors.format_exc_info)
-        renderer = structlog.processors.JSONRenderer()
+        renderer = structlog.processors.JSONRenderer(ensure_ascii=False)
     else:
         renderer = structlog.dev.ConsoleRenderer(colors=True)
 
