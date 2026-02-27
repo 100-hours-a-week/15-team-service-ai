@@ -1,16 +1,12 @@
-from httpx import ASGITransport, AsyncClient
-
+import pytest
 from app.main import app
-
 
 class TestHealthCheck:
     """헬스체크 엔드포인트 테스트"""
 
-    async def test_health_check_returns_up(self):
+    async def test_health_check_returns_up(self, async_client):
         """헬스체크 엔드포인트가 정상 응답을 반환"""
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            response = await client.get("/health")
+        response = await async_client.get("/health")
 
         assert response.status_code == 200
         assert response.json() == {"status": "UP"}

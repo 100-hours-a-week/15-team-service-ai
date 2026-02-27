@@ -1,11 +1,7 @@
 from unittest.mock import AsyncMock, patch
 
-import pytest
-from httpx import ASGITransport, AsyncClient
-
 from app.domain.interview.feedback_schemas import FeedbackOutput, OverallFeedbackOutput
 from app.domain.interview.schemas import InterviewQuestion, InterviewQuestionsOutput
-from app.main import app
 
 SAMPLE_INTERVIEW_REQUEST = {
     "resumeId": 1,
@@ -76,11 +72,7 @@ SAMPLE_OVERALL_OUTPUT = OverallFeedbackOutput(
 )
 
 
-@pytest.fixture
-def async_client():
-    """비동기 HTTP 클라이언트"""
-    transport = ASGITransport(app=app)
-    return AsyncClient(transport=transport, base_url="http://test")
+
 
 
 class TestInterviewGenerateEndpoint:
