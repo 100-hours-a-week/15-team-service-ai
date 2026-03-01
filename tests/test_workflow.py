@@ -14,7 +14,7 @@ from app.domain.resume.schemas import (
 )
 from app.domain.resume.workflow import (
     collect_data_node,
-    finalize_node,
+    evaluate_node,
     generate_node,
     should_continue,
 )
@@ -216,8 +216,8 @@ class TestGenerateNode:
         assert "검증 오류" in result["error_message"]
 
 
-class TestFinalizeNode:
-    """finalize_node 함수 테스트"""
+class TestEvaluateNode:
+    """evaluate_node 함수 테스트"""
 
     @pytest.fixture
     def base_state(self) -> ResumeState:
@@ -234,7 +234,7 @@ class TestFinalizeNode:
                     "repo_name": "testrepo",
                     "repo_url": "https://github.com/testuser/testrepo",
                     "dependencies": ["fastapi"],
-                    "messages": ["feat: init"],
+                    "messages": ["feat: 로그인 API 구현", "feat: 회원가입 추가"],
                 }
             ],
             resume_data=ResumeData(
@@ -242,160 +242,76 @@ class TestFinalizeNode:
                     ProjectInfo(
                         name="Test",
                         repo_url="https://github.com/testuser/testrepo",
-                        description="- 테스트 기능 구현",
-                        tech_stack=["Python", "FastAPI", "PostgreSQL"],
+                        description="- FastAPI 기반 로그인 API 구현",
+                        tech_stack=["Python", "FastAPI"],
                     )
                 ]
             ),
         )
 
-    async def test_finalize_success(self, base_state):
-        """정상 윤문 - 정제된 ResumeData 반환"""
-        polished_resume = ResumeData(
-            projects=[
-                ProjectInfo(
-                    name="Test",
-                    repo_url="https://github.com/testuser/testrepo",
-                    description="- FastAPI 기반 테스트 기능 설계 및 구현",
-                    tech_stack=["Python", "FastAPI", "PostgreSQL"],
-                )
-            ]
+    async def test_evaluate_pass(self, base_state):
+        """평가 통과 시 evaluation=pass 저장"""
+        from app.domain.resume.schemas import EvaluationOutput
+
+        mock_eval = EvaluationOutput(
+            result="pass",
+            violated_rule=None,
+            violated_item=None,
+            feedback="모든 규칙 준수",
         )
 
-        with (
-            patch(
-                "app.domain.resume.validators.validate_resume_format",
-                return_value=[],
-            ),
-            patch(
-                "app.domain.resume.workflow.finalize_resume",
-                new_callable=AsyncMock,
-                return_value=polished_resume,
-            ),
+        with patch(
+            "app.domain.resume.workflow.evaluate_resume",
+            new_callable=AsyncMock,
+            return_value=mock_eval,
         ):
-            result = await finalize_node(base_state)
+            result = await evaluate_node(base_state)
 
-        assert result["resume_data"] == polished_resume
+        assert result["evaluation"] == "pass"
+        assert result["evaluation_feedback"] == "모든 규칙 준수"
 
-    async def test_finalize_llm_error_graceful(self, base_state):
-        """LLM 실패 시 원본 ResumeData 유지"""
-        original_resume = base_state["resume_data"]
+    async def test_evaluate_fail_saves_feedback(self, base_state):
+        """평가 실패 시 evaluation=fail, feedback 저장"""
+        from app.domain.resume.schemas import EvaluationOutput
 
-        with (
-            patch(
-                "app.domain.resume.validators.validate_resume_format",
-                return_value=[],
-            ),
-            patch(
-                "app.domain.resume.workflow.finalize_resume",
-                new_callable=AsyncMock,
-                side_effect=Exception("LLM 호출 실패"),
-            ),
-        ):
-            result = await finalize_node(base_state)
-
-        assert result["resume_data"] == original_resume
-
-    async def test_finalize_with_format_violations(self, base_state):
-        """포맷 위반이 있어도 Finalizer가 수정하여 반환"""
-        mock_violations = [
-            {
-                "project": "Test",
-                "rule": "forbidden_ending",
-                "detail": "금지 어미 '~했습니다' 사용",
-            }
-        ]
-        polished_resume = ResumeData(
-            projects=[
-                ProjectInfo(
-                    name="Test",
-                    repo_url="https://github.com/testuser/testrepo",
-                    description="- FastAPI 기반 테스트 기능 구현",
-                    tech_stack=["Python", "FastAPI", "PostgreSQL"],
-                )
-            ]
+        mock_eval = EvaluationOutput(
+            result="fail",
+            violated_rule=1,
+            violated_item="Redis",
+            feedback="불릿 2 ('Redis 캐싱'): 커밋에서 Redis 사용 확인 불가. 해당 불릿 제거 필요",
         )
 
-        with (
-            patch(
-                "app.domain.resume.validators.validate_resume_format",
-                return_value=mock_violations,
-            ),
-            patch(
-                "app.domain.resume.workflow.finalize_resume",
-                new_callable=AsyncMock,
-                return_value=polished_resume,
-            ) as mock_finalize,
+        with patch(
+            "app.domain.resume.workflow.evaluate_resume",
+            new_callable=AsyncMock,
+            return_value=mock_eval,
         ):
-            result = await finalize_node(base_state)
+            result = await evaluate_node(base_state)
 
-        assert result["resume_data"] == polished_resume
-        call_kwargs = mock_finalize.call_args[1]
-        assert "금지 어미" in call_kwargs["violations"]
+        assert result["evaluation"] == "fail"
+        assert "Redis" in result["evaluation_feedback"]
 
-    async def test_finalize_hallucinated_repo_url_keeps_original(self, base_state):
-        """Finalizer가 repo_url을 바꾸면 원본 유지"""
-        original_resume = base_state["resume_data"]
-        hallucinated = ResumeData(
-            projects=[
-                ProjectInfo(
-                    name="Sample Project",
-                    repo_url="https://github.com/sample/repo",
-                    description="- RESTful API 기반의 백엔드 서버 설계",
-                    tech_stack=["Java", "Spring Boot"],
-                )
-            ]
-        )
+    async def test_evaluate_llm_failure_fallbacks_to_pass(self, base_state):
+        """평가 LLM 네트워크 실패 시 pass로 폴백해 파이프라인 중단 방지"""
+        import httpx
 
-        with (
-            patch(
-                "app.domain.resume.validators.validate_resume_format",
-                return_value=[],
-            ),
-            patch(
-                "app.domain.resume.workflow.finalize_resume",
-                new_callable=AsyncMock,
-                return_value=hallucinated,
-            ),
+        with patch(
+            "app.domain.resume.workflow.evaluate_resume",
+            new_callable=AsyncMock,
+            side_effect=httpx.ConnectError("LLM 연결 실패"),
         ):
-            result = await finalize_node(base_state)
+            result = await evaluate_node(base_state)
 
-        assert result["resume_data"] == original_resume
+        assert result["evaluation"] == "pass"
 
-    async def test_finalize_wrong_project_count_keeps_original(self, base_state):
-        """Finalizer가 프로젝트 수를 바꾸면 원본 유지"""
-        original_resume = base_state["resume_data"]
-        wrong_count = ResumeData(
-            projects=[
-                ProjectInfo(
-                    name="Test",
-                    repo_url="https://github.com/testuser/testrepo",
-                    description="- 기능 구현",
-                    tech_stack=["Python"],
-                ),
-                ProjectInfo(
-                    name="Extra",
-                    repo_url="https://github.com/extra/repo",
-                    description="- 추가 프로젝트",
-                    tech_stack=["Java"],
-                ),
-            ]
-        )
+    async def test_evaluate_no_resume_data_returns_pass(self, base_state):
+        """resume_data 없을 때 pass 반환"""
+        state_without_resume = dict(base_state)
+        state_without_resume.pop("resume_data", None)
 
-        with (
-            patch(
-                "app.domain.resume.validators.validate_resume_format",
-                return_value=[],
-            ),
-            patch(
-                "app.domain.resume.workflow.finalize_resume",
-                new_callable=AsyncMock,
-                return_value=wrong_count,
-            ),
-        ):
-            result = await finalize_node(base_state)
+        result = await evaluate_node(state_without_resume)
 
-        assert result["resume_data"] == original_resume
+        assert result["evaluation"] == "pass"
 
 
 class TestShouldContinue:

@@ -225,3 +225,4 @@ scripts/
 .DS_Store
 checkpoints.db
 Notebook
+plan*

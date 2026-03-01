@@ -8,7 +8,7 @@ from app.domain.resume.schemas import (
     ResumeData,
 )
 from app.infra.llm.client import (
-    finalize_resume,
+    evaluate_resume,
     format_project_info,
     format_repo_contexts,
     generate_resume,
@@ -290,8 +290,8 @@ class TestGenerateResume:
         assert result == expected_result
 
 
-class TestFinalizeResume:
-    """finalize_resume 함수 테스트"""
+class TestEvaluateResume:
+    """evaluate_resume 함수 테스트"""
 
     @pytest.fixture
     def sample_resume_data(self) -> ResumeData:
@@ -301,59 +301,57 @@ class TestFinalizeResume:
                 ProjectInfo(
                     name="Test Project",
                     repo_url="https://github.com/user/test-repo",
-                    description="- 테스트 기능 구현",
+                    description="- FastAPI 기반 인증 API 구현",
                     tech_stack=["Python", "FastAPI", "PostgreSQL"],
                 )
             ]
         )
 
-    async def test_finalize_resume_success(self, sample_resume_data):
-        """정상 윤문 - ResumeData 반환"""
-        polished = ResumeData(
-            projects=[
-                ProjectInfo(
-                    name="Test Project",
-                    repo_url="https://github.com/user/test-repo",
-                    description="- FastAPI 기반 테스트 API 설계 및 구현",
-                    tech_stack=["Python", "FastAPI", "PostgreSQL"],
-                )
-            ]
+    async def test_evaluate_resume_pass(self, sample_resume_data):
+        """평가 통과 시 EvaluationOutput 반환"""
+        from app.domain.resume.schemas import EvaluationOutput
+
+        expected = EvaluationOutput(
+            result="pass",
+            violated_rule=None,
+            violated_item=None,
+            feedback="모든 규칙 준수",
         )
 
         mock_llm = MagicMock()
-        mock_llm.with_structured_output.return_value.ainvoke = AsyncMock(return_value=polished)
+        mock_llm.with_structured_output.return_value.ainvoke = AsyncMock(return_value=expected)
 
         with patch("app.infra.llm.resume.get_evaluator_llm", return_value=mock_llm):
-            result = await finalize_resume(
+            result = await evaluate_resume(
                 resume_data=sample_resume_data,
                 position="백엔드 개발자",
+                commit_messages=["feat: 인증 API 구현"],
             )
 
-        assert isinstance(result, ResumeData)
-        assert len(result.projects) == 1
-        assert result.projects[0].description == "- FastAPI 기반 테스트 API 설계 및 구현"
+        assert result.result == "pass"
+        assert result.feedback == "모든 규칙 준수"
 
-    async def test_finalize_resume_with_session_id(self, sample_resume_data):
-        """세션 ID 포함 윤문"""
-        polished = ResumeData(
-            projects=[
-                ProjectInfo(
-                    name="Test Project",
-                    repo_url="https://github.com/user/test-repo",
-                    description="- 정제된 설명 구현",
-                    tech_stack=["Python", "FastAPI", "PostgreSQL"],
-                )
-            ]
+    async def test_evaluate_resume_fail(self, sample_resume_data):
+        """평가 실패 시 EvaluationOutput에 피드백 포함"""
+        from app.domain.resume.schemas import EvaluationOutput
+
+        expected = EvaluationOutput(
+            result="fail",
+            violated_rule=1,
+            violated_item="Redis 캐싱",
+            feedback="불릿 2 ('Redis 캐싱'): 커밋에서 Redis 사용 확인 불가. 해당 불릿 제거 필요",
         )
 
         mock_llm = MagicMock()
-        mock_llm.with_structured_output.return_value.ainvoke = AsyncMock(return_value=polished)
+        mock_llm.with_structured_output.return_value.ainvoke = AsyncMock(return_value=expected)
 
         with patch("app.infra.llm.resume.get_evaluator_llm", return_value=mock_llm):
-            result = await finalize_resume(
+            result = await evaluate_resume(
                 resume_data=sample_resume_data,
                 position="백엔드 개발자",
+                commit_messages=["feat: 인증 API 구현"],
                 session_id="test-session-123",
             )
 
-        assert isinstance(result, ResumeData)
+        assert result.result == "fail"
+        assert "Redis" in result.feedback

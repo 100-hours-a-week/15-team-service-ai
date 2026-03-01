@@ -1,6 +1,6 @@
 from app.core.logging import get_logger
 from app.domain.resume.prompts.builder import (
-    build_finalizer_system_prompt,
+    build_evaluator_system_prompt,
     build_generator_system_prompt,
 )
 from app.domain.resume.schemas import (
@@ -26,17 +26,31 @@ async def generate_resume(
     position: str,
     session_id: str | None = None,
     generation_plans: str = "",
+    feedback: str = "",
+    previous_resume_json: str = "",
 ) -> ResumeData:
     """Plan 기반 이력서 생성 - generation_plans 텍스트를 vLLM에 전달"""
-    logger.debug("이력서 생성 요청", position=position, projects=len(project_info))
-
     project_count = len(project_info)
 
-    human_content = get_prompt(
-        "resume-generator-human",
-        project_count=str(project_count),
-        generation_plans=generation_plans,
+    from app.domain.resume.prompts.generation import (
+        RESUME_GENERATOR_HUMAN,
+        RESUME_GENERATOR_RETRY_HUMAN,
     )
+
+    if feedback and previous_resume_json:
+        human_content = RESUME_GENERATOR_RETRY_HUMAN.format(
+            previous_resume_json=previous_resume_json,
+            feedback=feedback,
+            project_count=str(project_count),
+            generation_plans=generation_plans,
+        )
+        logger.debug("이력서 재생성 요청", position=position, projects=project_count)
+    else:
+        human_content = RESUME_GENERATOR_HUMAN.format(
+            project_count=str(project_count),
+            generation_plans=generation_plans,
+        )
+        logger.debug("이력서 생성 요청", position=position, projects=project_count)
 
     config = _build_langfuse_config(session_id, ["resume", "generate", position])
     system_prompt = build_generator_system_prompt(position)
@@ -58,34 +72,32 @@ async def generate_resume(
     return result
 
 
-async def finalize_resume(
+async def evaluate_resume(
     resume_data: ResumeData,
     position: str,
-    commit_messages: list[str] | None = None,
-    violations: str = "",
+    commit_messages: list[str],
     session_id: str | None = None,
-) -> ResumeData:
-    """이력서 1회 윤문 - Gemini로 오탈자 교정, 문맥 다듬기, 포맷 수정"""
-    logger.debug("이력서 윤문 요청", position=position)
+) -> EvaluationOutput:
+    """생성된 이력서 평가 - Gemini 사용, 커밋 근거 검증"""
+    logger.debug("이력서 평가 요청", position=position)
+
+    from app.domain.resume.prompts.evaluation import RESUME_EVALUATOR_HUMAN
 
     resume_json = resume_data.model_dump_json(indent=2)
     commits_text = "\n".join(commit_messages) if commit_messages else "없음"
-    violations_text = violations if violations else "없음"
 
-    human_content = get_prompt(
-        "resume-finalizer-human",
+    system_prompt = build_evaluator_system_prompt(position)
+    human_content = RESUME_EVALUATOR_HUMAN.format(
         position=position,
         resume_json=resume_json,
         commit_messages=commits_text,
-        violations=violations_text,
     )
 
-    config = _build_langfuse_config(session_id, ["resume", "finalize", position])
-    system_prompt = build_finalizer_system_prompt(position)
+    config = _build_langfuse_config(session_id, ["resume", "evaluate", position])
 
     result = await _invoke_llm(
         llm=get_evaluator_llm(),
-        output_type=ResumeData,
+        output_type=EvaluationOutput,
         system_prompt=system_prompt,
         human_content=human_content,
         config=config,
@@ -93,9 +105,10 @@ async def finalize_resume(
     )
 
     logger.debug(
-        "이력서 윤문 완료",
+        "이력서 평가 완료",
         position=position,
-        projects=len(result.projects),
+        result=result.result,
+        violated_rule=result.violated_rule,
     )
     return result
 
@@ -178,12 +191,12 @@ async def plan_resume(
     """Gemini로 프로젝트 1개의 이력서 생성 계획 수행"""
     logger.debug("이력서 Plan 요청", project=project_info.get("repo_name"), position=position)
 
+    from app.domain.resume.prompts.plan import RESUME_PLAN_HUMAN, RESUME_PLAN_SYSTEM
     from app.domain.resume.prompts.positions import get_position_rules
 
     position_rules = get_position_rules(position)
 
-    system_prompt = get_prompt(
-        "resume-plan-system",
+    system_prompt = RESUME_PLAN_SYSTEM.format(
         position=position,
         position_rules=position_rules,
     )
@@ -199,8 +212,7 @@ async def plan_resume(
         description = repo_context.get("description", "") or ""
         readme_summary = repo_context.get("readme_summary", "") or ""
 
-    human_content = get_prompt(
-        "resume-plan-human",
+    human_content = RESUME_PLAN_HUMAN.format(
         position=position,
         project_name=project_info.get("repo_name", ""),
         repo_url=project_info.get("repo_url", ""),
