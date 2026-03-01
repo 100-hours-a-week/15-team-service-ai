@@ -17,7 +17,6 @@ from app.domain.resume.error_handler import (
 )
 from app.domain.resume.schemas import (
     ProjectInfoDict,
-    ResumeData,
     ResumeState,
 )
 from app.domain.resume.schemas.plan import BulletPlan, ProjectPlan
@@ -28,9 +27,9 @@ from app.domain.resume.service import (
     filter_tech_stack_by_position,
     validate_position_match,
 )
-from app.domain.resume.workflow_utils import has_error
+from app.domain.resume.workflow_utils import evaluate_with_fallback, has_error, make_should_retry
 from app.infra.github.client import parse_repo_url
-from app.infra.llm.client import finalize_resume, generate_resume, plan_resume
+from app.infra.llm.client import evaluate_resume, generate_resume, plan_resume
 
 logger = get_logger(__name__)
 
@@ -212,10 +211,11 @@ def _create_fallback_plan(project: ProjectInfoDict) -> ProjectPlan:
 
 def _format_plans_for_generator(plans: list[ProjectPlan]) -> str:
     """ProjectPlan 리스트를 vLLM 프롬프트용 텍스트로 변환"""
+    total = len(plans)
     sections = []
-    for plan in plans:
+    for i, plan in enumerate(plans, 1):
         lines = [
-            f"[프로젝트: {plan.project_name}]",
+            f"=== 프로젝트 {i}/{total}: {plan.project_name} ===",
             f"URL: {plan.repo_url}",
             f"tech_stack: {', '.join(plan.recommended_tech_stack)}",
             "",
@@ -225,6 +225,7 @@ def _format_plans_for_generator(plans: list[ProjectPlan]) -> str:
             lines.append(f"  근거: {', '.join(bp.source_commits[:3])}")
             if bp.technical_detail and bp.technical_detail != "폴백 - 원본 커밋 메시지 사용":
                 lines.append(f"  기술: {bp.technical_detail}")
+        lines.append(f"=== 프로젝트 {i}/{total} 끝 ===")
         sections.append("\n".join(lines))
     return "\n\n".join(sections)
 
@@ -245,8 +246,19 @@ async def generate_node(state: ResumeState) -> ResumeState:
     request = state["request"]
     session_id = state.get("session_id")
     project_plans = state.get("project_plans", [])
+    retry_count = state.get("retry_count", 0)
 
     generation_plans = _format_plans_for_generator(project_plans) if project_plans else ""
+
+    evaluation_feedback = state.get("evaluation_feedback", "")
+    previous_resume = state.get("resume_data")
+    is_retry = bool(evaluation_feedback and previous_resume)
+
+    feedback = evaluation_feedback if is_retry else ""
+    previous_resume_json = previous_resume.model_dump_json(indent=2) if is_retry else ""
+
+    if is_retry:
+        logger.info("generate_node 재시도", retry_count=retry_count)
 
     try:
         resume_data = await generate_resume(
@@ -254,6 +266,8 @@ async def generate_node(state: ResumeState) -> ResumeState:
             position=request.position,
             session_id=session_id,
             generation_plans=generation_plans,
+            feedback=feedback,
+            previous_resume_json=previous_resume_json,
         )
 
         for project in resume_data.projects:
@@ -267,6 +281,7 @@ async def generate_node(state: ResumeState) -> ResumeState:
         return {
             **state,
             "resume_data": resume_data,
+            "retry_count": retry_count + 1 if is_retry else retry_count,
         }
 
     except (httpx.ConnectError, httpx.TimeoutException) as e:
@@ -312,69 +327,31 @@ async def generate_node(state: ResumeState) -> ResumeState:
         )
 
 
-def _validate_finalized_resume(original: ResumeData, finalized: ResumeData) -> str | None:
-    """Finalizer 결과가 원본과 구조적으로 일치하는지 검증
+async def evaluate_node(state: ResumeState) -> ResumeState:
+    """이력서 평가 노드: Gemini가 커밋 근거 검증, 실패 시 피드백 저장"""
+    resume_data = state.get("resume_data")
+    if not resume_data:
+        logger.error("evaluate_node: resume_data 없음")
+        return {**state, "evaluation": "pass", "evaluation_feedback": ""}
 
-    반환: 검증 실패 사유 문자열 또는 None
-    """
-    if len(finalized.projects) != len(original.projects):
-        return (
-            f"프로젝트 수 불일치: 원본 {len(original.projects)}개, 결과 {len(finalized.projects)}개"
-        )
-
-    for i, (orig, final) in enumerate(zip(original.projects, finalized.projects, strict=True)):
-        if final.repo_url != orig.repo_url:
-            return f"프로젝트 {i + 1} repo_url 변경됨: {orig.repo_url} → {final.repo_url}"
-        if final.name != orig.name:
-            return f"프로젝트 {i + 1} name 변경됨: {orig.name} → {final.name}"
-
-    return None
-
-
-async def finalize_node(state: ResumeState) -> ResumeState:
-    """이력서 윤문 노드: 포맷 검증 후 Gemini로 1회 정제, 실패 시 원본 유지"""
-    resume_data = state["resume_data"]
     request = state["request"]
     session_id = state.get("session_id")
     project_info = state.get("project_info", [])
-
-    logger.info("finalize_node 시작")
-
-    from app.domain.resume.validators import format_violations_as_feedback, validate_resume_format
-
-    violations = validate_resume_format(resume_data, request.position)
-    violations_text = format_violations_as_feedback(violations) if violations else ""
-
-    if violations:
-        logger.info("포맷 위반 발견, Finalizer에 전달", count=len(violations))
 
     all_commits: list[str] = []
     for project in project_info:
         all_commits.extend(project.get("messages", []))
 
-    try:
-        finalized = await finalize_resume(
+    return await evaluate_with_fallback(
+        state,
+        lambda: evaluate_resume(
             resume_data=resume_data,
             position=request.position,
             commit_messages=all_commits,
-            violations=violations_text,
             session_id=session_id,
-        )
-
-        validation_error = _validate_finalized_resume(resume_data, finalized)
-        if validation_error:
-            logger.warning("finalize_node 검증 실패, 원본 유지", reason=validation_error)
-            return state
-
-        logger.info("finalize_node 완료", projects=len(finalized.projects))
-        return {
-            **state,
-            "resume_data": finalized,
-        }
-
-    except Exception:
-        logger.warning("finalize_node LLM 실패, 원본 유지", exc_info=True)
-        return state
+        ),
+        node_name="evaluate_node",
+    )
 
 
 def should_continue(state: ResumeState) -> Literal["plan", "end"]:
@@ -390,20 +367,20 @@ def _should_continue_after_plan(state: ResumeState) -> Literal["generate", "end"
 _node_cache = InMemoryCache()
 
 
-def _should_continue_after_generate(state: ResumeState) -> Literal["finalize", "end"]:
-    """generate 후 에러 확인: 에러 있으면 종료, 없으면 finalize로"""
-    return "end" if has_error(state, "_should_continue_after_generate") else "finalize"
+def _should_continue_after_generate(state: ResumeState) -> Literal["evaluate", "end"]:
+    """generate 후 에러 확인: 에러 있으면 종료, 없으면 evaluate로"""
+    return "end" if has_error(state, "_should_continue_after_generate") else "evaluate"
 
 
 def create_resume_workflow() -> CompiledStateGraph:
-    """이력서 생성 워크플로우 생성 - Planner-Executor-Finalizer 패턴"""
+    """이력서 생성 워크플로우 생성 - Plan-Generate-Evaluate Reflection 패턴"""
     workflow = StateGraph(ResumeState)
 
     collect_data_cache_policy = CachePolicy(ttl=3600)
     workflow.add_node("collect_data", collect_data_node, cache_policy=collect_data_cache_policy)
     workflow.add_node("plan", plan_node)
     workflow.add_node("generate", generate_node)
-    workflow.add_node("finalize", finalize_node)
+    workflow.add_node("evaluate", evaluate_node)
 
     workflow.set_entry_point("collect_data")
 
@@ -429,11 +406,19 @@ def create_resume_workflow() -> CompiledStateGraph:
         "generate",
         _should_continue_after_generate,
         {
-            "finalize": "finalize",
+            "evaluate": "evaluate",
             "end": END,
         },
     )
 
-    workflow.add_edge("finalize", END)
+    _should_retry_generate = make_should_retry(max_retries=2, retry_node="generate")
+    workflow.add_conditional_edges(
+        "evaluate",
+        _should_retry_generate,
+        {
+            "generate": "generate",
+            "end": END,
+        },
+    )
 
     return workflow.compile(cache=_node_cache)

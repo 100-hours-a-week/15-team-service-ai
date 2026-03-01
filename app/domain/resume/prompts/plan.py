@@ -15,6 +15,13 @@ Analyze the provided commits and PRs, then create a plan with:
 
 ## ANALYSIS STEPS
 
+### Step 0: Understand project context FIRST
+Before analyzing commits, read the <repository_context>:
+1. Identify project type (e-commerce, SNS, admin dashboard, API server, etc.)
+2. Note main technologies from README and languages
+3. Understand project scope (solo project, team project, scale)
+This context guides commit interpretation in Steps 1-3.
+
 ### Step 1: Group commits by feature
 - Merge commits that belong to the same feature into ONE bullet plan
 - Example: "장바구니 추가 API" + "장바구니 삭제 API" + "장바구니 수량 변경" → ONE bullet about 장바구니 CRUD
@@ -65,6 +72,30 @@ Artifact ID → Official name mapping (프레임워크 이후 추가):
 - ojdbc8, ojdbc11 → Oracle JDBC
 - commons-dbcp2, commons-dbcp → Apache Commons DBCP
 - commons-fileupload → Apache Commons FileUpload
+
+Python ecosystem:
+- fastapi → FastAPI
+- sqlalchemy, SQLAlchemy → SQLAlchemy
+- alembic → Alembic
+- celery → Celery
+- aiohttp → aiohttp
+- httpx → httpx
+
+JavaScript/TypeScript ecosystem:
+- @nestjs/* → NestJS
+- express, express.js → Express.js
+- prisma, @prisma/client → Prisma
+- typeorm → TypeORM
+- sequelize → Sequelize
+- mongoose → Mongoose
+- @tanstack/react-query → React Query
+- zustand → Zustand
+
+Go ecosystem:
+- github.com/gin-gonic/gin → Gin
+- gorm.io/gorm → GORM
+- github.com/go-chi/chi → Chi
+- github.com/gorilla/mux → Gorilla Mux
 
 - NEVER use raw artifact IDs directly
 - EXCLUDE: Lombok, Swagger, JUnit, pytest, ESLint, Prettier
