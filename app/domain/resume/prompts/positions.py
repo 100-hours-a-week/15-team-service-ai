@@ -81,6 +81,14 @@ POSITION_CONFIGS = {
             "LangChain",
             "LlamaIndex",
         ],
+        "technical_categories": [
+            "API 설계",
+            "DB 설계",
+            "성능 최적화",
+            "동시성/트랜잭션",
+            "인증/보안",
+            "에러 핸들링",
+        ],
         "bullet_keywords": [
             "API 설계",
             "API 구현",
@@ -168,6 +176,14 @@ GOOD: "N+1 쿼리 문제를 발견한 과정과 해결 방법,
             "MySQL",
             "MongoDB",
         ],
+        "technical_categories": [
+            "컴포넌트 설계",
+            "상태 관리",
+            "렌더링 최적화",
+            "UX 설계",
+            "번들 최적화",
+            "접근성",
+        ],
         "bullet_keywords": [
             "UI/UX 컴포넌트",
             "상태 관리",
@@ -250,6 +266,14 @@ GOOD: "API 응답 로딩/에러/캐싱 상태를 사용자에게
             "S3",
         ],
         "tech_exclude": [],
+        "technical_categories": [
+            "프론트-백엔드 연동",
+            "인증/인가 흐름",
+            "데이터 흐름 설계",
+            "실시간 기능",
+            "에러/예외 처리",
+            "배포/환경 설정",
+        ],
         "bullet_keywords": [
             "API 설계",
             "UI 컴포넌트",
@@ -444,6 +468,14 @@ GOOD: "결제 기능에서 프론트엔드 UX, API 설계, DB 트랜잭션을
             "FastAPI",
             "Django",
         ],
+        "technical_categories": [
+            "CI/CD 설계",
+            "컨테이너 전략",
+            "IaC",
+            "모니터링",
+            "배포 전략",
+            "보안/비용 최적화",
+        ],
         "bullet_keywords": [
             "CI/CD 파이프라인",
             "컨테이너 오케스트레이션",
@@ -569,6 +601,14 @@ GOOD: "서비스 장애를 조기에 감지하기 위해 어떤 메트릭을 수
             "Vue.js",
             "Angular",
             "Next.js",
+        ],
+        "technical_categories": [
+            "모델 서빙",
+            "데이터 파이프라인",
+            "프롬프트 엔지니어링",
+            "벡터 검색",
+            "성능 평가",
+            "MLOps",
         ],
         "bullet_keywords": [
             "RAG 파이프라인",
@@ -713,6 +753,12 @@ def get_interview_position_focus(position: str) -> str:
         "### Key topic areas:",
         ", ".join(config["bullet_keywords"]),
     ]
+
+    technical_categories = config.get("technical_categories")
+    if technical_categories:
+        lines.append("")
+        lines.append("### Technical question categories (use for category diversity):")
+        lines.append(", ".join(technical_categories))
 
     if config["tech_exclude"]:
         lines.append("")
