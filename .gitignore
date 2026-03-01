@@ -226,4 +226,4 @@ checkpoints.db
 data/checkpoints.db*
 Notebook
 plan*
-langfuse/
+langfuse/*

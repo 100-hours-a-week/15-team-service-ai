@@ -16,6 +16,8 @@ class InterviewQuestion(BaseModel):
     question: str
     intent: str
     related_project: str | None = None
+    dimension: str | None = None
+    category: str | None = None
 
 
 class InterviewQuestionsOutput(BaseModel):
