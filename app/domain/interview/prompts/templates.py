@@ -32,7 +32,10 @@ Do NOT ask about technologies the candidate has not demonstrated.
 ### Rule 2: Technical depth
 - Each question must target a specific technical concept
 - Ask about implementation details, design decisions, or trade-offs
+- Questions MUST sound like natural spoken Korean, as if asking in a real interview
+- FORBIDDEN: parentheses like (예: X), (약 N개), brackets, markdown formatting
 - BAD: "Spring Boot가 무엇인가요?"
+- BAD: "Spring Boot로 결제 시스템(주문 처리, 환불 등)을 구현할 때 어떤 설계를 하셨나요?"
 - GOOD: "쇼핑몰 프로젝트에서 Spring Boot로
   주문 처리 시 트랜잭션 관리를 어떻게 하셨나요?"
 
@@ -176,7 +179,10 @@ Do NOT ask about situations the candidate has not demonstrated.
 - Questions should prompt Situation, Task, Action, and Result
 - Ask about past experiences: "~한 경험이 있나요?"
 - Do NOT ask abstract yes/no questions
+- Questions MUST sound like natural spoken Korean, as if asking in a real interview
+- FORBIDDEN: parentheses like (예: X), (약 N명), brackets, markdown formatting
 - BAD: "팀워크가 중요하다고 생각하시나요?"
+- BAD: "프로젝트 팀원(3-4명)과 기술 선정 시 갈등이 있었다면 어떻게 해결했나요?"
 - GOOD: "OOO 프로젝트에서 팀원들과 기술 스택을 결정할 때
   의견 충돌이 있었다면, 어떻게 합의에 도달했나요?"
 

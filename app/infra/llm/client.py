@@ -9,8 +9,6 @@ from app.infra.llm.base import (
 )
 from app.infra.llm.chat import generate_chat_response, generate_chat_response_with_history
 from app.infra.llm.feedback import (
-    evaluate_feedback,
-    evaluate_overall_feedback,
     generate_feedback,
     generate_overall_feedback,
 )
@@ -34,8 +32,6 @@ __all__ = [
     "setup_langfuse_env",
     "generate_chat_response",
     "generate_chat_response_with_history",
-    "evaluate_feedback",
-    "evaluate_overall_feedback",
     "generate_feedback",
     "generate_overall_feedback",
     "evaluate_interview",

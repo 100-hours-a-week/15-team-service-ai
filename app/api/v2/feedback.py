@@ -1,6 +1,5 @@
 import asyncio
 import json
-import uuid
 
 from fastapi import APIRouter, Request
 
@@ -18,6 +17,7 @@ from app.domain.interview.feedback_agent import (
     run_feedback_agent,
     run_overall_feedback_agent,
 )
+from app.domain.interview.store import interview_context_store
 
 router = APIRouter(prefix="/interview", tags=["v2"])
 logger = get_logger(__name__)
@@ -39,7 +39,6 @@ async def end_interview(
 
     분당 10회 요청 제한이 적용됩니다
     """
-    session_id = str(uuid.uuid4())
     interview_type = body.interview_type.lower()
 
     logger.info(
@@ -48,35 +47,45 @@ async def end_interview(
         interview_type=interview_type,
         position=body.position,
         message_count=len(body.messages),
-        session_id=session_id,
     )
 
-    qa_pairs = [{"question": m.question, "answer": m.answer} for m in body.messages]
+    qa_pairs = [
+        {
+            "question": m.question,
+            "answer": m.answer,
+            "answer_input_type": m.answer_input_type,
+        }
+        for m in body.messages
+    ]
     qa_pairs_json = json.dumps(qa_pairs, ensure_ascii=False, indent=2)
+
+    contexts = interview_context_store.get(body.ai_session_id)
 
     semaphore = asyncio.Semaphore(MAX_CONCURRENT_FEEDBACK)
 
-    async def run_feedback_with_semaphore(m):
+    async def run_feedback_with_semaphore(m, idx):
+        qid = f"q-{idx:03d}"
+        ctx = contexts.get(qid) if contexts else None
         async with semaphore:
             return await run_feedback_agent(
-                resume_json="없음",
                 position=body.position,
                 interview_type=interview_type,
                 question_text=m.question,
-                question_intent="제공되지 않음",
-                related_project=None,
+                question_intent=ctx.intent if ctx else "",
+                related_project=ctx.related_project if ctx else None,
                 answer=m.answer,
-                session_id=session_id,
+                session_id=body.ai_session_id,
             )
 
-    individual_tasks = [run_feedback_with_semaphore(m) for m in body.messages]
+    individual_tasks = [
+        run_feedback_with_semaphore(m, idx) for idx, m in enumerate(body.messages, start=1)
+    ]
 
     overall_task = run_overall_feedback_agent(
-        resume_json="없음",
         position=body.position,
         interview_type=interview_type,
         qa_pairs_json=qa_pairs_json,
-        session_id=session_id,
+        session_id=body.ai_session_id,
     )
 
     all_results = await asyncio.gather(*individual_tasks, overall_task, return_exceptions=True)

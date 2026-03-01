@@ -1,5 +1,3 @@
-import uuid
-
 from fastapi import APIRouter, Request
 
 from app.api.v2.schemas.chat import (
@@ -35,13 +33,11 @@ async def chat_interview(
     같은 aiSessionId + questionId로 반복 호출하면 이전 대화를 이어갑니다
     분당 20회 요청 제한이 적용됩니다
     """
-    trace_id = str(uuid.uuid4())
     thread_id = f"chat-{body.ai_session_id}-{body.question_id}"
     logger.info(
         "채팅 요청",
         ai_session_id=body.ai_session_id,
         question_id=body.question_id,
-        trace_id=trace_id,
         thread_id=thread_id,
     )
 
@@ -85,7 +81,7 @@ async def chat_interview(
         question_intent=question_ctx.intent,
         related_project=question_ctx.related_project,
         answer=body.answer,
-        session_id=trace_id,
+        session_id=body.ai_session_id,
         thread_id=thread_id,
         checkpointer=checkpointer,
     )

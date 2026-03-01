@@ -17,6 +17,7 @@ async def generate_chat_response(
     related_project: str | None,
     answer: str,
     session_id: str | None = None,
+    callbacks: list | None = None,
 ) -> ChatOutput:
     """면접 채팅 응답 생성 - vLLM 사용"""
     if interview_type not in _VALID_INTERVIEW_TYPES:
@@ -42,7 +43,11 @@ async def generate_chat_response(
         position=position,
         resume_json=resume_json,
     )
-    config = _build_langfuse_config(session_id, ["chat", interview_type, position])
+    config = _build_langfuse_config(
+        session_id,
+        ["chat", interview_type, position],
+        callbacks=callbacks,
+    )
 
     result = await _invoke_llm(
         llm=get_generator_llm(),
@@ -67,6 +72,7 @@ async def generate_chat_response_with_history(
     answer: str,
     conversation_history: str,
     session_id: str | None = None,
+    callbacks: list | None = None,
 ) -> ChatOutput:
     """멀티턴 면접 채팅 응답 생성 - 대화 이력 포함, vLLM 사용"""
     if interview_type not in _VALID_INTERVIEW_TYPES:
@@ -93,7 +99,11 @@ async def generate_chat_response_with_history(
         position=position,
         resume_json=resume_json,
     )
-    config = _build_langfuse_config(session_id, ["chat", "multiturn", interview_type, position])
+    config = _build_langfuse_config(
+        session_id,
+        ["chat", "multiturn", interview_type, position],
+        callbacks=callbacks,
+    )
 
     result = await _invoke_llm(
         llm=get_generator_llm(),

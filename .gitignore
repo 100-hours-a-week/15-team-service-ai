@@ -224,5 +224,6 @@ scripts/
 .langgraph_api
 .DS_Store
 checkpoints.db
+data/checkpoints.db*
 Notebook
 plan*
