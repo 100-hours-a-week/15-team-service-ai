@@ -19,8 +19,35 @@ def _get_client() -> Langfuse:
     return _langfuse_client
 
 
+def _get_local_fallback(name: str, **variables: str) -> str:
+    """Langfuse 조회 실패 시 로컬 상수로 fallback"""
+    from app.domain.resume.prompts.evaluation import RESUME_EVALUATOR_HUMAN, RESUME_EVALUATOR_SYSTEM
+    from app.domain.resume.prompts.generation import (
+        RESUME_GENERATOR_HUMAN,
+        RESUME_GENERATOR_RETRY_HUMAN,
+        RESUME_GENERATOR_SYSTEM,
+    )
+    from app.domain.resume.prompts.plan import RESUME_PLAN_HUMAN, RESUME_PLAN_SYSTEM
+
+    registry: dict[str, str] = {
+        "resume-evaluator-system": RESUME_EVALUATOR_SYSTEM,
+        "resume-evaluator-human": RESUME_EVALUATOR_HUMAN,
+        "resume-plan-system": RESUME_PLAN_SYSTEM,
+        "resume-plan-human": RESUME_PLAN_HUMAN,
+        "resume-generator-system": RESUME_GENERATOR_SYSTEM,
+        "resume-generator-human": RESUME_GENERATOR_HUMAN,
+        "resume-generator-retry-human": RESUME_GENERATOR_RETRY_HUMAN,
+    }
+
+    if name not in registry:
+        raise LLMError(detail=f"프롬프트 조회 실패 및 fallback 없음: {name}")
+
+    logger.warning("로컬 fallback 프롬프트 사용", prompt_name=name)
+    return registry[name].format(**variables)
+
+
 def get_prompt(name: str, **variables: str) -> str:
-    """Langfuse에서 프롬프트 조회 후 변수 치환
+    """Langfuse에서 프롬프트 조회 후 변수 치환, 실패 시 로컬 fallback
 
     name: Langfuse에 등록된 프롬프트 이름
     variables: 프롬프트에 주입할 변수들
@@ -30,8 +57,8 @@ def get_prompt(name: str, **variables: str) -> str:
     try:
         prompt = client.get_prompt(name)
     except Exception as e:
-        logger.error("Langfuse 프롬프트 조회 실패", prompt_name=name, error=str(e), exc_info=True)
-        raise LLMError(detail=f"프롬프트 조회 실패: {name}") from e
+        logger.warning("Langfuse 프롬프트 조회 실패, fallback 시도", prompt_name=name, error=str(e))
+        return _get_local_fallback(name, **variables)
 
     try:
         compiled = prompt.compile(**variables)

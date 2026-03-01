@@ -1,7 +1,6 @@
 from app.core.config import settings
 from app.domain.resume.prompts import get_position_rules
 from app.domain.resume.schemas import ProjectInfoDict, RepoContext
-from app.infra.langfuse.prompt_manager import get_prompt
 
 
 def format_project_info(project_info: list[ProjectInfoDict]) -> str:
@@ -72,21 +71,21 @@ def format_repo_contexts(repo_contexts: dict[str, RepoContext]) -> str:
 
 def build_generator_system_prompt(position: str) -> str:
     """포지션별 규칙을 주입한 시스템 프롬프트 생성"""
-    position_rules = get_position_rules(position)
+    from app.domain.resume.prompts.generation import RESUME_GENERATOR_SYSTEM
 
-    return get_prompt(
-        "resume-generator-system",
+    position_rules = get_position_rules(position)
+    return RESUME_GENERATOR_SYSTEM.format(
         position=position,
         position_rules=position_rules,
     )
 
 
-def build_finalizer_system_prompt(position: str) -> str:
-    """포지션별 규칙을 주입한 Finalizer 시스템 프롬프트 생성"""
-    position_rules = get_position_rules(position)
+def build_evaluator_system_prompt(position: str) -> str:
+    """포지션별 규칙을 주입한 Evaluator 시스템 프롬프트 생성 - 로컬 상수 직접 사용"""
+    from app.domain.resume.prompts.evaluation import RESUME_EVALUATOR_SYSTEM
 
-    return get_prompt(
-        "resume-finalizer-system",
+    position_rules = get_position_rules(position)
+    return RESUME_EVALUATOR_SYSTEM.format(
         position=position,
         position_rules=position_rules,
     )
