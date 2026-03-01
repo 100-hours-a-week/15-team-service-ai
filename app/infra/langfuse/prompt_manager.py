@@ -1,7 +1,6 @@
-from langfuse import Langfuse
-
 from app.core.exceptions import LLMError
 from app.core.logging import get_logger
+from langfuse import Langfuse
 
 logger = get_logger(__name__)
 
