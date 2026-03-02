@@ -3,8 +3,6 @@ set -e
 
 # Validate deployment directory exists
 mkdir -p /home/ubuntu/deploy
-DEPLOY_DIR="/home/ubuntu/deploy"
-COMPOSE_FILE="$DEPLOY_DIR/docker-compose.yml"
 
 # Ensure jq is installed (SSM parameter parsing에 필요)
 if ! command -v jq &> /dev/null; then
@@ -21,10 +19,17 @@ if ! docker compose version > /dev/null 2>&1; then
     exit 1
 fi
 
-# Ensure compose file exists in deployment bundle
-if [ ! -f "$COMPOSE_FILE" ]; then
-    echo "Error: $COMPOSE_FILE not found in deployment package."
-    exit 1
+# In CodeDeploy, files are copied to destination during Install (after BeforeInstall).
+# Validate bundle content from deployment archive path when env vars are available.
+if [ -n "$DEPLOYMENT_GROUP_ID" ] && [ -n "$DEPLOYMENT_ID" ]; then
+    ARCHIVE_DIR="/opt/codedeploy-agent/deployment-root/$DEPLOYMENT_GROUP_ID/$DEPLOYMENT_ID/deployment-archive"
+    if [ ! -f "$ARCHIVE_DIR/docker-compose.yml" ]; then
+        echo "Error: docker-compose.yml not found in deployment archive ($ARCHIVE_DIR)."
+        exit 1
+    fi
+    echo "docker-compose.yml found in deployment archive."
+else
+    echo "Warning: DEPLOYMENT_GROUP_ID/DEPLOYMENT_ID not set. Skipping archive compose check."
 fi
 
 echo "BeforeInstall hook completed."
