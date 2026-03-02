@@ -36,6 +36,7 @@ jobs:
       - name: Trivy Scan (Secret + Vuln)
         uses: aquasecurity/trivy-action@0.34.1
         with:
+          version: "v0.69.2"
           scan-type: "fs"
           scan-ref: "."
           scanners: "secret,vuln"
