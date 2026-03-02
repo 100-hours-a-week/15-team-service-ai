@@ -72,9 +72,6 @@ SAMPLE_OVERALL_OUTPUT = OverallFeedbackOutput(
 )
 
 
-
-
-
 class TestInterviewGenerateEndpoint:
     """POST /api/v2/interview 면접 질문 생성 엔드포인트 통합 테스트"""
 

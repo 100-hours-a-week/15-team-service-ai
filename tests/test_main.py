@@ -1,5 +1,5 @@
-import pytest
 from app.main import app
+
 
 class TestHealthCheck:
     """헬스체크 엔드포인트 테스트"""

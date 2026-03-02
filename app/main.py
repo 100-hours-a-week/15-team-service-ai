@@ -72,6 +72,7 @@ app.include_router(api_v2_router)
 
 Instrumentator().instrument(app).expose(app)
 
+
 @app.get("/health")
 async def health_check():
     return {"status": "UP"}
