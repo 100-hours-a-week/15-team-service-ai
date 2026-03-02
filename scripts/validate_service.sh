@@ -2,6 +2,15 @@
 set -e
 
 echo "Validating service..."
+DEPLOY_DIR="/home/ubuntu/deploy"
+
+if [ -f "$DEPLOY_DIR/docker-compose.yml" ]; then
+    echo "docker compose ps:"
+    (cd "$DEPLOY_DIR" && docker compose ps) || true
+else
+    echo "docker ps:"
+    docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' || true
+fi
 
 # Wait for a few seconds to let the application start
 sleep 10
