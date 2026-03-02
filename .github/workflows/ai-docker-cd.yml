@@ -2,7 +2,7 @@ name: AI Server CD (Blue/Green ASG)
 
 on:
   push:
-    branches: ["main", "feature/cd"]
+    branches: ["main", "feature/metrics-logging-integration"]
   workflow_dispatch:
 
 # 동시 실행 제어 (배포 중복 방지)
