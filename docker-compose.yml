@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  ai-server:
+    image: ${IMAGE_URI}
+    container_name: ai-server
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    # logs are collected via standard docker json-file driver
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  grafana-alloy:
+    image: ${ALLOY_IMAGE_URI:-248312021437.dkr.ecr.ap-northeast-2.amazonaws.com/commitme/alloy:latest}
+    container_name: grafana-alloy
+    restart: unless-stopped
+    ports:
+      - "12345:12345" # Alloy UI port
+    volumes:
+      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro # Allow Alloy to read docker container logs
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - /etc/alloy/config.alloy
+
+  cadvisor:
+    image: ${CADVISOR_IMAGE_URI:-248312021437.dkr.ecr.ap-northeast-2.amazonaws.com/commitme/cadvisor:latest}
+    container_name: cadvisor
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    privileged: true
+    devices:
+      - /dev/kmsg

@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+from prometheus_fastapi_instrumentator import Instrumentator
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -68,6 +69,8 @@ app.add_middleware(RequestLoggingMiddleware)
 register_exception_handlers(app)
 app.include_router(api_router)
 app.include_router(api_v2_router)
+
+Instrumentator().instrument(app).expose(app)
 
 
 @app.get("/health")

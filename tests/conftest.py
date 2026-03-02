@@ -121,10 +121,14 @@ def sample_resume_state(
 
 
 @pytest.fixture
-def async_client():
-    """비동기 HTTP 클라이언트"""
+async def async_client():
+    """비동기 HTTP 클라이언트 (Lifespan 활성화)
+
+    앱의 lifespan(DB 초기화 등)이 실행되도록 핸들링합니다.
+    """
     transport = ASGITransport(app=app)
-    return AsyncClient(transport=transport, base_url="http://test")
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        yield client
 
 
 @pytest.fixture(autouse=True)
