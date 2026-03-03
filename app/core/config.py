@@ -23,7 +23,6 @@ class Settings(BaseSettings):
     edit_callback_url: str = ""
     chat_callback_url: str = ""
     ai_callback_secret: str = ""
-    
 
     # Timeout 설정
     github_timeout: float = 60.0
