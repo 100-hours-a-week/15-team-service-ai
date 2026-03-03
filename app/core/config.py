@@ -20,7 +20,6 @@ class Settings(BaseSettings):
 
     # Callback
     generate_callback_url: str = ""
-    generate_callback_url_test: str = ""
     edit_callback_url: str = ""
     chat_callback_url: str = ""
     ai_callback_secret: str = ""

@@ -129,7 +129,7 @@ async def generate_resume_mock(
     """GitHub API 없이 모의 데이터로 이력서 생성"""
     
     job_id = str(uuid.uuid4())
-    callback_url = settings.generate_callback_url_test
+    callback_url = settings.generate_callback_url
 
     github_mock_var.set(True)
 
