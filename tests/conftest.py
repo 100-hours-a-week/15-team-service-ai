@@ -127,6 +127,35 @@ def async_client():
     return AsyncClient(transport=transport, base_url="http://test")
 
 
+@pytest.fixture
+def mock_github():
+    """GitHub API 호출을 2초 지연 mock으로 교체
+
+    사용법:
+        def test_something(mock_github):
+            ...
+    """
+    from tests.mock_github import (
+        mock_get_authenticated_user,
+        mock_get_files_content,
+        mock_get_project_info,
+        mock_get_repo_context,
+        mock_get_user_stats,
+    )
+
+    with (
+        patch("app.infra.github.client.get_project_info", side_effect=mock_get_project_info),
+        patch("app.infra.github.client.get_repo_context", side_effect=mock_get_repo_context),
+        patch("app.infra.github.client.get_files_content", side_effect=mock_get_files_content),
+        patch("app.infra.github.client.get_user_stats", side_effect=mock_get_user_stats),
+        patch(
+            "app.infra.github.client.get_authenticated_user",
+            side_effect=mock_get_authenticated_user,
+        ),
+    ):
+        yield
+
+
 @pytest.fixture(autouse=True)
 def mock_langfuse_get_prompt():
     """모든 테스트에서 Langfuse get_prompt를 자동 mock 처리

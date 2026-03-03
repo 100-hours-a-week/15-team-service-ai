@@ -3,6 +3,7 @@ import re
 
 import httpx
 
+from app.core.context import github_mock_var
 from app.core.logging import get_logger
 from app.domain.resume.constants import (
     BACKEND_TECHS,
@@ -303,6 +304,12 @@ async def collect_project_info(request: ResumeRequest) -> list[ProjectInfoDict]:
     Returns:
         유효한 프로젝트 정보 리스트
     """
+    if github_mock_var.get():
+        from app.infra.github.mock_data import MOCK_DELAY, make_mock_project_info
+
+        await asyncio.sleep(MOCK_DELAY)
+        return [make_mock_project_info(url, parse_repo_url(url)[1]) for url in request.repo_urls]
+
     unique_urls = list(dict.fromkeys(request.repo_urls))
     if len(unique_urls) < len(request.repo_urls):
         logger.warning("중복 URL 제거", original=len(request.repo_urls), unique=len(unique_urls))
@@ -491,6 +498,15 @@ async def collect_repo_contexts(request: ResumeRequest) -> dict[str, RepoContext
     Returns:
         레포 이름을 키로 하는 RepoContext 딕셔너리
     """
+    if github_mock_var.get():
+        from app.infra.github.mock_data import MOCK_DELAY, make_mock_repo_context
+
+        await asyncio.sleep(MOCK_DELAY)
+        return {
+            parse_repo_url(url)[1]: make_mock_repo_context(parse_repo_url(url)[1])
+            for url in request.repo_urls
+        }
+
     unique_urls = list(dict.fromkeys(request.repo_urls))
     semaphore = asyncio.Semaphore(GITHUB_API_SEMAPHORE_LIMIT)
     tasks = [
@@ -514,6 +530,12 @@ async def collect_user_stats(username: str, token: str | None) -> UserStats | No
     Returns:
         사용자 통계 정보, 토큰 없거나 실패하면 None
     """
+    if github_mock_var.get():
+        from app.infra.github.mock_data import MOCK_DELAY, MOCK_USER_STATS
+
+        await asyncio.sleep(MOCK_DELAY)
+        return MOCK_USER_STATS
+
     if not token:
         logger.info("토큰 없음, 사용자 통계 수집 건너뜀", username=username)
         return None

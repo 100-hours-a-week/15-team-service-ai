@@ -338,16 +338,15 @@ async def evaluate_node(state: ResumeState) -> ResumeState:
     session_id = state.get("session_id")
     project_info = state.get("project_info", [])
 
-    all_commits: list[str] = []
-    for project in project_info:
-        all_commits.extend(project.get("messages", []))
+    repo_contexts = state.get("repo_contexts", {})
 
     return await evaluate_with_fallback(
         state,
         lambda: evaluate_resume(
             resume_data=resume_data,
             position=request.position,
-            commit_messages=all_commits,
+            project_info=project_info,
+            repo_contexts=repo_contexts,
             session_id=session_id,
         ),
         node_name="evaluate_node",
