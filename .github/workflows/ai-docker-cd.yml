@@ -2,7 +2,7 @@ name: AI Server CD (Blue/Green ASG)
 
 on:
   push:
-    branches: ["main", "feat/metric-deploy"]
+    branches: ["main"]
   workflow_dispatch:
 
 # 동시 실행 제어 (배포 중복 방지)
