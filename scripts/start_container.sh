@@ -91,6 +91,11 @@ export IMAGE_URI="$IMAGE_URI"
 export ALLOY_IMAGE_URI="$ALLOY_IMAGE_URI"
 export CADVISOR_IMAGE_URI="$CADVISOR_IMAGE_URI"
 
+if [ ! -f "$DEPLOY_DIR/docker-compose.yml" ]; then
+    echo "Error: $DEPLOY_DIR/docker-compose.yml not found."
+    exit 1
+fi
+
 cd "$DEPLOY_DIR"
 docker compose up -d
 
