@@ -20,6 +20,8 @@ dependencies = [
     "slowapi>=0.1.9",
     "structlog>=24.1.0",
     "aioboto3>=13.0.0",
+    "prometheus-fastapi-instrumentator>=7.1.0",
+    "protobuf==6.33.5",
 ]
 
 [project.optional-dependencies]
@@ -40,6 +42,7 @@ ignore = []
 [tool.ruff.lint.per-file-ignores]
 "app/domain/resume/prompts/*.py" = ["E501"]
 "app/domain/interview/prompts/*.py" = ["E501"]
+"app/infra/github/mock_data.py" = ["E501"]
 "app/infra/langfuse/prompt_manager.py" = ["I001"]
 
 

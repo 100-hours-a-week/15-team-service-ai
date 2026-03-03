@@ -121,10 +121,43 @@ def sample_resume_state(
 
 
 @pytest.fixture
-def async_client():
-    """비동기 HTTP 클라이언트"""
+async def async_client():
+    """비동기 HTTP 클라이언트 (Lifespan 활성화)
+
+    앱의 lifespan(DB 초기화 등)이 실행되도록 핸들링합니다.
+    """
     transport = ASGITransport(app=app)
-    return AsyncClient(transport=transport, base_url="http://test")
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        yield client
+
+
+@pytest.fixture
+def mock_github():
+    """GitHub API 호출을 2초 지연 mock으로 교체
+
+    사용법:
+        def test_something(mock_github):
+            ...
+    """
+    from tests.mock_github import (
+        mock_get_authenticated_user,
+        mock_get_files_content,
+        mock_get_project_info,
+        mock_get_repo_context,
+        mock_get_user_stats,
+    )
+
+    with (
+        patch("app.infra.github.client.get_project_info", side_effect=mock_get_project_info),
+        patch("app.infra.github.client.get_repo_context", side_effect=mock_get_repo_context),
+        patch("app.infra.github.client.get_files_content", side_effect=mock_get_files_content),
+        patch("app.infra.github.client.get_user_stats", side_effect=mock_get_user_stats),
+        patch(
+            "app.infra.github.client.get_authenticated_user",
+            side_effect=mock_get_authenticated_user,
+        ),
+    ):
+        yield
 
 
 @pytest.fixture(autouse=True)

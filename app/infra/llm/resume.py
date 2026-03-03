@@ -72,20 +72,59 @@ async def generate_resume(
     return result
 
 
+def _format_project_evidence(
+    project_info: list,
+    repo_contexts: dict,
+) -> str:
+    """프로젝트별 증거 소스를 평가자용 텍스트로 포맷"""
+    sections = []
+    for project in project_info:
+        repo_name = project.get("repo_name", "")
+        lines = [f"=== {repo_name} ==="]
+
+        commits = project.get("messages", [])
+        lines.append(f"Commits ({len(commits)}):")
+        lines.append("\n".join(commits) if commits else "  (없음)")
+
+        deps = project.get("dependencies", [])
+        lines.append(f"Dependencies: {', '.join(deps) if deps else '없음'}")
+
+        file_tree = project.get("file_tree", [])
+        lines.append(f"File structure: {', '.join(file_tree[:15]) if file_tree else '없음'}")
+
+        ctx = repo_contexts.get(repo_name)
+        if ctx:
+            readme = getattr(ctx, "readme_summary", None) or (
+                ctx.get("readme_summary") if isinstance(ctx, dict) else None
+            )
+            if readme:
+                lines.append(f"README: {readme[:500]}")
+
+        sections.append("\n".join(lines))
+    return "\n\n".join(sections)
+
+
 async def evaluate_resume(
     resume_data: ResumeData,
     position: str,
-    commit_messages: list[str],
+    project_info: list | None = None,
+    repo_contexts: dict | None = None,
+    commit_messages: list[str] | None = None,
     session_id: str | None = None,
 ) -> EvaluationOutput:
-    """생성된 이력서 평가 - Gemini 사용, 커밋 근거 검증"""
+    """생성된 이력서 평가 - Gemini 사용, 커밋/의존성/파일구조/README 근거 검증"""
     logger.debug("이력서 평가 요청", position=position)
 
     from app.domain.resume.prompts.positions import get_position_rules
 
     resume_json = resume_data.model_dump_json(indent=2)
-    commits_text = "\n".join(commit_messages) if commit_messages else "없음"
     position_rules = get_position_rules(position)
+
+    if project_info is not None and repo_contexts is not None:
+        project_evidence = _format_project_evidence(project_info, repo_contexts)
+    else:
+        commits_text = "\n".join(commit_messages) if commit_messages else "없음"
+        project_evidence = f"Commits:\n{commits_text}"
 
     system_prompt = get_prompt(
         "resume-evaluator-system",
@@ -96,7 +135,7 @@ async def evaluate_resume(
         "resume-evaluator-human",
         position=position,
         resume_json=resume_json,
-        commit_messages=commits_text,
+        project_evidence=project_evidence,
     )
 
     config = _build_langfuse_config(session_id, ["resume", "evaluate", position])

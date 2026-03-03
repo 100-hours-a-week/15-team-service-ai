@@ -62,6 +62,38 @@ def prepend_logger_name_processor(
     return event_dict
 
 
+def _make_dev_renderer():
+    """개발 환경용 컬러 렌더러 - key는 흰색, value는 하늘색"""
+    WHITE = "\033[97m"
+    CYAN = "\033[96m"
+    RESET = "\033[0m"
+    BOLD = "\033[1m"
+
+    LEVEL_STYLES = {
+        "debug": "\033[32m",
+        "info": "\033[32m",
+        "warning": "\033[33m",
+        "error": "\033[31m",
+        "critical": "\033[35m",
+    }
+
+    def renderer(logger: object, method: str, event_dict: dict) -> str:
+        level = event_dict.pop("level", method)
+        timestamp = event_dict.pop("timestamp", "")
+        event = event_dict.pop("event", "")
+
+        level_color = LEVEL_STYLES.get(level.lower(), RESET)
+        level_str = f"{level_color}{BOLD}{level.upper():>8}{RESET}"
+
+        kv_parts = [f"{WHITE}{k}{RESET}={CYAN}{v}{RESET}" for k, v in event_dict.items()]
+        kv_str = "  ".join(kv_parts)
+
+        parts = filter(None, [timestamp, level_str, event, kv_str])
+        return "  ".join(parts)
+
+    return renderer
+
+
 def setup_logging(level: str | None = None) -> None:
     """structlog 설정 초기화"""
     if level is None:
@@ -83,7 +115,7 @@ def setup_logging(level: str | None = None) -> None:
         shared_processors.append(structlog.processors.format_exc_info)
         renderer = structlog.processors.JSONRenderer(ensure_ascii=False)
     else:
-        renderer = structlog.dev.ConsoleRenderer(colors=True)
+        renderer = _make_dev_renderer()
 
     structlog.configure(
         processors=shared_processors

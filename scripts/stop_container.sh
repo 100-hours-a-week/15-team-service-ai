@@ -3,15 +3,21 @@ set -e
 
 CONTAINER_NAME="ai-server"
 
-echo "Stopping container $CONTAINER_NAME if running..."
+DEPLOY_DIR="/home/ubuntu/deploy"
 
-if docker ps -a --format '{{.Names}}' | grep -Eq "^${CONTAINER_NAME}\$"; then
-    echo "Container $CONTAINER_NAME found."
-    docker stop $CONTAINER_NAME || true
-    docker rm $CONTAINER_NAME || true
-    echo "Container $CONTAINER_NAME stopped and removed."
+echo "Stopping containers using docker compose if they exist..."
+
+if [ -f "$DEPLOY_DIR/docker-compose.yml" ]; then
+    cd "$DEPLOY_DIR"
+    docker compose down || true
+    echo "Containers stopped and removed via docker compose."
 else
-    echo "Container $CONTAINER_NAME does not exist. Skipping stop."
+    # Fallback to older mechanism if no docker-compose.yml
+    if docker ps -a --format '{{.Names}}' | grep -Eq "^${CONTAINER_NAME}\$"; then
+        echo "Container $CONTAINER_NAME found. Using docker stop..."
+        docker stop $CONTAINER_NAME || true
+        docker rm $CONTAINER_NAME || true
+    fi
 fi
 
 # Prune unused images to save space

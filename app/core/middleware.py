@@ -15,7 +15,7 @@ from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
-SKIP_PATHS = {"/health", "/docs", "/openapi.json", "/redoc", "/favicon.ico"}
+SKIP_PATHS = {"/health", "/docs", "/openapi.json", "/redoc", "/favicon.ico", "/metrics"}
 
 
 class RequestLoggingMiddleware:

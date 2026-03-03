@@ -34,8 +34,9 @@ jobs:
       # 2. Trivy Scan (Secret + Vuln checking) - Fail Fast
       # 시크릿 유출과 의존성 취약점을 빌드 전에 가장 먼저 잡아냅니다.
       - name: Trivy Scan (Secret + Vuln)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.34.1
         with:
+          version: "v0.69.2"
           scan-type: "fs"
           scan-ref: "."
           scanners: "secret,vuln"

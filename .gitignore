@@ -148,7 +148,7 @@ activemq-data/
 *.sage.py
 
 # Environments
-.env
+.env*
 .envrc
 .venv
 env/
@@ -227,3 +227,4 @@ data/checkpoints.db*
 Notebook
 plan*
 langfuse/*
+vector-db-scripts/*

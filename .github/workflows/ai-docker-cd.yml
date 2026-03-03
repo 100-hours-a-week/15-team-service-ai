@@ -2,7 +2,7 @@ name: AI Server CD (Blue/Green ASG)
 
 on:
   push:
-    branches: ["main", "feature/cd"]
+    branches: ["main"]
   workflow_dispatch:
 
 # 동시 실행 제어 (배포 중복 방지)
@@ -57,8 +57,9 @@ jobs:
         run: |
           mkdir -p deploy
           
-          # appspec.yml과 scripts 폴더를 deploy 디렉토리로 복사
+          # appspec.yml, compose 파일, scripts 폴더를 deploy 디렉토리로 복사
           cp appspec.yml deploy/
+          cp docker-compose.yml deploy/
           cp -r scripts deploy/
           
           # EC2가 Pull할 이미지 URI 정보를 담은 파일 생성

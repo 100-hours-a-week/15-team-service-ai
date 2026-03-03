@@ -1,0 +1,64 @@
+// ==========================================
+// Docker 디스커버리 (컨테이너 정보 수집)
+// ==========================================
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+// ==========================================
+// 1. Logs Pipeline (FastAPI -> Loki)
+// ==========================================
+
+// 컨테이너 중 "ai-server"이라는 이름을 가진 컨테이너만 필터링합니다.
+discovery.relabel "ai_server_logs_target" {
+  targets = discovery.docker.containers.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/?(ai-server.*)" // docker-compose 이름 대응
+    action        = "keep"
+  }
+}
+
+// 필터링된 컨테이너의 stdout / stderr 로그 수집
+loki.source.docker "ai_server_logs" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.relabel.ai_server_logs_target.output
+  forward_to = [loki.write.loki_out.receiver]
+}
+
+// 수집된 로그를 Loki로 전송
+loki.write "loki_out" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}
+
+// ==========================================
+// 2. Metrics Pipeline (FastAPI -> Prometheus)
+// ==========================================
+
+// FastAPI 앱의 /metrics 엔드포인트를 주기적으로 스크랩
+prometheus.scrape "fastapi_metrics" {
+  // docker-compose의 서비스명인 ai-server:8000 을 타겟으로 지정
+  targets = [{"__address__" = "ai-server:8000"}]
+  forward_to = [prometheus.remote_write.amp.receiver]
+}
+
+// cAdvisor 컨테이너의 /metrics 엔드포인트를 주기적으로 스크랩
+prometheus.scrape "cadvisor_metrics" {
+  // docker-compose의 서비스명인 cadvisor:8080 을 타겟으로 지정
+  targets = [{"__address__" = "cadvisor:8080"}]
+  forward_to = [prometheus.remote_write.amp.receiver]
+}
+
+// 스크랩한 메트릭을 AWS Managed Prometheus로 전송
+prometheus.remote_write "amp" {
+  endpoint {
+    url = "https://aps-workspaces.ap-northeast-2.amazonaws.com/workspaces/<WORKSPACE_ID>/api/v1/remote_write"
+    sigv4 {
+      region = "ap-northeast-2"
+    }
+  }
+}
+

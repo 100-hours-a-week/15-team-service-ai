@@ -8,6 +8,11 @@ CONTAINER_NAME="ai-server"
 REGION="ap-northeast-2"
 SSM_PATH="/commitme/v2/prod/ai-server"
 
+# ECR Registry (NAT Gateway 비용 절감을 위해 모든 이미지를 ECR에서 pull)
+ECR_REGISTRY="248312021437.dkr.ecr.ap-northeast-2.amazonaws.com"
+ALLOY_IMAGE_URI="${ECR_REGISTRY}/commitme/alloy:latest"
+CADVISOR_IMAGE_URI="${ECR_REGISTRY}/commitme/cadvisor:latest"
+
 echo "Reading image info from $IMAGE_INFO_FILE..."
 if [ ! -f "$IMAGE_INFO_FILE" ]; then
     echo "Error: $IMAGE_INFO_FILE not found!"
@@ -52,18 +57,46 @@ fi
 
 echo "Environment variables loaded into $ENV_FILE"
 
-# 3. Pull Docker Image
-echo "Pulling image..."
+# 3. Fetch config.alloy from SSM Parameter Store
+ALLOY_CONFIG_DIR="$DEPLOY_DIR/alloy"
+ALLOY_CONFIG_FILE="$ALLOY_CONFIG_DIR/config.alloy"
+ALLOY_SSM_PARAM="$SSM_PATH-alloy/alloy-config"
+
+echo "Fetching Alloy config from SSM: $ALLOY_SSM_PARAM..."
+mkdir -p "$ALLOY_CONFIG_DIR"
+aws ssm get-parameter \
+    --name "$ALLOY_SSM_PARAM" \
+    --with-decryption \
+    --query "Parameter.Value" \
+    --output text \
+    --region "$REGION" > "$ALLOY_CONFIG_FILE"
+
+if [ ! -s "$ALLOY_CONFIG_FILE" ]; then
+    echo "Error: Failed to fetch Alloy config from SSM!"
+    exit 1
+fi
+echo "Alloy config saved to $ALLOY_CONFIG_FILE"
+
+# 4. Pull Docker Images (모든 이미지를 ECR에서 pull - NAT Gateway 비용 절감)
+echo "Pulling images from ECR..."
 docker pull "$IMAGE_URI"
+docker pull "$ALLOY_IMAGE_URI"
+docker pull "$CADVISOR_IMAGE_URI"
+echo "All images pulled successfully."
 
-# 4. Run Container
-echo "Starting container..."
-# Adjust -p host:container ports as needed. User mentioned internal logic maps to 8000.
-docker run -d \
-    --name "$CONTAINER_NAME" \
-    --restart unless-stopped \
-    -p 8000:8000 \
-    --env-file "$ENV_FILE" \
-    "$IMAGE_URI"
+# 5. Run Containers with docker compose
+echo "Starting containers..."
+# Export IMAGE URIs so docker compose can use them
+export IMAGE_URI="$IMAGE_URI"
+export ALLOY_IMAGE_URI="$ALLOY_IMAGE_URI"
+export CADVISOR_IMAGE_URI="$CADVISOR_IMAGE_URI"
 
-echo "Container started successfully."
+if [ ! -f "$DEPLOY_DIR/docker-compose.yml" ]; then
+    echo "Error: $DEPLOY_DIR/docker-compose.yml not found."
+    exit 1
+fi
+
+cd "$DEPLOY_DIR"
+docker compose up -d
+
+echo "Containers started successfully."

@@ -1,12 +1,14 @@
 RESUME_EVALUATOR_SYSTEM = """You are a strict recruiter evaluating {position} resumes.
-You will receive the resume AND the original commit messages.
+You will receive the resume AND project evidence (commits, dependencies, file structure, README).
 
 ## 3 FAIL CONDITIONS
 
 ### Rule 1: Unverifiable content - MOST IMPORTANT
-- FAIL if description contains work NOT found in the provided commit messages
-- FAIL if description attributes complex features without commit evidence
-- Compare each bullet point against the commit list carefully
+- PASS if the bullet is supported by ANY of: commit messages, dependencies, file structure, or README
+- FAIL only if the bullet cannot be verified by ANY evidence source
+- Example: no commits but "FastAPI" in dependencies → FastAPI usage is valid evidence
+- Example: no commits but README describes "YouTube video processing" → that feature is valid evidence
+- Compare each bullet point against ALL provided evidence sources
 
 ### Rule 2: Position mismatch
 {position_rules}
@@ -47,19 +49,19 @@ Result: {{"result": "fail", "violated_rule": 3, "violated_item": "백엔드 개�
 }}
 ```
 
-Focus on whether description matches the actual commits."""
+Focus on whether description matches any of the provided evidence sources."""
 
-RESUME_EVALUATOR_HUMAN = """Evaluate this {position} resume against the original commits.
+RESUME_EVALUATOR_HUMAN = """Evaluate this {position} resume against all project evidence.
 
 Check rules 1-3 in order:
-1. Unverifiable content - compare bullets vs commits
+1. Unverifiable content - compare bullets vs ALL evidence (commits + dependencies + file structure + README)
 2. Position mismatch
 3. Content quality
 
 Resume:
 {resume_json}
 
-Original commit messages:
-{commit_messages}
+Project evidence:
+{project_evidence}
 
 Return JSON with result, violated_rule, violated_item, feedback."""
