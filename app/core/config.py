@@ -15,14 +15,16 @@ class Settings(BaseSettings):
 
     # Gemini 평가용 설정
     gemini_api_key: str = ""
-    gemini_evaluator_model: str = "gemini-3-pro-preview"
+    gemini_evaluator_model: str = ""
     gemini_timeout: float = 60.0
 
     # Callback
     generate_callback_url: str = ""
+    generate_callback_url_test: str = ""
     edit_callback_url: str = ""
     chat_callback_url: str = ""
     ai_callback_secret: str = ""
+    
 
     # Timeout 설정
     github_timeout: float = 60.0
