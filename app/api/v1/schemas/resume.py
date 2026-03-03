@@ -26,6 +26,20 @@ class GenerateRequest(BaseModel):
         return v
 
 
+class MockGenerateRequest(BaseModel):
+    """모의 이력서 생성 요청 (GitHub 호출 없음, E2E 테스트용)"""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    position: str = Field(min_length=1, max_length=100)
+    company: str | None = Field(default=None, max_length=100)
+    repo_urls: list[str] = Field(
+        alias="repoUrls",
+        default=["https://github.com/mock/testrepo"],
+        max_length=5,
+    )
+
+
 class GenerateResponse(BaseModel):
     """이력서 생성 응답"""
 

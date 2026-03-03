@@ -15,7 +15,7 @@ class Settings(BaseSettings):
 
     # Gemini 평가용 설정
     gemini_api_key: str = ""
-    gemini_evaluator_model: str = "gemini-3-pro-preview"
+    gemini_evaluator_model: str = ""
     gemini_timeout: float = 60.0
 
     # Callback

@@ -12,6 +12,7 @@ _REQUEST_ID_PATTERN = re.compile(r"^[a-zA-Z0-9\-_]{1,64}$")
 
 request_id_var: ContextVar[str | None] = ContextVar("request_id", default=None)
 job_id_var: ContextVar[str | None] = ContextVar("job_id", default=None)
+github_mock_var: ContextVar[bool] = ContextVar("github_mock", default=False)
 
 
 def get_request_id() -> str | None:

@@ -6,7 +6,7 @@ import httpx
 from fastapi import APIRouter, Request
 
 from app.api.utils import send_callback_with_retry
-from app.api.v1.schemas import GenerateRequest, GenerateResponse
+from app.api.v1.schemas import GenerateRequest, GenerateResponse, MockGenerateRequest
 from app.api.v1.schemas.callback import (
     CallbackErrorData,
     CallbackFailurePayload,
@@ -15,7 +15,7 @@ from app.api.v1.schemas.callback import (
     CallbackSuccessPayload,
 )
 from app.core.config import settings
-from app.core.context import set_job_id
+from app.core.context import github_mock_var, set_job_id
 from app.core.exceptions import ErrorCode
 from app.core.limiter import limiter
 from app.core.logging import get_logger
@@ -111,6 +111,33 @@ async def generate_resume(
         position=body.position,
         company=body.company,
         github_token=body.github_token,
+        callback_url=callback_url,
+    )
+
+    task = create_task(_run_agent_and_callback(job_id, resume_request, callback_url))
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+
+    return GenerateResponse(job_id=job_id)
+
+
+@router.post("/generate/mock", response_model=GenerateResponse, summary="이력서 생성 Mock")
+async def generate_resume_mock(
+    request: Request,
+    body: MockGenerateRequest,
+) -> GenerateResponse:
+    """GitHub API 없이 모의 데이터로 이력서 생성"""
+
+    job_id = str(uuid.uuid4())
+    callback_url = settings.generate_callback_url
+
+    github_mock_var.set(True)
+
+    resume_request = ResumeRequest(
+        repo_urls=body.repo_urls,
+        position=body.position,
+        company=body.company,
+        github_token="mock-token",
         callback_url=callback_url,
     )
 
