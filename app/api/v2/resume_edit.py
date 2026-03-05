@@ -3,7 +3,7 @@ import uuid
 from asyncio import create_task
 
 import httpx
-from fastapi import APIRouter, Request
+from fastapi import APIRouter
 
 from app.api.utils import send_callback_with_retry
 from app.api.v2.schemas.resume_edit import (
@@ -19,7 +19,6 @@ from app.api.v2.utils import build_resume_json
 from app.core.config import settings
 from app.core.context import set_job_id
 from app.core.exceptions import ErrorCode
-from app.core.limiter import limiter
 from app.core.logging import get_logger
 from app.domain.resume.edit_agent import run_edit_agent
 
@@ -102,15 +101,10 @@ async def _run_edit_and_callback(
 
 
 @router.post("/edit", response_model=EditResponse, summary="이력서 수정")
-@limiter.limit("10/minute")
 async def edit_resume(
-    request: Request,
     body: EditRequest,
 ) -> EditResponse:
-    """이력서 수정 요청
-
-    분당 10회 요청 제한이 적용됩니다
-    """
+    """이력서 수정 요청"""
     job_id = str(uuid.uuid4())
     logger.info(
         "이력서 수정 요청",
