@@ -4,16 +4,12 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from prometheus_fastapi_instrumentator import Instrumentator
-from slowapi import _rate_limit_exceeded_handler
-from slowapi.errors import RateLimitExceeded
-from slowapi.middleware import SlowAPIMiddleware
 
 from app.api.routers import api_router, api_v2_router
 from app.api.v1.resume import get_background_tasks as get_v1_tasks
 from app.api.v2.resume_edit import get_background_tasks as get_v2_edit_tasks
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
-from app.core.limiter import limiter
 from app.core.logging import get_logger, setup_logging
 from app.core.middleware import RequestLoggingMiddleware
 from app.infra.github.client import close_client as close_github_client
@@ -61,9 +57,6 @@ app = FastAPI(
 )
 
 
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-app.add_middleware(SlowAPIMiddleware)
 app.add_middleware(RequestLoggingMiddleware)
 
 register_exception_handlers(app)

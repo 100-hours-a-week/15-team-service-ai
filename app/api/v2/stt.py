@@ -1,8 +1,7 @@
-from fastapi import APIRouter, Request
+from fastapi import APIRouter
 
 from app.api.v2.schemas.stt import STTErrorResponse, TranscriptionRequest, TranscriptionResponse
 from app.core.exceptions import CustomException, ErrorCode
-from app.core.limiter import limiter
 from app.core.logging import get_logger
 from app.domain.stt.service import transcribe_from_s3
 
@@ -11,15 +10,10 @@ logger = get_logger(__name__)
 
 
 @router.post("/transcribe", response_model=TranscriptionResponse, summary="음성을 텍스트로 변환")
-@limiter.limit("20/minute")
 async def transcribe(
-    request: Request,
     body: TranscriptionRequest,
 ) -> TranscriptionResponse:
-    """S3에 저장된 오디오 파일을 텍스트로 변환
-
-    분당 20회 요청 제한이 적용됩니다
-    """
+    """S3에 저장된 오디오 파일을 텍스트로 변환"""
     logger.info("STT 변환 요청", s3_key=body.s3_key, language=body.language)
 
     try:

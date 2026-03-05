@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter
 
 from app.api.v2.schemas.interview import (
     InterviewErrorResponse,
@@ -10,7 +10,6 @@ from app.api.v2.schemas.interview import (
 )
 from app.api.v2.utils import build_resume_json
 from app.core.exceptions import ErrorCode
-from app.core.limiter import limiter
 from app.core.logging import get_logger
 from app.domain.interview.agent import run_interview_agent
 from app.domain.interview.schemas import InterviewQuestion
@@ -36,15 +35,10 @@ _BEHAVIORAL_FIXED_COUNT = len(BEHAVIORAL_FIXED_QUESTIONS)
 
 
 @router.post("", response_model=InterviewResponse, summary="면접 질문 생성")
-@limiter.limit("10/minute")
 async def generate_interview(
-    request: Request,
     body: InterviewRequest,
 ) -> InterviewResponse:
-    """면접 질문 생성 요청
-
-    분당 10회 요청 제한이 적용됩니다
-    """
+    """면접 질문 생성 요청"""
     session_id = str(uuid.uuid4())
 
     is_behavioral = body.type == "behavioral"
