@@ -3,7 +3,7 @@ import uuid
 from asyncio import Semaphore, create_task
 
 import httpx
-from fastapi import APIRouter, Request
+from fastapi import APIRouter
 
 from app.api.utils import send_callback_with_retry
 from app.api.v1.schemas import GenerateRequest, GenerateResponse, MockGenerateRequest
@@ -17,7 +17,6 @@ from app.api.v1.schemas.callback import (
 from app.core.config import settings
 from app.core.context import github_mock_var, set_job_id
 from app.core.exceptions import ErrorCode
-from app.core.limiter import limiter
 from app.core.logging import get_logger
 from app.domain.resume.agent import run_resume_agent
 from app.domain.resume.schemas import ResumeData, ResumeRequest
@@ -94,15 +93,10 @@ def _build_callback_payload(
 
 
 @router.post("/generate", response_model=GenerateResponse, summary="이력서 생성")
-@limiter.limit("5/minute")
 async def generate_resume(
-    request: Request,
     body: GenerateRequest,
 ) -> GenerateResponse:
-    """이력서 생성 요청
-
-    분당 5회 요청 제한이 적용됩니다
-    """
+    """이력서 생성 요청"""
     job_id = str(uuid.uuid4())
     callback_url = settings.generate_callback_url
 
@@ -123,7 +117,6 @@ async def generate_resume(
 
 @router.post("/generate/mock", response_model=GenerateResponse, summary="이력서 생성 Mock")
 async def generate_resume_mock(
-    request: Request,
     body: MockGenerateRequest,
 ) -> GenerateResponse:
     """GitHub API 없이 모의 데이터로 이력서 생성"""

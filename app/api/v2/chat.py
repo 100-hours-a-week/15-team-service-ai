@@ -6,7 +6,6 @@ from app.api.v2.schemas.chat import (
     ChatResponse,
 )
 from app.core.exceptions import ErrorCode
-from app.core.limiter import limiter
 from app.core.logging import get_logger
 from app.domain.interview.chat_agent import run_chat_agent
 from app.domain.interview.chat_schemas import MAX_FOLLOW_UP_TURNS
@@ -23,7 +22,6 @@ SKIP_PATTERNS = ["모르겠", "잘 모르", "패스", "모릅니다", "생각이
     response_model=ChatResponse,
     summary="면접 채팅",
 )
-@limiter.limit("20/minute")
 async def chat_interview(
     request: Request,
     body: ChatRequest,
@@ -31,7 +29,6 @@ async def chat_interview(
     """면접 질문에 대한 실시간 채팅 응답
 
     같은 aiSessionId + questionId로 반복 호출하면 이전 대화를 이어갑니다
-    분당 20회 요청 제한이 적용됩니다
     """
     thread_id = f"chat-{body.ai_session_id}-{body.question_id}"
     logger.info(

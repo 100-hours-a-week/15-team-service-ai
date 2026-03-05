@@ -1,7 +1,7 @@
 import asyncio
 import json
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter
 
 from app.api.v2.schemas.feedback import (
     InterviewEndErrorResponse,
@@ -11,7 +11,6 @@ from app.api.v2.schemas.feedback import (
     InterviewEndResponse,
 )
 from app.core.exceptions import ErrorCode
-from app.core.limiter import limiter
 from app.core.logging import get_logger
 from app.domain.interview.feedback_agent import (
     run_feedback_agent,
@@ -30,15 +29,10 @@ MAX_CONCURRENT_FEEDBACK = 5
     response_model=InterviewEndResponse,
     summary="면접 종료 및 피드백 생성",
 )
-@limiter.limit("10/minute")
 async def end_interview(
-    request: Request,
     body: InterviewEndRequest,
 ) -> InterviewEndResponse:
-    """면접 종료 시 개별 + 종합 피드백을 한 번에 생성
-
-    분당 10회 요청 제한이 적용됩니다
-    """
+    """면접 종료 시 개별 + 종합 피드백을 한 번에 생성"""
     interview_type = body.interview_type.lower()
 
     logger.info(
