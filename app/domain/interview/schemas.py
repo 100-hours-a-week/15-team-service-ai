@@ -1,6 +1,6 @@
 from typing import Literal, TypedDict
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 __all__ = [
     "BEHAVIORAL_DIMENSIONS",
@@ -31,6 +31,13 @@ class InterviewQuestion(BaseModel):
     related_project: str | None = None
     dimension: BEHAVIORAL_DIMENSIONS | None = None
     category: str | None = None
+
+    @model_validator(mode="after")
+    def check_dimension_or_category(self) -> "InterviewQuestion":
+        """dimension과 category 중 하나는 반드시 있어야 함"""
+        if self.dimension is None and self.category is None:
+            raise ValueError("dimension 또는 category 중 하나는 필수입니다")
+        return self
 
 
 class InterviewQuestionsOutput(BaseModel):

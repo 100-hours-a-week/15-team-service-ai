@@ -56,12 +56,15 @@ def should_retry_retrieval(state: FeedbackState) -> str:
         return "generate"
 
     scores = state.get("retrieval_scores", [])
-    if scores and max(scores) >= settings.qdrant_score_threshold:
+    if not scores:
+        return "generate"
+
+    if max(scores) >= settings.qdrant_score_threshold:
         return "generate"
 
     logger.info(
-        "검색 품질 낮음 - 재검색 결정",
-        max_score=max(scores) if scores else 0.0,
+        "검색 품질 낮음 - 재검색",
+        max_score=max(scores),
         threshold=settings.qdrant_score_threshold,
     )
     return "re_retrieve"

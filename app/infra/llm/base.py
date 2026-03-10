@@ -81,6 +81,13 @@ def get_evaluator_llm() -> ChatGoogleGenerativeAI:
     )
 
 
+def close_llm_clients() -> None:
+    """캐시된 LLM 클라이언트 정리 — lifespan에서 호출"""
+    get_generator_llm.cache_clear()
+    get_evaluator_llm.cache_clear()
+    logger.info("LLM 클라이언트 캐시 정리 완료")
+
+
 def _build_langfuse_config(
     session_id: str | None,
     tags: list[str],

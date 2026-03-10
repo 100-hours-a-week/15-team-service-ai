@@ -65,14 +65,24 @@ async def generate_interview(
 
     resume_json = build_resume_json(body.content)
 
-    questions, error_message = await run_interview_agent(
-        resume_json=resume_json,
-        interview_type=body.type,
-        position=body.position,
-        question_count=max_count,
-        min_question_count=min_count,
-        session_id=session_id,
-    )
+    try:
+        questions, error_message = await run_interview_agent(
+            resume_json=resume_json,
+            interview_type=body.type,
+            position=body.position,
+            question_count=max_count,
+            min_question_count=min_count,
+            session_id=session_id,
+        )
+    except Exception:
+        logger.error("면접 질문 생성 예외 발생", exc_info=True)
+        return InterviewResponse(
+            status="failed",
+            error=InterviewErrorResponse(
+                code=ErrorCode.INTERVIEW_GENERATE_ERROR,
+                message="면접 질문 생성 중 오류가 발생했습니다",
+            ),
+        )
 
     if error_message or not questions:
         logger.error("면접 질문 생성 실패", error=error_message)
