@@ -27,6 +27,12 @@ logger = get_logger(__name__)
 MAX_CONCURRENT_JOBS = 10
 _job_semaphore = Semaphore(MAX_CONCURRENT_JOBS)
 _background_tasks: set[asyncio.Task] = set()
+_tasks_lock = asyncio.Lock()
+
+
+async def _remove_task(task: asyncio.Task) -> None:
+    async with _tasks_lock:
+        _background_tasks.discard(task)
 
 
 async def _send_callback(
@@ -114,8 +120,9 @@ async def generate_resume(
     )
 
     task = create_task(_run_agent_and_callback(job_id, resume_request, callback_url))
-    _background_tasks.add(task)
-    task.add_done_callback(_background_tasks.discard)
+    async with _tasks_lock:
+        _background_tasks.add(task)
+    task.add_done_callback(lambda t: create_task(_remove_task(t)))
 
     return GenerateResponse(job_id=job_id)
 
@@ -140,12 +147,13 @@ async def generate_resume_mock(
     )
 
     task = create_task(_run_agent_and_callback(job_id, resume_request, callback_url))
-    _background_tasks.add(task)
-    task.add_done_callback(_background_tasks.discard)
+    async with _tasks_lock:
+        _background_tasks.add(task)
+    task.add_done_callback(lambda t: create_task(_remove_task(t)))
 
     return GenerateResponse(job_id=job_id)
 
 
 def get_background_tasks() -> set[asyncio.Task]:
-    """진행 중인 백그라운드 태스크 반환"""
-    return _background_tasks
+    """진행 중인 백그라운드 태스크 스냅샷 반환"""
+    return set(_background_tasks)

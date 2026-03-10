@@ -34,16 +34,44 @@ from app.infra.llm.client import evaluate_resume, generate_resume, plan_resume
 logger = get_logger(__name__)
 
 
+async def _fetch_github_data(request) -> tuple[list, dict, object]:
+    """GitHub 데이터 병렬 수집 — 프로젝트 정보, 레포 컨텍스트, 사용자 통계 반환"""
+    project_info, repo_contexts = await asyncio.gather(
+        collect_project_info(request),
+        collect_repo_contexts(request),
+    )
+    username, _ = parse_repo_url(request.repo_urls[0])
+    user_stats = await collect_user_stats(username, request.github_token)
+    return project_info, repo_contexts, user_stats
+
+
+def _filter_matched_projects(project_info: list, position: str) -> list:
+    """포지션 조건에 맞는 프로젝트만 필터링하여 반환"""
+    matched = []
+    for project in project_info:
+        is_valid, error_msg = validate_position_match(
+            position,
+            project.get("dependencies", []),
+        )
+        if not is_valid:
+            logger.warning(
+                "포지션 불일치 스킵",
+                repo=project.get("repo_name"),
+                position=position,
+                error=error_msg,
+            )
+            continue
+        matched.append(project)
+    return matched
+
+
 async def collect_data_node(state: ResumeState) -> ResumeState:
     """데이터 수집 노드: 프로젝트 정보, 레포 컨텍스트, 사용자 통계 수집"""
     request = state["request"]
     logger.info("collect_data_node 시작", repos=len(request.repo_urls), position=request.position)
 
     try:
-        project_info, repo_contexts = await asyncio.gather(
-            collect_project_info(request),
-            collect_repo_contexts(request),
-        )
+        project_info, repo_contexts, user_stats = await _fetch_github_data(request)
 
         if not project_info:
             return create_error_state(
@@ -52,28 +80,11 @@ async def collect_data_node(state: ResumeState) -> ResumeState:
                 "프로젝트 정보 수집 실패",
             )
 
-        username, _ = parse_repo_url(request.repo_urls[0])
-        user_stats = await collect_user_stats(username, request.github_token)
-
         logger.info(
             "collect_data_node 완료", projects=len(project_info), contexts=len(repo_contexts)
         )
 
-        matched_projects = []
-        for project in project_info:
-            is_valid, error_msg = validate_position_match(
-                request.position,
-                project.get("dependencies", []),
-            )
-            if not is_valid:
-                logger.warning(
-                    "포지션 불일치 스킵",
-                    repo=project.get("repo_name"),
-                    position=request.position,
-                    error=error_msg,
-                )
-                continue
-            matched_projects.append(project)
+        matched_projects = _filter_matched_projects(project_info, request.position)
 
         if not matched_projects:
             return create_error_state(

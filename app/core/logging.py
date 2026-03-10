@@ -21,6 +21,10 @@ SENSITIVE_PATTERNS = [
     (re.compile(r"(Bearer\s+)[^\s]+", re.IGNORECASE), r"\1***"),
     (re.compile(r"(api[_-]?key=)[^&\s]+", re.IGNORECASE), r"\1***"),
     (re.compile(r"(password=)[^&\s]+", re.IGNORECASE), r"\1***"),
+    (re.compile(r"(gh[pousr]_[A-Za-z0-9_]+)"), r"***"),
+    (re.compile(r"(AKIA[0-9A-Z]{16})"), r"***"),
+    (re.compile(r"(github_token=)[^\s&]+", re.IGNORECASE), r"\1***"),
+    (re.compile(r"(gh_token=)[^\s&]+", re.IGNORECASE), r"\1***"),
 ]
 
 

@@ -1,3 +1,4 @@
+import concurrent.futures
 from pathlib import Path
 
 from google import genai
@@ -82,14 +83,20 @@ def search_knowledge(
         k = top_k or settings.qdrant_top_k
         fetch_k = k * _OVERFETCH_MULTIPLIER
 
-        result = genai_client.models.embed_content(
-            model=EMBEDDING_MODEL,
-            contents=query,
-            config=types.EmbedContentConfig(
-                task_type="RETRIEVAL_QUERY",
-                output_dimensionality=VECTOR_DIM,
-            ),
-        )
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(
+                genai_client.models.embed_content,
+                model=EMBEDDING_MODEL,
+                contents=query,
+                config=types.EmbedContentConfig(
+                    task_type="RETRIEVAL_QUERY",
+                    output_dimensionality=VECTOR_DIM,
+                ),
+            )
+            try:
+                result = future.result(timeout=30)
+            except concurrent.futures.TimeoutError as e:
+                raise TimeoutError("Google GenAI 임베딩 호출 타임아웃 — 30초 초과") from e
         query_vector = result.embeddings[0].values
 
         query_filter = None

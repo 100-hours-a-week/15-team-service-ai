@@ -4,6 +4,8 @@ from app.core.exceptions import LLMError
 from app.core.logging import get_logger
 from langfuse import Langfuse
 
+from app.core.config import settings
+
 logger = get_logger(__name__)
 
 _langfuse_client: Langfuse | None = None
@@ -15,6 +17,10 @@ def _get_client() -> Langfuse:
 
     if _langfuse_client is not None:
         return _langfuse_client
+
+    if not settings.langfuse_public_key or not settings.langfuse_secret_key:
+        logger.warning("Langfuse API 키 미설정 — 로컬 fallback만 사용 가능")
+        raise LLMError(detail="Langfuse API 키가 설정되지 않음")
 
     _langfuse_client = Langfuse()
     return _langfuse_client
