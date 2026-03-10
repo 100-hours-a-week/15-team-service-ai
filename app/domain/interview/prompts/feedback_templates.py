@@ -88,9 +88,30 @@ FEEDBACK_TECHNICAL_HUMAN = """Evaluate the candidate's answer to this technical 
 - Question Intent: {{question_intent}}
 - Related Project: {{related_project}}
 
+## Retrieved Technical Context
+{{retrieved_context}}
+
 ## Candidate's Answer
 <answer>
 {{answer}}
+</answer>
+
+Provide score, strengths, improvements, and a model answer."""
+
+LOCAL_FEEDBACK_TECHNICAL_HUMAN = """Evaluate the candidate's answer to this technical interview question.
+
+## Context
+- Position: {position}
+- Question: {question_text}
+- Question Intent: {question_intent}
+- Related Project: {related_project}
+
+## Retrieved Technical Context
+{retrieved_context}
+
+## Candidate's Answer
+<answer>
+{answer}
 </answer>
 
 Provide score, strengths, improvements, and a model answer."""
@@ -106,9 +127,33 @@ FEEDBACK_TECHNICAL_RETRY_HUMAN = """Re-evaluate with improvements based on feedb
 - Question Intent: {{question_intent}}
 - Related Project: {{related_project}}
 
+## Retrieved Technical Context
+{{retrieved_context}}
+
 ## Candidate's Answer
 <answer>
 {{answer}}
+</answer>
+
+Fix all feedback issues. Provide score, strengths, improvements, and a model answer."""
+
+LOCAL_FEEDBACK_TECHNICAL_RETRY_HUMAN = """Re-evaluate with improvements based on feedback.
+
+## Previous Evaluation Feedback - MUST FIX:
+{feedback}
+
+## Context
+- Position: {position}
+- Question: {question_text}
+- Question Intent: {question_intent}
+- Related Project: {related_project}
+
+## Retrieved Technical Context
+{retrieved_context}
+
+## Candidate's Answer
+<answer>
+{answer}
 </answer>
 
 Fix all feedback issues. Provide score, strengths, improvements, and a model answer."""
@@ -315,11 +360,19 @@ FEEDBACK_OVERALL_TECHNICAL_HUMAN = """Provide overall assessment for this techni
 
 ## Context
 - Position: {{position}}
+- Company: {{company}}
+
+## Company Talent Profile
+{{company_talent_info}}
 
 ## Interview Q&A Pairs
 {{qa_pairs_json}}
 
-Analyze all answers and provide overall_score, summary, key_strengths, and key_improvements."""
+## Individual Feedback Results
+{{individual_feedbacks_json}}
+
+Analyze all answers and provide overall_score, summary, key_strengths, and key_improvements.
+If company talent profile is provided, include in the summary how the candidate aligns with the company's values."""
 
 FEEDBACK_OVERALL_TECHNICAL_RETRY_HUMAN = """Re-assess with improvements based on feedback.
 
@@ -331,6 +384,9 @@ FEEDBACK_OVERALL_TECHNICAL_RETRY_HUMAN = """Re-assess with improvements based on
 
 ## Interview Q&A Pairs
 {{qa_pairs_json}}
+
+## Individual Feedback Results
+{{individual_feedbacks_json}}
 
 Fix all feedback issues. Provide overall_score, summary, key_strengths, and key_improvements."""
 
@@ -401,11 +457,19 @@ FEEDBACK_OVERALL_BEHAVIORAL_HUMAN = """Provide overall assessment for this behav
 
 ## Context
 - Position: {{position}}
+- Company: {{company}}
+
+## Company Talent Profile
+{{company_talent_info}}
 
 ## Interview Q&A Pairs
 {{qa_pairs_json}}
 
-Analyze all answers and provide overall_score, summary, key_strengths, and key_improvements."""
+## Individual Feedback Results
+{{individual_feedbacks_json}}
+
+Analyze all answers and provide overall_score, summary, key_strengths, and key_improvements.
+If company talent profile is provided, include in the summary how the candidate aligns with the company's values."""
 
 FEEDBACK_OVERALL_BEHAVIORAL_RETRY_HUMAN = """Re-assess with improvements based on feedback.
 
@@ -417,6 +481,9 @@ FEEDBACK_OVERALL_BEHAVIORAL_RETRY_HUMAN = """Re-assess with improvements based o
 
 ## Interview Q&A Pairs
 {{qa_pairs_json}}
+
+## Individual Feedback Results
+{{individual_feedbacks_json}}
 
 Fix all feedback issues. Provide overall_score, summary, key_strengths, and key_improvements."""
 
@@ -460,3 +527,33 @@ FEEDBACK_OVERALL_EVALUATOR_HUMAN = """Evaluate the quality of this overall inter
 
 Check score-summary consistency, evidence-based assessment, and actionable improvements.
 Return JSON with result and feedback."""
+
+LANGFUSE_FEEDBACK_RETRIEVAL_EVALUATOR_SYSTEM = "feedback-retrieval-evaluator-system"
+LANGFUSE_FEEDBACK_RETRIEVAL_EVALUATOR_HUMAN = "feedback-retrieval-evaluator-human"
+
+LOCAL_FEEDBACK_RETRIEVAL_EVALUATOR_SYSTEM = """\
+You are a RAG retrieval quality evaluator.
+Assess whether the retrieved technical context is relevant and useful \
+for evaluating a candidate's interview answer.
+
+## DECISION CRITERIA
+- pass: retrieved context covers concepts, patterns, or technologies \
+directly related to the question
+- fail: retrieved context is about a different topic, or too generic to help evaluate
+
+## OUTPUT FORMAT
+{"result": "pass or fail", "reason": "one-sentence Korean reason"}"""
+
+LOCAL_FEEDBACK_RETRIEVAL_EVALUATOR_HUMAN = """\
+Assess retrieval quality for this technical interview question.
+
+## Question
+{question_text}
+
+## Question Intent
+{question_intent}
+
+## Retrieved Context
+{retrieved_context}
+
+Is the retrieved context relevant and useful for evaluating this question?"""

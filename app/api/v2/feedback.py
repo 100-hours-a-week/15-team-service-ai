@@ -10,18 +10,138 @@ from app.api.v2.schemas.feedback import (
     InterviewEndRequest,
     InterviewEndResponse,
 )
+from app.core.config import settings
 from app.core.exceptions import ErrorCode
 from app.core.logging import get_logger
 from app.domain.interview.feedback_agent import (
+    run_all_feedback_agents,
     run_feedback_agent,
     run_overall_feedback_agent,
 )
 from app.domain.interview.store import interview_context_store
+from app.infra.llm.base import get_langfuse_parent_handler
+from app.infra.tavily.client import search_company_talent
 
 router = APIRouter(prefix="/interview", tags=["v2"])
 logger = get_logger(__name__)
 
-MAX_CONCURRENT_FEEDBACK = 5
+MAX_CONCURRENT_FEEDBACK = 10
+FEEDBACK_GATHER_TIMEOUT = settings.feedback_gather_timeout
+
+
+def _process_individual_results(
+    individual_results: list,
+    messages: list,
+) -> tuple[list[InterviewEndFeedbackItem], list[str], str]:
+    """개별 피드백 결과를 처리하여 피드백 아이템, 에러, JSON 반환"""
+    feedback_items: list[InterviewEndFeedbackItem] = []
+    individual_errors: list[str] = []
+    individual_feedbacks: list[dict] = []
+
+    for idx, result in enumerate(individual_results):
+        msg = messages[idx]
+        if isinstance(result, Exception):
+            logger.error(
+                "개별 피드백 생성 실패",
+                turn_no=msg.turn_no,
+                error=str(result),
+                exc_info=result,
+            )
+            individual_errors.append(f"턴 {msg.turn_no}: 피드백 생성에 실패했습니다")
+            continue
+        feedback_result, error_message = result
+        if error_message or not feedback_result:
+            individual_errors.append(f"턴 {msg.turn_no}: {error_message or '생성 실패'}")
+            continue
+        feedback_items.append(
+            InterviewEndFeedbackItem(
+                turn_no=msg.turn_no,
+                score=feedback_result.score,
+                strengths=feedback_result.strengths,
+                improvements=feedback_result.improvements,
+                model_answer=feedback_result.model_answer,
+            )
+        )
+        individual_feedbacks.append(
+            {
+                "turn_no": msg.turn_no,
+                "score": feedback_result.score,
+                "strengths": feedback_result.strengths,
+                "improvements": feedback_result.improvements,
+            }
+        )
+
+    individual_feedbacks_json = json.dumps(individual_feedbacks, ensure_ascii=False)
+    return feedback_items, individual_errors, individual_feedbacks_json
+
+
+async def _generate_overall_feedback(
+    position: str,
+    interview_type: str,
+    qa_pairs_json: str,
+    individual_feedbacks_json: str,
+    session_id: str,
+    company: str = "",
+    company_talent_info: str = "",
+) -> tuple[InterviewEndOverallFeedback | None, str | None]:
+    """종합 피드백 생성 후 응답 스키마로 변환"""
+    overall_result, overall_err_msg = await run_overall_feedback_agent(
+        position=position,
+        interview_type=interview_type,
+        qa_pairs_json=qa_pairs_json,
+        individual_feedbacks_json=individual_feedbacks_json,
+        company=company,
+        company_talent_info=company_talent_info,
+        session_id=session_id,
+    )
+
+    if overall_err_msg or not overall_result:
+        logger.error("종합 피드백 생성 실패", error=overall_err_msg)
+        return None, overall_err_msg or "종합 피드백 생성 실패"
+
+    return InterviewEndOverallFeedback(
+        overall_score=overall_result.overall_score,
+        summary=overall_result.summary,
+        key_strengths=overall_result.key_strengths,
+        key_improvements=overall_result.key_improvements,
+    ), None
+
+
+def _build_feedback_response(
+    feedback_items: list[InterviewEndFeedbackItem],
+    overall_feedback: InterviewEndOverallFeedback | None,
+    individual_errors: list[str],
+    overall_error: str | None,
+) -> InterviewEndResponse:
+    """최종 피드백 응답 빌드"""
+    if not feedback_items and not overall_feedback:
+        error_msgs = individual_errors + ([overall_error] if overall_error else [])
+        logger.error("피드백 전체 실패", errors=error_msgs)
+        return InterviewEndResponse(
+            status="failed",
+            error=InterviewEndErrorResponse(
+                code=ErrorCode.FEEDBACK_GENERATE_ERROR,
+                message="; ".join(error_msgs) or "피드백 생성에 실패했습니다",
+            ),
+        )
+
+    if individual_errors:
+        logger.warning("일부 개별 피드백 실패", errors=individual_errors)
+
+    if overall_error:
+        logger.warning("종합 피드백 실패", error=overall_error)
+
+    logger.info(
+        "면접 피드백 생성 완료",
+        individual_count=len(feedback_items),
+        has_overall=overall_feedback is not None,
+    )
+
+    return InterviewEndResponse(
+        status="success",
+        feedbacks=feedback_items if feedback_items else None,
+        overall_feedback=overall_feedback,
+    )
 
 
 @router.post(
@@ -56,6 +176,11 @@ async def end_interview(
     contexts = interview_context_store.get(body.ai_session_id)
 
     semaphore = asyncio.Semaphore(MAX_CONCURRENT_FEEDBACK)
+    langfuse_parent = get_langfuse_parent_handler(
+        "individual-feedbacks",
+        session_id=body.ai_session_id,
+    )
+    parent_callbacks = [langfuse_parent] if langfuse_parent else None
 
     async def run_feedback_with_semaphore(m, idx):
         qid = f"q-{idx:03d}"
@@ -69,94 +194,50 @@ async def end_interview(
                 related_project=ctx.related_project if ctx else None,
                 answer=m.answer,
                 session_id=body.ai_session_id,
+                callbacks=parent_callbacks,
             )
 
     individual_tasks = [
         run_feedback_with_semaphore(m, idx) for idx, m in enumerate(body.messages, start=1)
     ]
 
-    overall_task = run_overall_feedback_agent(
-        position=body.position,
-        interview_type=interview_type,
-        qa_pairs_json=qa_pairs_json,
-        session_id=body.ai_session_id,
-    )
+    talent_search_task = asyncio.create_task(search_company_talent(body.company))
 
-    all_results = await asyncio.gather(*individual_tasks, overall_task, return_exceptions=True)
-
-    individual_results = all_results[:-1]
-    feedback_items = []
-    individual_errors = []
-
-    for idx, result in enumerate(individual_results):
-        msg = body.messages[idx]
-        if isinstance(result, Exception):
-            logger.error(
-                "개별 피드백 생성 실패",
-                turn_no=msg.turn_no,
-                error=str(result),
-                exc_info=result,
-            )
-            individual_errors.append(f"턴 {msg.turn_no}: 피드백 생성에 실패했습니다")
-            continue
-        feedback_result, error_message = result
-        if error_message or not feedback_result:
-            individual_errors.append(f"턴 {msg.turn_no}: {error_message or '생성 실패'}")
-            continue
-        feedback_items.append(
-            InterviewEndFeedbackItem(
-                turn_no=msg.turn_no,
-                score=feedback_result.score,
-                strengths=feedback_result.strengths,
-                improvements=feedback_result.improvements,
-                model_answer=feedback_result.model_answer,
-            )
+    try:
+        individual_results = await asyncio.wait_for(
+            run_all_feedback_agents(individual_tasks),
+            timeout=FEEDBACK_GATHER_TIMEOUT,
         )
-
-    overall_entry = all_results[-1]
-    overall_feedback = None
-    overall_error = None
-
-    if isinstance(overall_entry, Exception):
-        logger.error("종합 피드백 생성 실패", error=str(overall_entry), exc_info=overall_entry)
-        overall_error = "종합 피드백 생성에 실패했습니다"
-    else:
-        overall_result, overall_err_msg = overall_entry
-        if overall_err_msg or not overall_result:
-            overall_error = overall_err_msg or "종합 피드백 생성 실패"
-        else:
-            overall_feedback = InterviewEndOverallFeedback(
-                overall_score=overall_result.overall_score,
-                summary=overall_result.summary,
-                key_strengths=overall_result.key_strengths,
-                key_improvements=overall_result.key_improvements,
-            )
-
-    if not feedback_items and not overall_feedback:
-        error_msgs = individual_errors + ([overall_error] if overall_error else [])
-        logger.error("피드백 전체 실패", errors=error_msgs)
+    except asyncio.TimeoutError:
+        logger.error(
+            "개별 피드백 전체 타임아웃",
+            timeout=FEEDBACK_GATHER_TIMEOUT,
+        )
+        talent_search_task.cancel()
         return InterviewEndResponse(
             status="failed",
             error=InterviewEndErrorResponse(
                 code=ErrorCode.FEEDBACK_GENERATE_ERROR,
-                message="; ".join(error_msgs) or "피드백 생성에 실패했습니다",
+                message=f"피드백 생성 타임아웃: {FEEDBACK_GATHER_TIMEOUT}초 초과",
             ),
         )
 
-    if individual_errors:
-        logger.warning("일부 개별 피드백 실패", errors=individual_errors)
+    company_talent_info = await talent_search_task
 
-    if overall_error:
-        logger.warning("종합 피드백 실패", error=overall_error)
-
-    logger.info(
-        "면접 피드백 생성 완료",
-        individual_count=len(feedback_items),
-        has_overall=overall_feedback is not None,
+    feedback_items, individual_errors, individual_feedbacks_json = _process_individual_results(
+        individual_results, body.messages
     )
 
-    return InterviewEndResponse(
-        status="success",
-        feedbacks=feedback_items if feedback_items else None,
-        overall_feedback=overall_feedback,
+    overall_feedback, overall_error = await _generate_overall_feedback(
+        position=body.position,
+        interview_type=interview_type,
+        qa_pairs_json=qa_pairs_json,
+        individual_feedbacks_json=individual_feedbacks_json,
+        company=body.company,
+        company_talent_info=company_talent_info,
+        session_id=body.ai_session_id,
+    )
+
+    return _build_feedback_response(
+        feedback_items, overall_feedback, individual_errors, overall_error
     )
