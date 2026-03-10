@@ -2,6 +2,11 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.api.schemas.callback import (
+    BaseCallbackErrorData,
+    BaseCallbackFailurePayload,
+    BaseCallbackProjectData,
+)
 from app.domain.resume.schemas.edit import EditProjectOutput, EditResumeOutput
 
 __all__ = [
@@ -17,6 +22,10 @@ __all__ = [
     "EditCallbackSuccessPayload",
     "EditCallbackFailurePayload",
 ]
+
+EditCallbackProjectData = BaseCallbackProjectData
+EditCallbackErrorData = BaseCallbackErrorData
+EditCallbackFailurePayload = BaseCallbackFailurePayload
 
 
 class EditProjectRequest(BaseModel):
@@ -62,28 +71,10 @@ class EditResponse(BaseModel):
     job_id: str = Field(alias="jobId")
 
 
-class EditCallbackProjectData(BaseModel):
-    """콜백 프로젝트 데이터"""
-
-    model_config = ConfigDict(populate_by_name=True, by_alias=True)
-
-    name: str
-    repo_url: str = Field(alias="repoUrl")
-    tech_stack: list[str] = Field(alias="techStack")
-    description: str
-
-
 class EditCallbackContentData(BaseModel):
     """콜백 이력서 내용 데이터"""
 
     projects: list[EditCallbackProjectData]
-
-
-class EditCallbackErrorData(BaseModel):
-    """콜백 에러 데이터"""
-
-    code: str
-    message: str
 
 
 class EditCallbackSuccessPayload(BaseModel):
@@ -95,13 +86,3 @@ class EditCallbackSuccessPayload(BaseModel):
     status: Literal["success"] = "success"
     content: EditCallbackContentData
     message: str | None = None
-
-
-class EditCallbackFailurePayload(BaseModel):
-    """콜백 실패 페이로드"""
-
-    model_config = ConfigDict(populate_by_name=True, by_alias=True)
-
-    job_id: str = Field(alias="jobId")
-    status: Literal["failed"] = "failed"
-    error: EditCallbackErrorData

@@ -25,11 +25,13 @@ SAMPLE_INTERVIEW_QUESTIONS_OUTPUT = InterviewQuestionsOutput(
             question="FastAPI에서 비동기 처리의 장점은 무엇인가요?",
             intent="비동기 프로그래밍 이해도",
             related_project="테스트 프로젝트",
+            category="Python/FastAPI",
         ),
         InterviewQuestion(
             question="REST API 설계 시 중요한 원칙은?",
             intent="API 설계 이해도",
             related_project="테스트 프로젝트",
+            category="API 설계/통합",
         ),
     ]
 )
@@ -479,7 +481,7 @@ class TestFeedbackEndpointIntegration:
 
     async def test_feedback_invalid_interview_type_returns_422(self, async_client):
         """잘못된 interviewType 시 422 반환"""
-        request = {**SAMPLE_FEEDBACK_REQUEST, "interviewType": "technical"}
+        request = {**SAMPLE_FEEDBACK_REQUEST, "interviewType": "invalid_type"}
         response = await async_client.post("/api/v2/interview/end", json=request)
         assert response.status_code == 422
 

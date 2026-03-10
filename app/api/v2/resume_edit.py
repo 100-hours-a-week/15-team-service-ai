@@ -26,6 +26,12 @@ router = APIRouter(prefix="/resume", tags=["v2"])
 logger = get_logger(__name__)
 
 _background_tasks: set[asyncio.Task] = set()
+_tasks_lock = asyncio.Lock()
+
+
+async def _remove_task(task: asyncio.Task) -> None:
+    async with _tasks_lock:
+        _background_tasks.discard(task)
 
 
 def _build_callback_url(job_id: str) -> str:
@@ -115,12 +121,13 @@ async def edit_resume(
     resume_json = build_resume_json(body.content)
 
     task = create_task(_run_edit_and_callback(job_id, resume_json, body.request_message))
-    _background_tasks.add(task)
-    task.add_done_callback(_background_tasks.discard)
+    async with _tasks_lock:
+        _background_tasks.add(task)
+    task.add_done_callback(lambda t: create_task(_remove_task(t)))
 
     return EditResponse(job_id=job_id)
 
 
 def get_background_tasks() -> set[asyncio.Task]:
-    """진행 중인 백그라운드 태스크 반환"""
-    return _background_tasks
+    """진행 중인 백그라운드 태스크 스냅샷 반환"""
+    return set(_background_tasks)

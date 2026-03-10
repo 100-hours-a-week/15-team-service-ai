@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 __all__ = [
     "InterviewProjectRequest",
@@ -38,6 +38,11 @@ class InterviewRequest(BaseModel):
     content: InterviewResumeRequest
     type: Literal["technical", "behavioral"]
     position: str = Field(min_length=1, max_length=100)
+
+    @field_validator("type", mode="before")
+    @classmethod
+    def normalize_type(cls, v: str) -> str:
+        return v.lower() if isinstance(v, str) else v
 
 
 class InterviewQuestionResponse(BaseModel):

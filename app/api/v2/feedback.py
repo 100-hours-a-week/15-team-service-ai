@@ -153,7 +153,7 @@ async def end_interview(
     body: InterviewEndRequest,
 ) -> InterviewEndResponse:
     """면접 종료 시 개별 + 종합 피드백을 한 번에 생성"""
-    interview_type = body.interview_type.lower()
+    interview_type = body.interview_type
 
     logger.info(
         "면접 종료 피드백 요청",
