@@ -3,6 +3,7 @@ from app.domain.interview.schemas import InterviewEvaluationOutput, InterviewQue
 from app.domain.resume.prompts.positions import get_interview_position_focus
 from app.infra.langfuse.prompt_manager import get_prompt
 from app.infra.llm.base import (
+    _VALID_INTERVIEW_TYPES,
     _build_langfuse_config,
     _invoke_llm,
     get_evaluator_llm,
@@ -11,14 +12,13 @@ from app.infra.llm.base import (
 
 logger = get_logger(__name__)
 
-_VALID_INTERVIEW_TYPES = frozenset({"technical", "behavioral"})
-
 
 async def generate_interview(
     resume_json: str,
     interview_type: str,
     position: str,
     question_count: int,
+    min_question_count: int | None = None,
     feedback: str | None = None,
     session_id: str | None = None,
 ) -> InterviewQuestionsOutput:
@@ -27,27 +27,32 @@ async def generate_interview(
         raise ValueError(f"지원하지 않는 면접 유형: {interview_type}")
     logger.debug("면접 질문 생성 요청", interview_type=interview_type, position=position)
 
+    effective_min = min_question_count if min_question_count is not None else question_count
+
     if feedback:
         human_content = get_prompt(
             f"interview-{interview_type}-retry-human",
             position=position,
             resume_json=resume_json,
             feedback=feedback,
-            question_count=str(question_count),
+            min_question_count=str(effective_min),
+            max_question_count=str(question_count),
         )
     else:
         human_content = get_prompt(
             f"interview-{interview_type}-human",
             position=position,
             resume_json=resume_json,
-            question_count=str(question_count),
+            min_question_count=str(effective_min),
+            max_question_count=str(question_count),
         )
 
     position_focus = get_interview_position_focus(position)
     system_prompt = get_prompt(
         f"interview-{interview_type}-system",
         position_focus=position_focus,
-        question_count=str(question_count),
+        min_question_count=str(effective_min),
+        max_question_count=str(question_count),
     )
     config = _build_langfuse_config(session_id, ["interview", interview_type, position])
 

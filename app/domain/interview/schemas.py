@@ -3,10 +3,23 @@ from typing import Literal, TypedDict
 from pydantic import BaseModel
 
 __all__ = [
+    "BEHAVIORAL_DIMENSIONS",
     "InterviewQuestion",
     "InterviewQuestionsOutput",
     "InterviewEvaluationOutput",
     "InterviewState",
+]
+
+BEHAVIORAL_DIMENSIONS = Literal[
+    "협업",
+    "갈등해결",
+    "성장마인드",
+    "실패경험",
+    "우선순위",
+    "사용자관점",
+    "자기소개",
+    "장단점",
+    "기타",
 ]
 
 
@@ -16,7 +29,7 @@ class InterviewQuestion(BaseModel):
     question: str
     intent: str
     related_project: str | None = None
-    dimension: str | None = None
+    dimension: BEHAVIORAL_DIMENSIONS | None = None
     category: str | None = None
 
 
@@ -42,10 +55,13 @@ class InterviewState(TypedDict, total=False):
     interview_type: str
     position: str
     question_count: int
+    min_question_count: int
     session_id: str | None
     questions: InterviewQuestionsOutput
-    evaluation: str
-    evaluation_feedback: str
     retry_count: int
     error_code: str
     error_message: str
+    missing_dimensions: list[str]
+    duplicate_categories: list[str]
+    invalid_categories: list[str]
+    validation_passed: bool
