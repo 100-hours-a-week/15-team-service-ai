@@ -123,21 +123,9 @@ async def plan_node(state: ResumeState) -> ResumeState:
         context_dict = None
         if repo_context:
             context_dict = {
-                "languages": (
-                    repo_context.languages
-                    if hasattr(repo_context, "languages")
-                    else repo_context.get("languages", {})
-                ),
-                "description": (
-                    repo_context.description
-                    if hasattr(repo_context, "description")
-                    else repo_context.get("description")
-                ),
-                "readme_summary": (
-                    repo_context.readme_summary
-                    if hasattr(repo_context, "readme_summary")
-                    else repo_context.get("readme_summary")
-                ),
+                "languages": repo_context.languages,
+                "description": repo_context.description,
+                "readme_summary": repo_context.readme_summary,
             }
 
         return await plan_resume(

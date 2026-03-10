@@ -1,6 +1,6 @@
 from enum import Enum
 
-from fastapi import Request
+from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
@@ -132,7 +132,7 @@ class S3DownloadError(CustomException):
         )
 
 
-def register_exception_handlers(app):
+def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(CustomException)
     async def custom_exception_handler(request: Request, exc: CustomException):
         content = {

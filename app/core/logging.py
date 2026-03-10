@@ -9,6 +9,7 @@ structlog 기반 로깅 설정
 import logging
 import re
 import sys
+from typing import Any
 
 import structlog
 
@@ -57,7 +58,7 @@ def prepend_logger_name_processor(
 ) -> dict:
     """로거 이름을 이벤트 앞에 고정 너비로 추가"""
     logger_name = event_dict.pop("logger", "unknown")
-    padded = f"[{logger_name:<28}]"
+    padded = f"[{logger_name:<40}]"
     event_dict["event"] = f"{padded} {event_dict.get('event', '')}"
     return event_dict
 
@@ -100,7 +101,7 @@ def setup_logging(level: str | None = None) -> None:
         level = settings.log_level
     log_level = getattr(logging, level.upper(), logging.INFO)
 
-    shared_processors: list = [
+    shared_processors: list[Any] = [
         structlog.stdlib.add_logger_name,
         structlog.stdlib.add_log_level,
         structlog.processors.TimeStamper(fmt="iso"),

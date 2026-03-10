@@ -1,5 +1,6 @@
 import functools
 import os
+from typing import Any
 
 import httpx
 from langchain_core.language_models import BaseChatModel
@@ -7,12 +8,15 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
 from langfuse.langchain import CallbackHandler
+from langfuse.types import TraceContext
 
 from app.core.config import settings
 from app.core.exceptions import LLMError
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
+
+_VALID_INTERVIEW_TYPES = frozenset({"technical", "behavioral"})
 
 
 def setup_langfuse_env() -> None:
@@ -31,6 +35,23 @@ def get_langfuse_handler() -> CallbackHandler | None:
         return None
 
     return CallbackHandler()
+
+
+def get_langfuse_parent_handler(
+    name: str,
+    session_id: str | None = None,
+) -> CallbackHandler | None:
+    """여러 LangGraph 워크플로우를 하나의 Langfuse 트레이스로 묶는 핸들러 반환
+
+    반환된 핸들러를 여러 에이전트에 공유하면 모두 같은 부모 트레이스 아래 자식으로 기록됨
+    """
+    if not settings.langfuse_public_key or not settings.langfuse_secret_key:
+        return None
+
+    from langfuse import Langfuse
+
+    trace = Langfuse().trace(name=name, session_id=session_id)
+    return CallbackHandler(trace_context=TraceContext(trace_id=trace.id))
 
 
 @functools.cache
@@ -63,8 +84,8 @@ def get_evaluator_llm() -> ChatGoogleGenerativeAI:
 def _build_langfuse_config(
     session_id: str | None,
     tags: list[str],
-    callbacks: list | None = None,
-) -> dict:
+    callbacks: list[Any] | None = None,
+) -> dict[str, Any]:
     """Langfuse 콜백 설정 생성
 
     callbacks가 전달되면 상위 워크플로우의 핸들러를 재사용합니다

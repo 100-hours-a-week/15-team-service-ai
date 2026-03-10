@@ -2,7 +2,7 @@ import json
 from typing import Protocol
 
 
-class _ProjectLike(Protocol):
+class ProjectProtocol(Protocol):
     """프로젝트 필드를 가진 객체"""
 
     name: str
@@ -11,13 +11,13 @@ class _ProjectLike(Protocol):
     description: str
 
 
-class _ContentLike(Protocol):
+class ContentProtocol(Protocol):
     """projects 리스트를 가진 객체"""
 
-    projects: list[_ProjectLike]
+    projects: list[ProjectProtocol]
 
 
-def build_resume_json(content: _ContentLike) -> str:
+def build_resume_json(content: ContentProtocol) -> str:
     """이력서 내용을 LLM 입력용 JSON 문자열로 변환"""
     projects = []
     for p in content.projects:

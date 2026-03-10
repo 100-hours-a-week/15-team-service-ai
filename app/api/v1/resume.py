@@ -29,6 +29,19 @@ _job_semaphore = Semaphore(MAX_CONCURRENT_JOBS)
 _background_tasks: set[asyncio.Task] = set()
 
 
+async def _send_callback(
+    callback_url: str,
+    payload: dict,
+    job_id: str,
+) -> None:
+    """콜백 전송 - 실패 시 로그만 남김"""
+    try:
+        async with httpx.AsyncClient(timeout=settings.callback_timeout) as client:
+            await send_callback_with_retry(client, callback_url, payload, job_id)
+    except Exception as cb_err:
+        logger.error("콜백 전송 실패", error=str(cb_err), exc_info=True)
+
+
 async def _run_agent_and_callback(
     job_id: str,
     request: ResumeRequest,
@@ -43,21 +56,13 @@ async def _run_agent_and_callback(
                 request=request,
                 session_id=job_id,
             )
-
             payload = _build_callback_payload(job_id, resume_data, error_message)
-            logger.info("콜백 전송 시작")
-
-            async with httpx.AsyncClient(timeout=settings.callback_timeout) as client:
-                await send_callback_with_retry(client, callback_url, payload, job_id)
-
         except Exception as e:
             logger.error("작업 처리 실패", error=str(e), exc_info=True)
-            try:
-                payload = _build_callback_payload(job_id, None, "알 수 없는 오류가 발생했습니다")
-                async with httpx.AsyncClient(timeout=settings.callback_timeout) as client:
-                    await send_callback_with_retry(client, callback_url, payload, job_id)
-            except Exception as cb_err:
-                logger.error("실패 콜백 전송도 실패", error=str(cb_err), exc_info=True)
+            payload = _build_callback_payload(job_id, None, "알 수 없는 오류가 발생했습니다")
+
+        logger.info("콜백 전송 시작")
+        await _send_callback(callback_url, payload, job_id)
 
 
 def _build_callback_payload(

@@ -1,6 +1,10 @@
 import asyncio
 from contextlib import asynccontextmanager
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 from fastapi import FastAPI
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from prometheus_fastapi_instrumentator import Instrumentator
@@ -14,6 +18,7 @@ from app.core.logging import get_logger, setup_logging
 from app.core.middleware import RequestLoggingMiddleware
 from app.infra.github.client import close_client as close_github_client
 from app.infra.llm.client import setup_langfuse_env
+from app.infra.qdrant.client import close_client as close_qdrant_client
 from app.infra.s3.client import close_s3_client
 from app.infra.stt.client import close_client as close_stt_client
 
@@ -45,6 +50,7 @@ async def lifespan(app: FastAPI):
         await close_github_client()
         await close_s3_client()
         await close_stt_client()
+        close_qdrant_client()
 
 
 app = FastAPI(
