@@ -10,6 +10,8 @@ class QuestionContext:
     question_text: str
     intent: str
     related_project: str | None
+    dimension: str | None = None
+    category: str | None = None
 
 
 @dataclass
@@ -21,7 +23,7 @@ class SessionMeta:
     interview_type: str
 
 
-CLEANUP_INTERVAL = 60
+CLEANUP_INTERVAL = 60  # TTL의 일부 주기로 만료 항목 정리
 
 
 class InterviewContextStore:
@@ -30,6 +32,7 @@ class InterviewContextStore:
     def __init__(self, ttl_seconds: int = 3600):
         self._store: dict[str, dict[str, QuestionContext]] = {}
         self._meta_store: dict[str, SessionMeta] = {}
+        self._skip_counts: dict[str, int] = {}
         self._timestamps: dict[str, float] = {}
         self._ttl = ttl_seconds
         self._last_cleanup: float = 0.0
@@ -62,6 +65,17 @@ class InterviewContextStore:
             return None
         return self._meta_store.get(session_id)
 
+    def increment_skip_count(self, session_id: str, question_id: str) -> int:
+        """질문별 성의없는 답변 횟수 증가 후 현재값 반환"""
+        key = f"{session_id}:{question_id}"
+        self._skip_counts[key] = self._skip_counts.get(key, 0) + 1
+        return self._skip_counts[key]
+
+    def get_skip_count(self, session_id: str, question_id: str) -> int:
+        """질문별 성의없는 답변 횟수 조회"""
+        key = f"{session_id}:{question_id}"
+        return self._skip_counts.get(key, 0)
+
     def _cleanup(self) -> None:
         """만료된 항목 제거 - 60초 간격으로만 실행"""
         now = time.time()
@@ -73,6 +87,9 @@ class InterviewContextStore:
             self._store.pop(sid, None)
             self._meta_store.pop(sid, None)
             self._timestamps.pop(sid, None)
+            skip_keys = [k for k in self._skip_counts if k.startswith(f"{sid}:")]
+            for k in skip_keys:
+                self._skip_counts.pop(k, None)
 
 
 interview_context_store = InterviewContextStore()

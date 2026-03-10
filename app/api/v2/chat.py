@@ -15,6 +15,8 @@ router = APIRouter(prefix="/interview", tags=["v2"])
 logger = get_logger(__name__)
 
 SKIP_PATTERNS = ["모르겠", "잘 모르", "패스", "모릅니다", "생각이 안", "기억이 안"]
+SELF_PRESENTATION_PATTERNS = ["자기소개", "장단점", "강점과 약점"]
+SOLO_PROJECT_PATTERNS = ["혼자 진행", "혼자 했", "개인 프로젝트", "팀원이 없", "팀원은 없"]
 
 
 @router.post(
@@ -97,8 +99,27 @@ async def chat_interview(
 
     is_skip_answer = any(p in body.answer for p in SKIP_PATTERNS)
     if is_skip_answer:
+        skip_count = interview_context_store.increment_skip_count(
+            body.ai_session_id, body.question_id
+        )
+        if skip_count >= 2:
+            follow_up = None
+            logger.info("두 번째 성의없는 답변 - 다음 질문으로 이동", skip_count=skip_count)
+        else:
+            logger.info("첫 번째 성의없는 답변 - LLM 힌트 유지", skip_count=skip_count)
+
+    is_self_presentation = any(p in question_ctx.question_text for p in SELF_PRESENTATION_PATTERNS)
+    if is_self_presentation and follow_up is not None:
         follow_up = None
-        logger.info("모르겠다 답변 감지 - 다음 질문으로 이동")
+        logger.info(
+            "자기소개/장단점 질문 - 꼬리질문 강제 null",
+            question=question_ctx.question_text,
+        )
+
+    is_solo_project = any(p in body.answer for p in SOLO_PROJECT_PATTERNS)
+    if is_solo_project and follow_up is not None:
+        follow_up = None
+        logger.info("솔로 프로젝트 감지 - 꼬리질문 강제 null", answer_snippet=body.answer[:50])
 
     if turn_count >= MAX_FOLLOW_UP_TURNS:
         follow_up = None

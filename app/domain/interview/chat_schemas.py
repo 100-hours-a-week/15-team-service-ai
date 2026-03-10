@@ -33,7 +33,7 @@ class ChatState(TypedDict, total=False):
 
 
 MAX_CHAT_TURNS = 10
-MAX_FOLLOW_UP_TURNS = 3
+MAX_FOLLOW_UP_TURNS = 4
 
 
 class ChatOutput(BaseModel):
