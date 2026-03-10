@@ -260,7 +260,7 @@ class TestChatEndpointIntegration:
             patch(
                 "app.api.v2.chat.run_chat_agent",
                 new_callable=AsyncMock,
-                return_value=(chat_output, None, 3),
+                return_value=(chat_output, None, 4),
             ),
         ):
             response = await async_client.post(
@@ -273,8 +273,8 @@ class TestChatEndpointIntegration:
         assert data["status"] == "success"
         assert data["followUpQuestion"] is None
 
-    async def test_chat_follow_up_suppressed_on_skip_answer(self, async_client):
-        """모르겠다 패턴 답변 시 follow_up 제거"""
+    async def test_chat_follow_up_retry_on_first_skip_answer(self, async_client):
+        """첫 번째 모르겠다 답변 시 LLM 힌트 유지"""
         from app.domain.interview.chat_schemas import ChatOutput
         from app.domain.interview.store import (
             InterviewContextStore,
@@ -302,6 +302,63 @@ class TestChatEndpointIntegration:
                 interview_type="technical",
             ),
         )
+
+        chat_output = ChatOutput(
+            message="괜찮습니다",
+            follow_up_question="원래 꼬리질문",
+        )
+
+        skip_request = {**SAMPLE_CHAT_REQUEST, "answer": "모르겠습니다"}
+
+        with (
+            patch("app.api.v2.chat.interview_context_store", mock_store),
+            patch(
+                "app.api.v2.chat.run_chat_agent",
+                new_callable=AsyncMock,
+                return_value=(chat_output, None, 1),
+            ),
+        ):
+            response = await async_client.post(
+                "/api/v2/interview/chat",
+                json=skip_request,
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "success"
+        assert data["followUpQuestion"] is not None
+        assert data["followUpQuestion"] == "원래 꼬리질문"
+
+    async def test_chat_follow_up_suppressed_on_second_skip_answer(self, async_client):
+        """두 번째 연속 모르겠다 답변 시 follow_up 제거"""
+        from app.domain.interview.chat_schemas import ChatOutput
+        from app.domain.interview.store import (
+            InterviewContextStore,
+            QuestionContext,
+            SessionMeta,
+        )
+
+        mock_store = InterviewContextStore()
+        mock_store.save(
+            session_id="test-session-001",
+            contexts=[
+                QuestionContext(
+                    question_id="q-001",
+                    question_text="어려운 질문",
+                    intent="의도",
+                    related_project=None,
+                )
+            ],
+        )
+        mock_store.save_session_meta(
+            session_id="test-session-001",
+            meta=SessionMeta(
+                resume_json="{}",
+                position="백엔드 개발자",
+                interview_type="technical",
+            ),
+        )
+        mock_store.increment_skip_count("test-session-001", "q-001")
 
         chat_output = ChatOutput(
             message="괜찮습니다",
@@ -467,3 +524,118 @@ class TestFeedbackEndpointIntegration:
 
         assert response.status_code == 200
         assert response.json()["status"] == "success"
+
+
+class TestChatSafetyNets:
+    """채팅 API 안전장치 테스트 - 자기소개/장단점 null, 솔로 프로젝트 null"""
+
+    async def test_self_presentation_forces_null_follow_up(self, async_client):
+        """자기소개/장단점 질문에서 LLM이 꼬리질문을 생성해도 강제 null"""
+        from app.domain.interview.chat_schemas import ChatOutput
+        from app.domain.interview.store import (
+            InterviewContextStore,
+            QuestionContext,
+            SessionMeta,
+        )
+
+        mock_store = InterviewContextStore()
+        mock_store.save(
+            session_id="test-session-001",
+            contexts=[
+                QuestionContext(
+                    question_id="q-001",
+                    question_text="본인의 장단점을 말씀해주세요",
+                    intent="자기 분석 능력",
+                    related_project=None,
+                )
+            ],
+        )
+        mock_store.save_session_meta(
+            session_id="test-session-001",
+            meta=SessionMeta(
+                resume_json="{}",
+                position="백엔드 개발자",
+                interview_type="behavioral",
+            ),
+        )
+
+        chat_output = ChatOutput(
+            message="말씀 잘 들었습니다",
+            follow_up_question="로그 분석 사례를 더 말씀해주시겠어요?",
+        )
+
+        with (
+            patch("app.api.v2.chat.interview_context_store", mock_store),
+            patch(
+                "app.api.v2.chat.run_chat_agent",
+                new_callable=AsyncMock,
+                return_value=(chat_output, None, 1),
+            ),
+        ):
+            response = await async_client.post(
+                "/api/v2/interview/chat",
+                json=SAMPLE_CHAT_REQUEST,
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "success"
+        assert data["followUpQuestion"] is None
+
+    async def test_solo_project_forces_null_follow_up(self, async_client):
+        """솔로 프로젝트 답변 시 LLM이 팀 질문을 생성해도 강제 null"""
+        from app.domain.interview.chat_schemas import ChatOutput
+        from app.domain.interview.store import (
+            InterviewContextStore,
+            QuestionContext,
+            SessionMeta,
+        )
+
+        mock_store = InterviewContextStore()
+        mock_store.save(
+            session_id="test-session-001",
+            contexts=[
+                QuestionContext(
+                    question_id="q-001",
+                    question_text="팀원과의 갈등 해결 경험을 말씀해주세요",
+                    intent="갈등 해결 능력",
+                    related_project="테스트 프로젝트",
+                )
+            ],
+        )
+        mock_store.save_session_meta(
+            session_id="test-session-001",
+            meta=SessionMeta(
+                resume_json="{}",
+                position="백엔드 개발자",
+                interview_type="behavioral",
+            ),
+        )
+
+        chat_output = ChatOutput(
+            message="네, 알겠습니다",
+            follow_up_question="팀원들과 어떻게 소통하셨나요?",
+        )
+
+        solo_request = {
+            **SAMPLE_CHAT_REQUEST,
+            "answer": "혼자 진행한 프로젝트여서 팀원은 없었습니다",
+        }
+
+        with (
+            patch("app.api.v2.chat.interview_context_store", mock_store),
+            patch(
+                "app.api.v2.chat.run_chat_agent",
+                new_callable=AsyncMock,
+                return_value=(chat_output, None, 1),
+            ),
+        ):
+            response = await async_client.post(
+                "/api/v2/interview/chat",
+                json=solo_request,
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "success"
+        assert data["followUpQuestion"] is None
