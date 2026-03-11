@@ -61,9 +61,9 @@ class Settings(BaseSettings):
     qdrant_url: str = ""
     qdrant_api_key: str = ""
     qdrant_collection: str = "tech_knowledge_base"
-    qdrant_top_k: int = 3
-    qdrant_top_k_retry: int = 5
-    qdrant_score_threshold: float = 0.6
+    qdrant_top_k: int = 5
+    qdrant_top_k_retry: int = 7
+    qdrant_score_threshold: float = 0.65
 
     # 피드백 설정
     feedback_gather_timeout: float = 600.0

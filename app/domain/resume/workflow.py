@@ -28,7 +28,7 @@ from app.domain.resume.service import (
     validate_position_match,
 )
 from app.domain.resume.workflow_utils import evaluate_with_fallback, has_error, make_should_retry
-from app.infra.github.client import parse_repo_url
+from app.infra.github.client import get_authenticated_username, parse_repo_url
 from app.infra.llm.client import evaluate_resume, generate_resume, plan_resume
 
 logger = get_logger(__name__)
@@ -40,7 +40,9 @@ async def _fetch_github_data(request) -> tuple[list, dict, object]:
         collect_project_info(request),
         collect_repo_contexts(request),
     )
-    username, _ = parse_repo_url(request.repo_urls[0])
+    username = await get_authenticated_username(request.github_token)
+    if not username:
+        username, _ = parse_repo_url(request.repo_urls[0])
     user_stats = await collect_user_stats(username, request.github_token)
     return project_info, repo_contexts, user_stats
 

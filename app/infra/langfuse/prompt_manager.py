@@ -155,9 +155,8 @@ def get_prompt(name: str, **variables: str) -> str:
     name: Langfuse에 등록된 프롬프트 이름
     variables: 프롬프트에 주입할 변수들
     """
-    client = _get_client()
-
     try:
+        client = _get_client()
         prompt = client.get_prompt(name)
     except Exception as e:
         logger.warning("Langfuse 프롬프트 조회 실패, fallback 시도", prompt_name=name, error=str(e))

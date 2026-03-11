@@ -27,6 +27,7 @@ logger = get_logger(__name__)
 
 MAX_CONCURRENT_FEEDBACK = 10
 FEEDBACK_GATHER_TIMEOUT = settings.feedback_gather_timeout
+TAVILY_SEARCH_TIMEOUT = 10
 
 
 def _process_individual_results(
@@ -182,8 +183,8 @@ async def end_interview(
     )
     parent_callbacks = [langfuse_parent] if langfuse_parent else None
 
-    async def run_feedback_with_semaphore(m, idx):
-        qid = f"q-{idx:03d}"
+    async def run_feedback_with_semaphore(m):
+        qid = f"q-{m.turn_no:03d}"
         ctx = contexts.get(qid) if contexts else None
         async with semaphore:
             return await run_feedback_agent(
@@ -197,9 +198,7 @@ async def end_interview(
                 callbacks=parent_callbacks,
             )
 
-    individual_tasks = [
-        run_feedback_with_semaphore(m, idx) for idx, m in enumerate(body.messages, start=1)
-    ]
+    individual_tasks = [run_feedback_with_semaphore(m) for m in body.messages]
 
     talent_search_task = asyncio.create_task(search_company_talent(body.company))
 
@@ -222,7 +221,13 @@ async def end_interview(
             ),
         )
 
-    company_talent_info = await talent_search_task
+    try:
+        company_talent_info = await asyncio.wait_for(
+            talent_search_task, timeout=TAVILY_SEARCH_TIMEOUT
+        )
+    except asyncio.TimeoutError:
+        logger.warning("기업 인재상 검색 타임아웃", timeout=TAVILY_SEARCH_TIMEOUT)
+        company_talent_info = ""
 
     feedback_items, individual_errors, individual_feedbacks_json = _process_individual_results(
         individual_results, body.messages

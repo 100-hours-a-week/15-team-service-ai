@@ -4,7 +4,11 @@ from pathlib import Path
 from google import genai
 from google.genai import types
 from qdrant_client import QdrantClient
-from qdrant_client.models import FieldCondition, Filter, MatchAny
+from qdrant_client.models import (
+    FieldCondition,
+    Filter,
+    MatchAny,
+)
 
 from app.core.config import settings
 from app.core.logging import get_logger
@@ -24,9 +28,6 @@ POSITION_CATEGORIES: dict[str, list[str]] = {
     "data": ["database", "cs", "ai_ml"],
     "security": ["security", "cs", "backend"],
 }
-
-_QA_SOURCE_BOOST = 0.03
-_OVERFETCH_MULTIPLIER = 3
 
 _qdrant_client: QdrantClient | None = None
 _genai_client: genai.Client | None = None
@@ -69,19 +70,18 @@ def search_knowledge(
     position: str | None = None,
     score_threshold: float | None = None,
 ) -> list[dict]:
-    """Qdrant에서 관련 기술 문서 검색
+    """Qdrant Dense Search — Gemini 임베딩 기반 코사인 유사도 검색
 
     Args:
         query: 검색 쿼리 - 질문 + 질문 의도 조합
         top_k: 반환할 최대 결과 수
         position: 포지션명 - 해당 카테고리만 필터링
-        score_threshold: 최소 유사도 점수 - 이하 결과 필터링, None이면 비활성
+        score_threshold: 최소 유사도 점수 - 호환성 유지용
     """
     try:
         qdrant = _get_qdrant_client()
         genai_client = _get_genai_client()
         k = top_k or settings.qdrant_top_k
-        fetch_k = k * _OVERFETCH_MULTIPLIER
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
             future = executor.submit(
@@ -110,46 +110,27 @@ def search_knowledge(
         response = qdrant.query_points(
             collection_name=settings.qdrant_collection,
             query=query_vector,
+            using="dense",
             query_filter=query_filter,
-            limit=fetch_k,
+            limit=k,
         )
 
         chunks = []
         for hit in response.points:
-            is_qa = hit.payload.get("is_qa", False)
-            boosted_score = hit.score + (_QA_SOURCE_BOOST if is_qa else 0)
             chunks.append(
                 {
                     "document": hit.payload.get("document", ""),
                     "score": hit.score,
-                    "boosted_score": boosted_score,
                     "tech": hit.payload.get("tech", ""),
                     "topic": hit.payload.get("topic", ""),
-                    "source_type": "qa" if is_qa else "knowledge",
                 }
             )
 
-        chunks.sort(key=lambda c: c["boosted_score"], reverse=True)
-
-        if score_threshold is not None:
-            before_count = len(chunks)
-            chunks = [c for c in chunks if c["score"] >= score_threshold]
-            if before_count > len(chunks):
-                logger.debug(
-                    "Score threshold 필터링",
-                    before=before_count,
-                    after=len(chunks),
-                    threshold=score_threshold,
-                )
-
-        chunks = chunks[:k]
-
         logger.debug(
-            "Qdrant 검색 완료",
+            "Qdrant Dense 검색 완료",
             query_length=len(query),
             results_count=len(chunks),
             position_filter=position,
-            score_threshold=score_threshold,
         )
         return chunks
 

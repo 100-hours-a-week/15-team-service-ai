@@ -49,7 +49,10 @@ class InterviewContextStore:
         ts = self._timestamps.get(session_id)
         if ts is not None and time.time() - ts > self._ttl:
             return None
-        return self._store.get(session_id)
+        result = self._store.get(session_id)
+        if result is not None:
+            self._timestamps[session_id] = time.time()
+        return result
 
     def save_session_meta(self, session_id: str, meta: SessionMeta) -> None:
         """면접 세션 메타데이터 저장"""
@@ -63,12 +66,17 @@ class InterviewContextStore:
         ts = self._timestamps.get(session_id)
         if ts is not None and time.time() - ts > self._ttl:
             return None
-        return self._meta_store.get(session_id)
+        result = self._meta_store.get(session_id)
+        if result is not None:
+            self._timestamps[session_id] = time.time()
+        return result
 
     def increment_skip_count(self, session_id: str, question_id: str) -> int:
         """질문별 성의없는 답변 횟수 증가 후 현재값 반환"""
         key = f"{session_id}:{question_id}"
         self._skip_counts[key] = self._skip_counts.get(key, 0) + 1
+        if session_id in self._timestamps:
+            self._timestamps[session_id] = time.time()
         return self._skip_counts[key]
 
     def get_skip_count(self, session_id: str, question_id: str) -> int:

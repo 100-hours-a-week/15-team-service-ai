@@ -793,6 +793,19 @@ async def get_repo_context(repo_url: str, token: str | None = None) -> dict:
     }
 
 
+async def get_authenticated_username(token: str) -> str | None:
+    """OAuth 토큰으로 인증된 사용자의 GitHub 유저네임 조회
+
+    Args:
+        token: GitHub OAuth 토큰
+
+    Returns:
+        인증된 사용자의 GitHub 유저네임, 실패 시 None
+    """
+    username, _ = await get_authenticated_user(token)
+    return username
+
+
 async def get_user_stats(username: str, token: str) -> UserStats:
     """사용자 GitHub 통계 조회
 
