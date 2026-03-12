@@ -26,9 +26,7 @@ class TestGetPromptFallback:
 
             result = get_prompt("interview-technical-system", position="backend")
 
-            mock_fallback.assert_called_once_with(
-                "interview-technical-system", position="backend"
-            )
+            mock_fallback.assert_called_once_with("interview-technical-system", position="backend")
             assert result == "fallback-prompt"
 
     def test_falls_back_when_client_raises_connection_error(self):

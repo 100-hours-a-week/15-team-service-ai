@@ -72,6 +72,7 @@ All output MUST be in Korean.
 - EXCLUDE: ESLint, Prettier, Jest, pytest, Swagger, JUnit
 - EXCLUDE: FFmpeg, yt-dlp, Pillow, ImageMagick
 - EXCLUDE: npm, pip, yarn, uv, Git, GitHub, GitLab
+- 단, 사용자가 수정 요청에서 명시적으로 추가를 요청한 항목은 EXCLUDE 규칙을 무시하고 반드시 추가한다
 
 ### description
 - 5-8 bullets, format: "- [내용]"
@@ -160,6 +161,8 @@ FAIL if contains ANY of these:
 **Package managers:** npm, pip, yarn, uv
 **Version control:** Git, GitHub, GitLab
 
+**예외:** 사용자의 수정 요청에서 해당 항목 추가를 명시적으로 지시한 경우, Rule 2보다 Rule 6을 우선한다
+
 ### Rule 3: description format
 - FAIL if no bullet points
 - FAIL if LESS than 5 bullets
@@ -241,6 +244,8 @@ Output a JSON object with these exact fields:
 4. Include the constraint: tech_stack 1-20 items, description 5-8 bullets
 5. Format as a numbered list (1., 2., 3. ...)
 6. Always end with "절대 변경 금지: [변경하면 안 되는 필드 목록]" as the final line
+7. 기술 스택 추가/변경 요청 시, detailed_instructions에 반드시 'tech_stack에 X를 추가한다' 또는 'tech_stack에서 X를 제거한다'를 별도 단계로 포함할 것
+8. EXCLUDE 대상이지만 사용자가 명시적으로 요청한 항목은 'EXCLUDE 예외: X는 사용자 요청에 따라 추가한다'로 명시할 것
 
 ## edit_type mapping
 

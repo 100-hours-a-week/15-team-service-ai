@@ -345,6 +345,13 @@ If you cannot identify one, DELETE that item.
 - GOOD: "양자화 적용 후 정확도 변화를 WER 수치로 답변했지만,
   구체적인 수치 범위가 빠져 설득력이 약합니다"
 
+### Rule 4: Company talent profile grounding
+- When company_talent_info is provided and is NOT "없음", you MUST directly quote from the provided text and include it in the summary
+- ONLY use talent profile information that appears verbatim in the company_talent_info data
+- ABSOLUTELY FORBIDDEN: mentioning talent profiles from companies, universities, or organizations NOT in company_talent_info
+- Inventing, fabricating, or inferring talent profile content beyond what is explicitly provided will make the feedback INVALID
+- When company_talent_info is "없음", do NOT mention any company talent profile at all
+
 ## OUTPUT FORMAT
 
 ```json
@@ -363,7 +370,9 @@ FEEDBACK_OVERALL_TECHNICAL_HUMAN = """Provide overall assessment for this techni
 - Company: {{company}}
 
 ## Company Talent Profile
+<company_talent_profile>
 {{company_talent_info}}
+</company_talent_profile>
 
 ## Interview Q&A Pairs
 {{qa_pairs_json}}
@@ -372,7 +381,7 @@ FEEDBACK_OVERALL_TECHNICAL_HUMAN = """Provide overall assessment for this techni
 {{individual_feedbacks_json}}
 
 Analyze all answers and provide overall_score, summary, key_strengths, and key_improvements.
-If company talent profile is provided, include in the summary how the candidate aligns with the company's values."""
+If the company_talent_info above is NOT "없음", you MUST include 1-2 sentences in the summary that directly quote from the talent profile data inside <company_talent_profile> tags to evaluate how well the candidate aligns. Do NOT fabricate or infer talent profiles beyond what is explicitly provided above."""
 
 FEEDBACK_OVERALL_TECHNICAL_RETRY_HUMAN = """Re-assess with improvements based on feedback.
 
@@ -442,6 +451,13 @@ If you cannot identify one, DELETE that item.
 - BAD: "STAR 기법을 활용한 답변 연습이 필요합니다" - generic advice
 - GOOD: "두 번째 답변에서 Action은 구체적이었으나 Result가 빠져 성과를 판단하기 어렵습니다"
 
+### Rule 4: Company talent profile grounding
+- When company_talent_info is provided and is NOT "없음", you MUST directly quote from the provided text and include it in the summary
+- ONLY use talent profile information that appears verbatim in the company_talent_info data
+- ABSOLUTELY FORBIDDEN: mentioning talent profiles from companies, universities, or organizations NOT in company_talent_info
+- Inventing, fabricating, or inferring talent profile content beyond what is explicitly provided will make the feedback INVALID
+- When company_talent_info is "없음", do NOT mention any company talent profile at all
+
 ## OUTPUT FORMAT
 
 ```json
@@ -460,7 +476,9 @@ FEEDBACK_OVERALL_BEHAVIORAL_HUMAN = """Provide overall assessment for this behav
 - Company: {{company}}
 
 ## Company Talent Profile
+<company_talent_profile>
 {{company_talent_info}}
+</company_talent_profile>
 
 ## Interview Q&A Pairs
 {{qa_pairs_json}}
@@ -469,7 +487,7 @@ FEEDBACK_OVERALL_BEHAVIORAL_HUMAN = """Provide overall assessment for this behav
 {{individual_feedbacks_json}}
 
 Analyze all answers and provide overall_score, summary, key_strengths, and key_improvements.
-If company talent profile is provided, include in the summary how the candidate aligns with the company's values."""
+If the company_talent_info above is NOT "없음", you MUST include 1-2 sentences in the summary that directly quote from the talent profile data inside <company_talent_profile> tags to evaluate how well the candidate aligns. Do NOT fabricate or infer talent profiles beyond what is explicitly provided above."""
 
 FEEDBACK_OVERALL_BEHAVIORAL_RETRY_HUMAN = """Re-assess with improvements based on feedback.
 
