@@ -32,18 +32,35 @@ POSITION_CATEGORIES: dict[str, list[str]] = {
 
 POSITION_TECH_EXCLUDE: dict[str, list[str]] = {
     "frontend": [
-        "Jetpack Compose", "React Native", "Android", "Flutter",
-        "Kotlin", "Swift", "SwiftUI", "Firebase Cloud Messaging",
-        "Mobile Security", "Mobile Testing",
-        "LangGraph", "LangChain", "LangChain Summarization",
+        "Jetpack Compose",
+        "React Native",
+        "Android",
+        "Flutter",
+        "Kotlin",
+        "Swift",
+        "SwiftUI",
+        "Firebase Cloud Messaging",
+        "Mobile Security",
+        "Mobile Testing",
+        "LangGraph",
+        "LangChain",
+        "LangChain Summarization",
     ],
     "backend": [
-        "Jetpack Compose", "React Native", "Android", "Flutter",
-        "Kotlin", "Swift", "SwiftUI",
-        "Mobile Security", "Mobile Testing",
+        "Jetpack Compose",
+        "React Native",
+        "Android",
+        "Flutter",
+        "Kotlin",
+        "Swift",
+        "SwiftUI",
+        "Mobile Security",
+        "Mobile Testing",
     ],
     "mobile": [
-        "LangGraph", "LangChain", "LangChain Summarization",
+        "LangGraph",
+        "LangChain",
+        "LangChain Summarization",
     ],
 }
 

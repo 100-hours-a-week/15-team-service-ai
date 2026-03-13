@@ -14,7 +14,7 @@ dependencies = [
     "langchain>=0.3.0",
     "langchain-openai>=0.3.0",
     "langchain-google-genai>=2.1.0",
-    "langgraph>=1.0.6",
+    "langgraph>=1.0.10",
     "langgraph-checkpoint-sqlite>=2.0.0",
     "langfuse>=3.12.0",
     "structlog>=24.1.0",
@@ -29,6 +29,7 @@ dependencies = [
     "datasets>=3.0.0",
     "langsmith>=0.3.0",
     "jsonref>=1.1.0",
+    "orjson>=3.11.6",
 ]
 
 [project.optional-dependencies]
