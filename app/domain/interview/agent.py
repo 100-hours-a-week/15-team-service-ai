@@ -4,7 +4,7 @@ from app.core.config import settings
 from app.core.logging import get_logger
 from app.domain.interview.schemas import InterviewQuestionsOutput, InterviewState
 from app.domain.interview.workflow import create_interview_workflow
-from app.infra.llm.client import get_langfuse_handler
+from app.infra.llm.base import _build_langfuse_config
 
 logger = get_logger(__name__)
 
@@ -16,6 +16,7 @@ async def run_interview_agent(
     interview_type: str,
     position: str,
     question_count: int,
+    min_question_count: int,
     session_id: str | None = None,
 ) -> tuple[InterviewQuestionsOutput | None, str | None]:
     """면접 질문 생성 워크플로우 실행
@@ -31,18 +32,15 @@ async def run_interview_agent(
             "interview_type": interview_type,
             "position": position,
             "question_count": question_count,
+            "min_question_count": min_question_count,
             "session_id": session_id,
             "retry_count": 0,
         }
 
-        langfuse_handler = get_langfuse_handler()
-        config = {
-            "callbacks": [langfuse_handler] if langfuse_handler else [],
-            "metadata": {
-                "langfuse_session_id": session_id,
-                "langfuse_tags": ["interview", interview_type, position],
-            },
-        }
+        config = _build_langfuse_config(
+            session_id=session_id,
+            tags=["interview", interview_type, position],
+        )
 
         final_state = await asyncio.wait_for(
             _interview_workflow.ainvoke(initial_state, config=config),

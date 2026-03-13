@@ -142,6 +142,14 @@ async def plan_node(state: EditState) -> EditState:
         )
 
 
+def _detect_target_fields(instructions: str) -> str:
+    """수정 지시에서 변경 대상 필드를 추출"""
+    lower = instructions.lower()
+    _field_names = ["tech_stack", "description", "name", "repo_url"]
+    found = [f for f in _field_names if f in lower]
+    return ", ".join(found) if found else "자동 판별"
+
+
 async def edit_node(state: EditState) -> EditState:
     """이력서 수정 노드"""
     retry_count = state.get("retry_count", 0)
@@ -162,11 +170,13 @@ async def edit_node(state: EditState) -> EditState:
 
     effective_message = message
     if edit_plan is not None:
+        fields_line = _detect_target_fields(edit_plan.detailed_instructions)
         effective_message = (
             f"{message}\n\n"
             f"[수정 계획]\n"
             f"유형: {edit_plan.edit_type}\n"
             f"대상: {edit_plan.target_summary}\n"
+            f"수정 대상 필드: {fields_line}\n"
             f"지시: {edit_plan.detailed_instructions}"
         )
     elif classification is not None:
@@ -224,6 +234,26 @@ async def edit_node(state: EditState) -> EditState:
         )
 
 
+_TECH_STACK_KEYWORDS = frozenset(
+    [
+        "기술",
+        "스택",
+        "tech",
+        "stack",
+        "추가",
+        "빼",
+        "제거",
+        "삭제",
+        "넣어",
+        "넣",
+        "빠져",
+        "빠졌",
+        "없",
+        "포함",
+    ]
+)
+
+
 def _is_resume_unchanged(original_json: str, edited_resume: EditResumeOutput) -> bool:
     """수정 전후 이력서 비교 - projects만 비교"""
     try:
@@ -234,13 +264,41 @@ def _is_resume_unchanged(original_json: str, edited_resume: EditResumeOutput) ->
         return False
 
 
+def _is_tech_stack_unchanged(
+    original_json: str,
+    edited_resume: EditResumeOutput,
+    user_message: str,
+) -> bool:
+    """사용자가 tech_stack 변경을 요청했는데 실제로 미변경인지 판별"""
+    message_lower = user_message.lower()
+    has_tech_keyword = any(kw in message_lower for kw in _TECH_STACK_KEYWORDS)
+    if not has_tech_keyword:
+        return False
+
+    try:
+        original = json.loads(original_json)
+        original_projects = original.get("projects", [])
+        edited_projects = edited_resume.projects
+
+        for orig, edited in zip(original_projects, edited_projects, strict=False):
+            orig_stack = sorted(orig.get("tech_stack", []))
+            edited_stack = sorted(edited.tech_stack)
+            if orig_stack != edited_stack:
+                return False
+
+        return True
+    except (json.JSONDecodeError, Exception):
+        return False
+
+
 async def evaluate_node(state: EditState) -> EditState:
     """수정 평가 노드"""
     edited_resume = state["edited_resume"]
     session_id = state.get("session_id")
 
+    user_message = state.get("message", "")
+
     if _is_resume_unchanged(state["resume_json"], edited_resume):
-        user_message = state.get("message", "")
         logger.warning("수정 전후 이력서 동일")
         return {
             **state,
@@ -253,7 +311,18 @@ async def evaluate_node(state: EditState) -> EditState:
             ),
         }
 
-    user_message = state.get("message", "")
+    if _is_tech_stack_unchanged(state["resume_json"], edited_resume, user_message):
+        logger.warning("tech_stack 변경 요청이나 미반영", user_message=user_message)
+        return {
+            **state,
+            "evaluation": "fail",
+            "evaluation_feedback": (
+                f"사용자가 기술 스택 변경을 요청했으나 tech_stack 배열이 변경되지 않았습니다. "
+                f"사용자 요청: '{user_message}' - "
+                f"tech_stack 배열에 해당 항목을 반드시 추가하거나 제거하세요. "
+                f"EXCLUDE 목록에 포함된 항목이라도 사용자가 명시적으로 요청한 경우 추가해야 합니다."
+            ),
+        }
 
     async def _evaluate():
         resume_json = edited_resume.model_dump_json(indent=2)

@@ -21,6 +21,9 @@ async def _get_s3_client():
         return _s3_client
     async with _s3_lock:
         if _s3_client is None:
+            if not settings.aws_access_key_id or not settings.aws_secret_access_key:
+                logger.error("AWS 자격증명 미설정 — access_key_id 또는 secret_access_key 없음")
+                raise RuntimeError("AWS 자격증명이 설정되지 않음")
             _s3_client_ctx = _session.client(
                 "s3",
                 region_name=settings.aws_region,

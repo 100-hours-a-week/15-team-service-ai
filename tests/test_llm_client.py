@@ -2,6 +2,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from app.domain.resume.prompts.builder import format_project_info, format_repo_contexts
 from app.domain.resume.schemas import (
     ProjectInfo,
     RepoContext,
@@ -9,8 +10,6 @@ from app.domain.resume.schemas import (
 )
 from app.infra.llm.client import (
     evaluate_resume,
-    format_project_info,
-    format_repo_contexts,
     generate_resume,
 )
 

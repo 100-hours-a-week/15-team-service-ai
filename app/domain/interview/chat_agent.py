@@ -1,6 +1,7 @@
 import asyncio
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Command
 
 from app.core.config import settings
@@ -10,7 +11,7 @@ from app.domain.interview.chat_workflow import create_chat_workflow
 from app.infra.llm.client import generate_chat_response, get_langfuse_handler
 
 logger = get_logger(__name__)
-_chat_workflow: object | None = None
+_chat_workflow: CompiledStateGraph | None = None
 
 
 async def _run_single_call(
@@ -112,9 +113,9 @@ async def run_chat_agent(
         }
 
         existing_state = await workflow.aget_state(config)
-        has_checkpoint = bool(existing_state.next)
+        is_interrupted = bool(existing_state.next)
 
-        if has_checkpoint:
+        if is_interrupted:
             logger.info("기존 대화 이어서 진행", thread_id=thread_id)
             result_state = await asyncio.wait_for(
                 workflow.ainvoke(
@@ -139,6 +140,7 @@ async def run_chat_agent(
                 "error_message": None,
                 "last_response": None,
                 "last_follow_up": None,
+                "last_follow_up_intent": None,
             }
             result_state = await asyncio.wait_for(
                 workflow.ainvoke(initial_state, config=config),
@@ -154,6 +156,7 @@ async def run_chat_agent(
         chat_output = ChatOutput(
             message=result_state.get("last_response", ""),
             follow_up_question=result_state.get("last_follow_up"),
+            follow_up_intent=result_state.get("last_follow_up_intent"),
         )
 
         logger.info("채팅 에이전트 완료", turn_count=turn_count)

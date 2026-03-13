@@ -1,11 +1,14 @@
 from app.core.logging import get_logger
 from app.domain.interview.chat_schemas import ChatOutput
 from app.infra.langfuse.prompt_manager import get_prompt
-from app.infra.llm.base import _build_langfuse_config, _invoke_llm, get_generator_llm
+from app.infra.llm.base import (
+    _VALID_INTERVIEW_TYPES,
+    _build_langfuse_config,
+    _invoke_llm,
+    get_generator_llm,
+)
 
 logger = get_logger(__name__)
-
-_VALID_INTERVIEW_TYPES = frozenset({"technical", "behavioral"})
 
 
 async def generate_chat_response(

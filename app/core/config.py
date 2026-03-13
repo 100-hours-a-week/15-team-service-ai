@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     workflow_timeout: float = 600.0
 
     # 동시 요청 제한
-    github_max_concurrent_requests: int = 5
+    github_max_concurrent_requests: int = 15
 
     # Callback 재시도 설정
     callback_max_retries: int = 3
@@ -57,10 +57,29 @@ class Settings(BaseSettings):
     langfuse_secret_key: str = ""
     langfuse_base_url: str = "https://cloud.langfuse.com"
 
+    # Qdrant 설정
+    qdrant_url: str = ""
+    qdrant_api_key: str = ""
+    qdrant_collection: str = "tech_knowledge_base"
+    qdrant_top_k: int = 5
+    qdrant_top_k_retry: int = 7
+    qdrant_score_threshold: float = 0.65
+
+    # 피드백 설정
+    feedback_gather_timeout: float = 600.0
+
     # ElevenLabs STT 설정
     elevenlabs_api_key: str = ""
     elevenlabs_stt_model: str = "scribe_v2"
-    stt_timeout: float = 30.0
+    stt_timeout: float = 60.0
+
+    # LangSmith 설정
+    langchain_tracing_v2: bool = False
+    langchain_api_key: str = ""
+    langchain_project: str = "dev-experience-extractor"
+
+    # Tavily 설정
+    tavily_api_key: str = ""
 
     # AWS S3 설정
     aws_access_key_id: str = ""

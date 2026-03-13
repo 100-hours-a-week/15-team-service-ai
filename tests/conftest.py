@@ -1,6 +1,9 @@
+import os
 from unittest.mock import patch
 
 import pytest
+
+os.environ["LANGCHAIN_TRACING_V2"] = "false"
 from httpx import ASGITransport, AsyncClient
 
 from app.domain.resume.schemas import (
@@ -157,6 +160,13 @@ def mock_github():
             side_effect=mock_get_authenticated_user,
         ),
     ):
+        yield
+
+
+@pytest.fixture(autouse=True)
+def mock_qdrant_search():
+    """모든 테스트에서 Qdrant 검색을 자동 mock 처리"""
+    with patch("app.domain.interview.feedback_workflow.search_knowledge", return_value=[]):
         yield
 
 

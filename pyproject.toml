@@ -14,13 +14,19 @@ dependencies = [
     "langchain>=0.3.0",
     "langchain-openai>=0.3.0",
     "langchain-google-genai>=2.1.0",
-    "langgraph>=1.0.6",
+    "langgraph>=1.0.10",
     "langgraph-checkpoint-sqlite>=2.0.0",
     "langfuse>=3.12.0",
     "structlog>=24.1.0",
     "aioboto3>=13.0.0",
+    "qdrant-client>=1.12.0",
+    "google-genai>=1.0.0",
     "prometheus-fastapi-instrumentator>=7.1.0",
     "protobuf==6.33.5",
+    "tavily-python>=0.5.0",
+    "langsmith>=0.3.0",
+    "jsonref>=1.1.0",
+    "orjson>=3.11.6",
 ]
 
 [project.optional-dependencies]
@@ -43,6 +49,8 @@ ignore = []
 "app/domain/interview/prompts/*.py" = ["E501"]
 "app/infra/github/mock_data.py" = ["E501"]
 "app/infra/langfuse/prompt_manager.py" = ["I001"]
+"app/main.py" = ["E402"]
+"evals/*.py" = ["E402", "C901"]
 
 
 [tool.ruff.format]

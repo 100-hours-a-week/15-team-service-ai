@@ -1,17 +1,24 @@
 import asyncio
 
+from langsmith import traceable
+
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.domain.interview.feedback_schemas import (
     FeedbackOutput,
+    FeedbackState,
     OverallFeedbackOutput,
     OverallFeedbackState,
 )
-from app.domain.interview.feedback_workflow import create_overall_feedback_workflow
-from app.infra.llm.client import generate_feedback, get_langfuse_handler
+from app.domain.interview.feedback_workflow import (
+    create_feedback_workflow,
+    create_overall_feedback_workflow,
+)
+from app.infra.llm.base import _build_langfuse_config
 
 logger = get_logger(__name__)
 
+_feedback_workflow = create_feedback_workflow()
 _overall_feedback_workflow = create_overall_feedback_workflow()
 
 
@@ -23,8 +30,12 @@ async def run_feedback_agent(
     related_project: str | None,
     answer: str,
     session_id: str | None = None,
+    callbacks: list | None = None,
 ) -> tuple[FeedbackOutput | None, str | None]:
-    """개별 피드백 생성 - LLM 직접 호출
+    """개별 피드백 워크플로우 실행 - retrieve → generate
+
+    Args:
+        callbacks: 외부에서 주입하는 콜백 리스트 - Langfuse 부모 트레이스 묶기에 사용
 
     Returns:
         feedback_result, error_message 튜플
@@ -32,18 +43,33 @@ async def run_feedback_agent(
     logger.info("피드백 에이전트 시작", session_id=session_id)
 
     try:
-        feedback_result = await asyncio.wait_for(
-            generate_feedback(
-                position=position,
-                interview_type=interview_type,
-                question_text=question_text,
-                question_intent=question_intent,
-                related_project=related_project,
-                answer=answer,
-                session_id=session_id,
-            ),
+        initial_state: FeedbackState = {
+            "position": position,
+            "interview_type": interview_type,
+            "question_text": question_text,
+            "question_intent": question_intent,
+            "related_project": related_project,
+            "answer": answer,
+            "session_id": session_id,
+        }
+
+        config = _build_langfuse_config(
+            session_id=session_id,
+            tags=["feedback", "individual", interview_type, position],
+            callbacks=callbacks,
+        )
+
+        final_state = await asyncio.wait_for(
+            _feedback_workflow.ainvoke(initial_state, config=config),
             timeout=settings.workflow_timeout,
         )
+
+        if final_state.get("error_code"):
+            return None, final_state.get("error_message", "피드백 생성에 실패했습니다")
+
+        feedback_result = final_state.get("feedback_result")
+        if not feedback_result:
+            return None, "피드백 생성에 실패했습니다"
 
         logger.info("피드백 에이전트 완료", score=feedback_result.score)
         return feedback_result, None
@@ -57,10 +83,23 @@ async def run_feedback_agent(
         return None, "피드백 생성에 실패했습니다"
 
 
+@traceable(run_type="chain", name="individual-feedbacks")
+async def run_all_feedback_agents(tasks: list) -> list:
+    """개별 피드백 태스크를 병렬 실행하고 LangSmith에서 하나의 트레이스로 묶음
+
+    Returns:
+        각 태스크 결과 리스트 (예외 포함)
+    """
+    return await asyncio.gather(*tasks, return_exceptions=True)
+
+
 async def run_overall_feedback_agent(
     position: str,
     interview_type: str,
     qa_pairs_json: str,
+    individual_feedbacks_json: str = "",
+    company: str = "",
+    company_talent_info: str = "",
     session_id: str | None = None,
 ) -> tuple[OverallFeedbackOutput | None, str | None]:
     """종합 피드백 워크플로우 실행
@@ -74,19 +113,17 @@ async def run_overall_feedback_agent(
         initial_state: OverallFeedbackState = {
             "position": position,
             "interview_type": interview_type,
+            "company": company,
+            "company_talent_info": company_talent_info,
             "qa_pairs_json": qa_pairs_json,
+            "individual_feedbacks_json": individual_feedbacks_json,
             "session_id": session_id,
-            "retry_count": 0,
         }
 
-        langfuse_handler = get_langfuse_handler()
-        config = {
-            "callbacks": [langfuse_handler] if langfuse_handler else [],
-            "metadata": {
-                "langfuse_session_id": session_id,
-                "langfuse_tags": ["feedback", "overall", interview_type, position],
-            },
-        }
+        config = _build_langfuse_config(
+            session_id=session_id,
+            tags=["feedback", "overall", interview_type, position],
+        )
 
         final_state = await asyncio.wait_for(
             _overall_feedback_workflow.ainvoke(initial_state, config=config),

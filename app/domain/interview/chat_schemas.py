@@ -28,12 +28,13 @@ class ChatState(TypedDict, total=False):
     messages: Annotated[list[ChatMessage], operator.add]
     last_response: str | None
     last_follow_up: str | None
+    last_follow_up_intent: str | None
     turn_count: int
     error_message: str | None
 
 
 MAX_CHAT_TURNS = 10
-MAX_FOLLOW_UP_TURNS = 3
+MAX_FOLLOW_UP_TURNS = 4
 
 
 class ChatOutput(BaseModel):
@@ -41,3 +42,4 @@ class ChatOutput(BaseModel):
 
     message: str
     follow_up_question: str | None = None
+    follow_up_intent: str | None = None
