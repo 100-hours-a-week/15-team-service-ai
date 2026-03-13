@@ -50,8 +50,8 @@ def get_langfuse_parent_handler(
 
     from langfuse import Langfuse
 
-    trace = Langfuse().trace(name=name, session_id=session_id)
-    return CallbackHandler(trace_context=TraceContext(trace_id=trace.id))
+    trace_id = Langfuse.create_trace_id()
+    return CallbackHandler(trace_context=TraceContext(trace_id=trace_id))
 
 
 @functools.cache
