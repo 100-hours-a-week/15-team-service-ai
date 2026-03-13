@@ -9,7 +9,7 @@ from app.core.exceptions import ErrorCode
 from app.core.logging import get_logger
 from app.domain.interview.chat_agent import run_chat_agent
 from app.domain.interview.chat_schemas import MAX_FOLLOW_UP_TURNS
-from app.domain.interview.store import interview_context_store
+from app.domain.interview.store import QuestionContext, interview_context_store
 
 router = APIRouter(prefix="/interview", tags=["v2"])
 logger = get_logger(__name__)
@@ -138,6 +138,23 @@ async def chat_interview(
         )
 
     follow_up = _filter_follow_up(chat_result.follow_up_question, body, question_ctx, turn_count)
+
+    if follow_up and chat_result.follow_up_intent:
+        fu_qid = f"{body.question_id}-fu{turn_count}"
+        fu_ctx = QuestionContext(
+            question_id=fu_qid,
+            question_text=follow_up,
+            intent=chat_result.follow_up_intent,
+            related_project=question_ctx.related_project,
+            dimension=question_ctx.dimension,
+            category=question_ctx.category,
+        )
+        interview_context_store.save_single(body.ai_session_id, fu_ctx)
+        logger.info(
+            "꼬리질문 컨텍스트 저장",
+            fu_qid=fu_qid,
+            intent=chat_result.follow_up_intent,
+        )
 
     logger.info("채팅 응답 성공", turn_count=turn_count)
     return ChatResponse(

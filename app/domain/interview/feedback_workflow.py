@@ -43,6 +43,7 @@ async def retrieve_node(state: FeedbackState) -> dict:
         retrieved_context = "\n\n".join(
             f"[{c['tech']} - {c['topic']}] {c['document']}" for c in chunks
         )
+
     return {
         "retrieved_context": retrieved_context,
         "retrieval_scores": scores,

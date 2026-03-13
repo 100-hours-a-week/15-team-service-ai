@@ -145,6 +145,53 @@ def _build_feedback_response(
     )
 
 
+def _find_context(contexts: dict | None, turn_no: int, question: str):
+    """turn_no → 꼬리질문 ID → text 폴백 3단계 매칭"""
+    if not contexts:
+        return None
+
+    qid = f"q-{turn_no:03d}"
+    ctx = contexts.get(qid)
+    if ctx and ctx.question_text == question:
+        logger.debug(
+            "INTENT_LOOKUP",
+            turn_no=turn_no,
+            method="turn_no",
+            qid=qid,
+            intent=ctx.intent[:60] if ctx.intent else "",
+        )
+        return ctx
+
+    for key, stored_ctx in contexts.items():
+        if "-fu" in key and stored_ctx.question_text == question:
+            logger.debug(
+                "INTENT_LOOKUP",
+                turn_no=turn_no,
+                method="follow_up_id",
+                matched_qid=key,
+                intent=stored_ctx.intent[:60] if stored_ctx.intent else "",
+            )
+            return stored_ctx
+
+    for stored_ctx in contexts.values():
+        if stored_ctx.question_text == question:
+            logger.debug(
+                "INTENT_LOOKUP",
+                turn_no=turn_no,
+                method="text_fallback",
+                matched_qid=stored_ctx.question_id,
+                intent=stored_ctx.intent[:60] if stored_ctx.intent else "",
+            )
+            return stored_ctx
+
+    logger.warning(
+        "INTENT_LOOKUP_MISS",
+        turn_no=turn_no,
+        question=question[:60],
+    )
+    return None
+
+
 @router.post(
     "/end",
     response_model=InterviewEndResponse,
@@ -184,8 +231,7 @@ async def end_interview(
     parent_callbacks = [langfuse_parent] if langfuse_parent else None
 
     async def run_feedback_with_semaphore(m):
-        qid = f"q-{m.turn_no:03d}"
-        ctx = contexts.get(qid) if contexts else None
+        ctx = _find_context(contexts, m.turn_no, m.question)
         async with semaphore:
             return await run_feedback_agent(
                 position=body.position,

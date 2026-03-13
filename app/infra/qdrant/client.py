@@ -12,11 +12,12 @@ from qdrant_client.models import (
 
 from app.core.config import settings
 from app.core.logging import get_logger
+from app.domain.resume.prompts.positions import normalize_position
 
 logger = get_logger(__name__)
 
-EMBEDDING_MODEL = "gemini-embedding-001"
-VECTOR_DIM = 1536
+EMBEDDING_MODEL = "gemini-embedding-2-preview"
+VECTOR_DIM = 3072
 
 POSITION_CATEGORIES: dict[str, list[str]] = {
     "backend": ["backend", "database", "cs", "security"],
@@ -27,6 +28,23 @@ POSITION_CATEGORIES: dict[str, list[str]] = {
     "ai": ["ai_ml", "backend", "database", "cs"],
     "data": ["database", "cs", "ai_ml"],
     "security": ["security", "cs", "backend"],
+}
+
+POSITION_TECH_EXCLUDE: dict[str, list[str]] = {
+    "frontend": [
+        "Jetpack Compose", "React Native", "Android", "Flutter",
+        "Kotlin", "Swift", "SwiftUI", "Firebase Cloud Messaging",
+        "Mobile Security", "Mobile Testing",
+        "LangGraph", "LangChain", "LangChain Summarization",
+    ],
+    "backend": [
+        "Jetpack Compose", "React Native", "Android", "Flutter",
+        "Kotlin", "Swift", "SwiftUI",
+        "Mobile Security", "Mobile Testing",
+    ],
+    "mobile": [
+        "LangGraph", "LangChain", "LangChain Summarization",
+    ],
 }
 
 _qdrant_client: QdrantClient | None = None
@@ -101,10 +119,23 @@ def search_knowledge(
 
         query_filter = None
         if position:
-            categories = POSITION_CATEGORIES.get(position.lower())
+            pos_lower = normalize_position(position)
+            categories = POSITION_CATEGORIES.get(pos_lower)
+            must_conditions = []
+            must_not_conditions = []
             if categories:
+                must_conditions.append(
+                    FieldCondition(key="category", match=MatchAny(any=categories))
+                )
+            exclude_techs = POSITION_TECH_EXCLUDE.get(pos_lower)
+            if exclude_techs:
+                must_not_conditions.append(
+                    FieldCondition(key="tech", match=MatchAny(any=exclude_techs))
+                )
+            if must_conditions or must_not_conditions:
                 query_filter = Filter(
-                    must=[FieldCondition(key="category", match=MatchAny(any=categories))]
+                    must=must_conditions or None,
+                    must_not=must_not_conditions or None,
                 )
 
         response = qdrant.query_points(

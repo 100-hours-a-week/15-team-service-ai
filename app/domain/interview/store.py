@@ -43,6 +43,14 @@ class InterviewContextStore:
         self._store[session_id] = {ctx.question_id: ctx for ctx in contexts}
         self._timestamps[session_id] = time.time()
 
+    def save_single(self, session_id: str, context: QuestionContext) -> None:
+        """개별 질문 컨텍스트 추가 저장 - 꼬리질문용"""
+        self._cleanup()
+        if session_id not in self._store:
+            self._store[session_id] = {}
+        self._store[session_id][context.question_id] = context
+        self._timestamps[session_id] = time.time()
+
     def get(self, session_id: str) -> dict[str, QuestionContext] | None:
         """session_id로 질문 컨텍스트 조회"""
         self._cleanup()

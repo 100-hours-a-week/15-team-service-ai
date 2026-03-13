@@ -140,6 +140,7 @@ async def run_chat_agent(
                 "error_message": None,
                 "last_response": None,
                 "last_follow_up": None,
+                "last_follow_up_intent": None,
             }
             result_state = await asyncio.wait_for(
                 workflow.ainvoke(initial_state, config=config),
@@ -155,6 +156,7 @@ async def run_chat_agent(
         chat_output = ChatOutput(
             message=result_state.get("last_response", ""),
             follow_up_question=result_state.get("last_follow_up"),
+            follow_up_intent=result_state.get("last_follow_up_intent"),
         )
 
         logger.info("채팅 에이전트 완료", turn_count=turn_count)
