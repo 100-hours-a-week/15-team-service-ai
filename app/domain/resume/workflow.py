@@ -28,10 +28,43 @@ from app.domain.resume.service import (
     validate_position_match,
 )
 from app.domain.resume.workflow_utils import evaluate_with_fallback, has_error, make_should_retry
-from app.infra.github.client import parse_repo_url
+from app.infra.github.client import get_authenticated_username, parse_repo_url
 from app.infra.llm.client import evaluate_resume, generate_resume, plan_resume
 
 logger = get_logger(__name__)
+
+
+async def _fetch_github_data(request) -> tuple[list, dict, object]:
+    """GitHub 데이터 병렬 수집 — 프로젝트 정보, 레포 컨텍스트, 사용자 통계 반환"""
+    project_info, repo_contexts = await asyncio.gather(
+        collect_project_info(request),
+        collect_repo_contexts(request),
+    )
+    username = await get_authenticated_username(request.github_token)
+    if not username:
+        username, _ = parse_repo_url(request.repo_urls[0])
+    user_stats = await collect_user_stats(username, request.github_token)
+    return project_info, repo_contexts, user_stats
+
+
+def _filter_matched_projects(project_info: list, position: str) -> list:
+    """포지션 조건에 맞는 프로젝트만 필터링하여 반환"""
+    matched = []
+    for project in project_info:
+        is_valid, error_msg = validate_position_match(
+            position,
+            project.get("dependencies", []),
+        )
+        if not is_valid:
+            logger.warning(
+                "포지션 불일치 스킵",
+                repo=project.get("repo_name"),
+                position=position,
+                error=error_msg,
+            )
+            continue
+        matched.append(project)
+    return matched
 
 
 async def collect_data_node(state: ResumeState) -> ResumeState:
@@ -40,10 +73,7 @@ async def collect_data_node(state: ResumeState) -> ResumeState:
     logger.info("collect_data_node 시작", repos=len(request.repo_urls), position=request.position)
 
     try:
-        project_info, repo_contexts = await asyncio.gather(
-            collect_project_info(request),
-            collect_repo_contexts(request),
-        )
+        project_info, repo_contexts, user_stats = await _fetch_github_data(request)
 
         if not project_info:
             return create_error_state(
@@ -52,28 +82,11 @@ async def collect_data_node(state: ResumeState) -> ResumeState:
                 "프로젝트 정보 수집 실패",
             )
 
-        username, _ = parse_repo_url(request.repo_urls[0])
-        user_stats = await collect_user_stats(username, request.github_token)
-
         logger.info(
             "collect_data_node 완료", projects=len(project_info), contexts=len(repo_contexts)
         )
 
-        matched_projects = []
-        for project in project_info:
-            is_valid, error_msg = validate_position_match(
-                request.position,
-                project.get("dependencies", []),
-            )
-            if not is_valid:
-                logger.warning(
-                    "포지션 불일치 스킵",
-                    repo=project.get("repo_name"),
-                    position=request.position,
-                    error=error_msg,
-                )
-                continue
-            matched_projects.append(project)
+        matched_projects = _filter_matched_projects(project_info, request.position)
 
         if not matched_projects:
             return create_error_state(
@@ -123,21 +136,9 @@ async def plan_node(state: ResumeState) -> ResumeState:
         context_dict = None
         if repo_context:
             context_dict = {
-                "languages": (
-                    repo_context.languages
-                    if hasattr(repo_context, "languages")
-                    else repo_context.get("languages", {})
-                ),
-                "description": (
-                    repo_context.description
-                    if hasattr(repo_context, "description")
-                    else repo_context.get("description")
-                ),
-                "readme_summary": (
-                    repo_context.readme_summary
-                    if hasattr(repo_context, "readme_summary")
-                    else repo_context.get("readme_summary")
-                ),
+                "languages": repo_context.languages,
+                "description": repo_context.description,
+                "readme_summary": repo_context.readme_summary,
             }
 
         return await plan_resume(

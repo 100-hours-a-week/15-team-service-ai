@@ -3,8 +3,6 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 import httpx
-from langgraph.graph import END, StateGraph
-from langgraph.graph.state import CompiledStateGraph
 
 from app.core.logging import get_logger
 
@@ -118,50 +116,3 @@ async def evaluate_with_fallback(
         "evaluation": "pass",
         "evaluation_feedback": "",
     }
-
-
-def build_gen_eval_retry_graph(
-    state_schema: type,
-    generate_node: Callable,
-    evaluate_node: Callable,
-    max_retries: int,
-    generate_node_name: str = "generate",
-    evaluate_node_name: str = "evaluate",
-) -> CompiledStateGraph:
-    """생성-평가-재시도 패턴 워크플로우 빌더
-
-    Args:
-        state_schema: 워크플로우에 사용할 TypedDict 상태 클래스
-        generate_node: 생성 노드 함수
-        evaluate_node: 평가 노드 함수
-        max_retries: 최대 재시도 횟수
-        generate_node_name: 그래프에 등록할 생성 노드 이름
-        evaluate_node_name: 그래프에 등록할 평가 노드 이름
-    """
-    workflow = StateGraph(state_schema)
-
-    workflow.add_node(generate_node_name, generate_node)
-    workflow.add_node(evaluate_node_name, evaluate_node)
-
-    workflow.set_entry_point(generate_node_name)
-
-    workflow.add_conditional_edges(
-        generate_node_name,
-        should_evaluate,
-        {
-            "evaluate": evaluate_node_name,
-            "end": END,
-        },
-    )
-
-    should_retry = make_should_retry(max_retries, generate_node_name)
-    workflow.add_conditional_edges(
-        evaluate_node_name,
-        should_retry,
-        {
-            generate_node_name: generate_node_name,
-            "end": END,
-        },
-    )
-
-    return workflow.compile()

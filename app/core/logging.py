@@ -9,6 +9,7 @@ structlog 기반 로깅 설정
 import logging
 import re
 import sys
+from typing import Any
 
 import structlog
 
@@ -20,6 +21,10 @@ SENSITIVE_PATTERNS = [
     (re.compile(r"(Bearer\s+)[^\s]+", re.IGNORECASE), r"\1***"),
     (re.compile(r"(api[_-]?key=)[^&\s]+", re.IGNORECASE), r"\1***"),
     (re.compile(r"(password=)[^&\s]+", re.IGNORECASE), r"\1***"),
+    (re.compile(r"(gh[pousr]_[A-Za-z0-9_]+)"), r"***"),
+    (re.compile(r"(AKIA[0-9A-Z]{16})"), r"***"),
+    (re.compile(r"(github_token=)[^\s&]+", re.IGNORECASE), r"\1***"),
+    (re.compile(r"(gh_token=)[^\s&]+", re.IGNORECASE), r"\1***"),
 ]
 
 
@@ -57,7 +62,7 @@ def prepend_logger_name_processor(
 ) -> dict:
     """로거 이름을 이벤트 앞에 고정 너비로 추가"""
     logger_name = event_dict.pop("logger", "unknown")
-    padded = f"[{logger_name:<28}]"
+    padded = f"[{logger_name:<40}]"
     event_dict["event"] = f"{padded} {event_dict.get('event', '')}"
     return event_dict
 
@@ -100,7 +105,7 @@ def setup_logging(level: str | None = None) -> None:
         level = settings.log_level
     log_level = getattr(logging, level.upper(), logging.INFO)
 
-    shared_processors: list = [
+    shared_processors: list[Any] = [
         structlog.stdlib.add_logger_name,
         structlog.stdlib.add_log_level,
         structlog.processors.TimeStamper(fmt="iso"),

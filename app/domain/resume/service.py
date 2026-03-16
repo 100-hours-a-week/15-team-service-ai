@@ -354,7 +354,7 @@ def _is_empty_repository(file_tree: list[str]) -> bool:
 
 
 def _summarize_file_tree(file_tree: list[str]) -> list[str]:
-    """파일 트리를 디렉토리 구조 중심으로 요약.
+    """파일 트리를 디렉토리 구조 중심으로 요약
 
     Args:
         file_tree: 전체 파일 경로 리스트
@@ -385,7 +385,7 @@ def _summarize_file_tree(file_tree: list[str]) -> list[str]:
 
 
 async def _parse_dependencies(repo_url: str, file_tree: list[str], token: str | None) -> list[str]:
-    """파일 트리에서 의존성 파일을 찾아 파싱.
+    """파일 트리에서 의존성 파일을 찾아 파싱
 
     Args:
         repo_url: GitHub 레포지토리 URL
@@ -490,7 +490,7 @@ async def _collect_single_context(
 
 
 async def collect_repo_contexts(request: ResumeRequest) -> dict[str, RepoContext]:
-    """각 레포지토리의 컨텍스트 정보 수집.
+    """각 레포지토리의 컨텍스트 정보 수집
 
     Args:
         request: 이력서 생성 요청
@@ -521,7 +521,7 @@ async def collect_repo_contexts(request: ResumeRequest) -> dict[str, RepoContext
 
 
 async def collect_user_stats(username: str, token: str | None) -> UserStats | None:
-    """사용자 GitHub 통계 수집.
+    """사용자 GitHub 통계 수집
 
     Args:
         username: GitHub 유저네임

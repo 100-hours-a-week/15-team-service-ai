@@ -14,6 +14,7 @@ from app.core.logging import get_logger
 from app.domain.interview.agent import run_interview_agent
 from app.domain.interview.schemas import InterviewQuestion
 from app.domain.interview.store import QuestionContext, SessionMeta, interview_context_store
+from app.domain.resume.prompts.positions import get_effective_question_count
 
 router = APIRouter(prefix="/interview", tags=["v2"])
 logger = get_logger(__name__)
@@ -42,27 +43,46 @@ async def generate_interview(
     session_id = str(uuid.uuid4())
 
     is_behavioral = body.type == "behavioral"
-    base_count = max(min(len(body.content.projects) * 2, 10), 4)
-    llm_question_count = base_count
+    project_count = len(body.content.projects)
+    min_count = max(project_count, 3)
+    max_count = max(min(project_count * 3, 10), min_count + 1)
+
+    if not is_behavioral:
+        min_count = get_effective_question_count(min_count, body.position)
+        max_count = get_effective_question_count(max_count, body.position)
+        if max_count <= min_count:
+            max_count = min_count + 1
 
     logger.info(
         "면접 질문 생성 요청",
         resume_id=body.resume_id,
         interview_type=body.type,
         position=body.position,
-        question_count=llm_question_count,
+        min_question_count=min_count,
+        max_question_count=max_count,
         session_id=session_id,
     )
 
     resume_json = build_resume_json(body.content)
 
-    questions, error_message = await run_interview_agent(
-        resume_json=resume_json,
-        interview_type=body.type,
-        position=body.position,
-        question_count=llm_question_count,
-        session_id=session_id,
-    )
+    try:
+        questions, error_message = await run_interview_agent(
+            resume_json=resume_json,
+            interview_type=body.type,
+            position=body.position,
+            question_count=max_count,
+            min_question_count=min_count,
+            session_id=session_id,
+        )
+    except Exception:
+        logger.error("면접 질문 생성 예외 발생", exc_info=True)
+        return InterviewResponse(
+            status="failed",
+            error=InterviewErrorResponse(
+                code=ErrorCode.INTERVIEW_GENERATE_ERROR,
+                message="면접 질문 생성 중 오류가 발생했습니다",
+            ),
+        )
 
     if error_message or not questions:
         logger.error("면접 질문 생성 실패", error=error_message)
@@ -74,9 +94,12 @@ async def generate_interview(
             ),
         )
 
-    all_questions = (
-        BEHAVIORAL_FIXED_QUESTIONS + questions.questions if is_behavioral else questions.questions
-    )
+    if is_behavioral:
+        fixed_texts = {q.question for q in BEHAVIORAL_FIXED_QUESTIONS}
+        llm_questions = [q for q in questions.questions if q.question not in fixed_texts]
+        all_questions = BEHAVIORAL_FIXED_QUESTIONS + llm_questions
+    else:
+        all_questions = questions.questions
 
     question_responses = []
     question_contexts = []
@@ -90,6 +113,8 @@ async def generate_interview(
                 question_text=q.question,
                 intent=q.intent,
                 related_project=q.related_project,
+                dimension=q.dimension,
+                category=q.category,
             )
         )
 

@@ -36,10 +36,15 @@ class InterviewEndRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     ai_session_id: str = Field(alias="aiSessionId", min_length=1)
-    interview_type: Literal["TECHNICAL", "BEHAVIORAL"] = Field(alias="interviewType")
+    interview_type: Literal["technical", "behavioral"] = Field(alias="interviewType")
     position: str = Field(min_length=1, max_length=100)
     company: str = Field(min_length=1, max_length=100)
     messages: list[InterviewEndMessage] = Field(min_length=1, max_length=20)
+
+    @field_validator("interview_type", mode="before")
+    @classmethod
+    def normalize_interview_type(cls, v: str) -> str:
+        return v.lower() if isinstance(v, str) else v
 
 
 class InterviewEndFeedbackItem(BaseModel):

@@ -83,6 +83,7 @@ async def respond_node(state: ChatState, config: RunnableConfig) -> ChatState:
             "messages": [ai_message],
             "last_response": result.message,
             "last_follow_up": result.follow_up_question,
+            "last_follow_up_intent": result.follow_up_intent,
             "turn_count": turn_count + 1,
             "error_message": None,
         }

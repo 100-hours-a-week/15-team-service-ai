@@ -33,8 +33,16 @@ DANGEROUS_PATH_PARTS = frozenset(
     }
 )
 
-_client = httpx.AsyncClient(timeout=settings.github_timeout)
+_client: httpx.AsyncClient | None = None
 _request_semaphore = asyncio.Semaphore(settings.github_max_concurrent_requests)
+
+
+def _get_client() -> httpx.AsyncClient:
+    """GitHub httpx 클라이언트 지연 초기화 싱글턴"""
+    global _client
+    if _client is None:
+        _client = httpx.AsyncClient(timeout=settings.github_timeout)
+    return _client
 
 
 def _matches_commit_author(
@@ -95,7 +103,10 @@ def _get_headers(token: str | None = None) -> dict[str, str]:
 
 async def close_client():
     """httpx 클라이언트 종료"""
-    await _client.aclose()
+    global _client
+    if _client is not None:
+        await _client.aclose()
+        _client = None
 
 
 async def get_authenticated_user(token: str) -> tuple[str | None, str | None]:
@@ -112,7 +123,7 @@ async def get_authenticated_user(token: str) -> tuple[str | None, str | None]:
     url = f"{GITHUB_API_BASE}/user"
 
     try:
-        response = await _client.get(url, headers=_get_headers(token))
+        response = await _get_client().get(url, headers=_get_headers(token))
         response.raise_for_status()
         data = response.json()
         username = data.get("login")
@@ -200,7 +211,7 @@ async def get_commits(
 
     params = {"per_page": min(per_page, 100)}
 
-    response = await _client.get(url, headers=_get_headers(token), params=params)
+    response = await _get_client().get(url, headers=_get_headers(token), params=params)
     response.raise_for_status()
     data = response.json()
 
@@ -236,7 +247,7 @@ async def get_repo_languages(repo_url: str, token: str | None = None) -> dict[st
     owner, repo = parse_repo_url(repo_url)
     url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/languages"
 
-    response = await _client.get(url, headers=_get_headers(token))
+    response = await _get_client().get(url, headers=_get_headers(token))
     response.raise_for_status()
 
     logger.debug("언어 조회 완료", owner=owner, repo=repo)
@@ -256,7 +267,7 @@ async def get_repo_info(repo_url: str, token: str | None = None) -> dict:
     owner, repo = parse_repo_url(repo_url)
     url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}"
 
-    response = await _client.get(url, headers=_get_headers(token))
+    response = await _get_client().get(url, headers=_get_headers(token))
     response.raise_for_status()
     data = response.json()
 
@@ -281,7 +292,7 @@ async def get_repo_readme(repo_url: str, token: str | None = None) -> str | None
     url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/readme"
 
     try:
-        response = await _client.get(url, headers=_get_headers(token))
+        response = await _get_client().get(url, headers=_get_headers(token))
         response.raise_for_status()
         data = response.json()
 
@@ -313,7 +324,7 @@ async def get_repo_tree(repo_url: str, token: str | None = None) -> list[str]:
 
     params = {"recursive": "1"}
 
-    response = await _client.get(url, headers=_get_headers(token), params=params)
+    response = await _get_client().get(url, headers=_get_headers(token), params=params)
     response.raise_for_status()
     data = response.json()
 
@@ -337,7 +348,7 @@ async def get_file_content(repo_url: str, path: str, token: str | None = None) -
     url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/contents/{path}"
 
     try:
-        response = await _client.get(url, headers=_get_headers(token))
+        response = await _get_client().get(url, headers=_get_headers(token))
         response.raise_for_status()
         data = response.json()
 
@@ -374,7 +385,7 @@ async def _graphql_query(query: str, variables: dict, token: str) -> dict:
     """
     headers = _get_headers(token)
     headers["Content-Type"] = "application/json"
-    response = await _client.post(
+    response = await _get_client().post(
         GITHUB_GRAPHQL_URL,
         headers=headers,
         json={"query": query, "variables": variables},
@@ -782,6 +793,19 @@ async def get_repo_context(repo_url: str, token: str | None = None) -> dict:
     }
 
 
+async def get_authenticated_username(token: str) -> str | None:
+    """OAuth 토큰으로 인증된 사용자의 GitHub 유저네임 조회
+
+    Args:
+        token: GitHub OAuth 토큰
+
+    Returns:
+        인증된 사용자의 GitHub 유저네임, 실패 시 None
+    """
+    username, _ = await get_authenticated_user(token)
+    return username
+
+
 async def get_user_stats(username: str, token: str) -> UserStats:
     """사용자 GitHub 통계 조회
 
@@ -837,7 +861,7 @@ async def get_pulls_extended(
 
     params = {"state": "closed", "per_page": min(per_page, 100)}
 
-    response = await _client.get(url, headers=_get_headers(token), params=params)
+    response = await _get_client().get(url, headers=_get_headers(token), params=params)
     response.raise_for_status()
     data = response.json()
 
@@ -889,7 +913,7 @@ async def _get_pull_detail(
         commits, additions, deletions 포함 딕셔너리
     """
     url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/pulls/{pull_number}"
-    response = await _client.get(url, headers=_get_headers(token))
+    response = await _get_client().get(url, headers=_get_headers(token))
     response.raise_for_status()
     data = response.json()
 

@@ -76,10 +76,17 @@ class TestFeedbackAgent:
         """에이전트 정상 실행"""
         from app.domain.interview.feedback_agent import run_feedback_agent
 
-        with patch(
-            "app.domain.interview.feedback_agent.generate_feedback",
-            new_callable=AsyncMock,
-            return_value=SAMPLE_FEEDBACK_OUTPUT,
+        GOOD_CHUNKS = [{"document": "doc", "score": 0.9, "tech": "Python", "topic": "async"}]
+        with (
+            patch(
+                "app.domain.interview.feedback_workflow.search_knowledge",
+                return_value=GOOD_CHUNKS,
+            ),
+            patch(
+                "app.domain.interview.feedback_workflow.generate_feedback",
+                new_callable=AsyncMock,
+                return_value=SAMPLE_FEEDBACK_OUTPUT,
+            ),
         ):
             result, error = await run_feedback_agent(
                 position="백엔드 개발자",
@@ -97,10 +104,17 @@ class TestFeedbackAgent:
         """LLM 호출 실패 시 에러 반환"""
         from app.domain.interview.feedback_agent import run_feedback_agent
 
-        with patch(
-            "app.domain.interview.feedback_agent.generate_feedback",
-            new_callable=AsyncMock,
-            side_effect=Exception("LLM 오류"),
+        GOOD_CHUNKS = [{"document": "doc", "score": 0.9, "tech": "Python", "topic": "async"}]
+        with (
+            patch(
+                "app.domain.interview.feedback_workflow.search_knowledge",
+                return_value=GOOD_CHUNKS,
+            ),
+            patch(
+                "app.domain.interview.feedback_workflow.generate_feedback",
+                new_callable=AsyncMock,
+                side_effect=Exception("LLM 오류"),
+            ),
         ):
             result, error = await run_feedback_agent(
                 position="백엔드 개발자",
@@ -118,10 +132,17 @@ class TestFeedbackAgent:
         """에이전트 타임아웃"""
         from app.domain.interview.feedback_agent import run_feedback_agent
 
-        with patch(
-            "app.domain.interview.feedback_agent.generate_feedback",
-            new_callable=AsyncMock,
-            side_effect=asyncio.TimeoutError(),
+        GOOD_CHUNKS = [{"document": "doc", "score": 0.9, "tech": "Python", "topic": "async"}]
+        with (
+            patch(
+                "app.domain.interview.feedback_workflow.search_knowledge",
+                return_value=GOOD_CHUNKS,
+            ),
+            patch(
+                "app.domain.interview.feedback_workflow.generate_feedback",
+                new_callable=AsyncMock,
+                side_effect=asyncio.TimeoutError(),
+            ),
         ):
             result, error = await run_feedback_agent(
                 position="백엔드 개발자",
@@ -134,6 +155,35 @@ class TestFeedbackAgent:
 
         assert result is None
         assert "타임아웃" in error
+
+    async def test_run_all_feedback_agents_returns_results(self):
+        """run_all_feedback_agents가 gather 결과를 그대로 반환"""
+        from app.domain.interview.feedback_agent import run_all_feedback_agents
+
+        async def fake_task():
+            return (SAMPLE_FEEDBACK_OUTPUT, None)
+
+        tasks = [fake_task(), fake_task()]
+        results = await run_all_feedback_agents(tasks)
+
+        assert len(results) == 2
+        assert results[0] == (SAMPLE_FEEDBACK_OUTPUT, None)
+        assert results[1] == (SAMPLE_FEEDBACK_OUTPUT, None)
+
+    async def test_run_all_feedback_agents_preserves_exceptions(self):
+        """return_exceptions=True 동작 확인 - 예외가 결과에 포함됨"""
+        from app.domain.interview.feedback_agent import run_all_feedback_agents
+
+        async def failing_task():
+            raise ValueError("실패")
+
+        async def ok_task():
+            return (SAMPLE_FEEDBACK_OUTPUT, None)
+
+        results = await run_all_feedback_agents([failing_task(), ok_task()])
+
+        assert isinstance(results[0], ValueError)
+        assert results[1] == (SAMPLE_FEEDBACK_OUTPUT, None)
 
 
 class TestOverallFeedbackAgent:
@@ -159,7 +209,7 @@ class TestOverallFeedbackAgent:
                 mock_workflow,
             ),
             patch(
-                "app.domain.interview.feedback_agent.get_langfuse_handler",
+                "app.infra.llm.base.get_langfuse_handler",
                 return_value=None,
             ),
         ):
@@ -192,7 +242,7 @@ class TestOverallFeedbackAgent:
                 mock_workflow,
             ),
             patch(
-                "app.domain.interview.feedback_agent.get_langfuse_handler",
+                "app.infra.llm.base.get_langfuse_handler",
                 return_value=None,
             ),
         ):

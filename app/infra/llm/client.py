@@ -1,14 +1,13 @@
-from app.domain.resume.prompts.builder import format_project_info, format_repo_contexts
 from app.infra.llm.base import (
-    _build_langfuse_config,
-    _invoke_llm,
     get_evaluator_llm,
     get_generator_llm,
     get_langfuse_handler,
+    get_langfuse_parent_handler,
     setup_langfuse_env,
 )
 from app.infra.llm.chat import generate_chat_response, generate_chat_response_with_history
 from app.infra.llm.feedback import (
+    evaluate_retrieval_quality,
     generate_feedback,
     generate_overall_feedback,
 )
@@ -24,14 +23,14 @@ from app.infra.llm.resume import (
 )
 
 __all__ = [
-    "_build_langfuse_config",
-    "_invoke_llm",
     "get_evaluator_llm",
     "get_generator_llm",
     "get_langfuse_handler",
+    "get_langfuse_parent_handler",
     "setup_langfuse_env",
     "generate_chat_response",
     "generate_chat_response_with_history",
+    "evaluate_retrieval_quality",
     "generate_feedback",
     "generate_overall_feedback",
     "evaluate_interview",
@@ -43,6 +42,4 @@ __all__ = [
     "generate_resume",
     "plan_edit",
     "plan_resume",
-    "format_project_info",
-    "format_repo_contexts",
 ]

@@ -228,3 +228,4 @@ Notebook
 plan*
 langfuse/*
 vector-db-scripts/*
+evals/*

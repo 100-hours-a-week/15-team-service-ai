@@ -46,3 +46,4 @@ def clear_context() -> None:
     """모든 컨텍스트 변수 초기화"""
     request_id_var.set(None)
     job_id_var.set(None)
+    github_mock_var.set(False)

@@ -33,6 +33,7 @@ class TestInterviewGenerateNode:
                     question="FastAPI의 비동기 처리 방식을 설명해주세요",
                     intent="비동기 프로그래밍 이해도 확인",
                     related_project="test-project",
+                    category="Python/FastAPI",
                 )
             ]
         )
