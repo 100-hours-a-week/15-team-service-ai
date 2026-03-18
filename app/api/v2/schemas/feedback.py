@@ -3,6 +3,12 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 __all__ = [
+    "ProfileTechStack",
+    "ProfileExperience",
+    "ProfileEducation",
+    "ProfileActivity",
+    "ProfileCertificate",
+    "CandidateProfile",
     "InterviewEndMessage",
     "InterviewEndRequest",
     "InterviewEndFeedbackItem",
@@ -10,6 +16,82 @@ __all__ = [
     "InterviewEndErrorResponse",
     "InterviewEndResponse",
 ]
+
+
+class ProfileTechStack(BaseModel):
+    """프로필 - 기술 스택"""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: int
+    name: str
+
+
+class ProfileExperience(BaseModel):
+    """프로필 - 경력"""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: int
+    company_name: str = Field(alias="companyName")
+    position: str
+    department: str | None = None
+    start_at: str = Field(alias="startAt")
+    end_at: str | None = Field(default=None, alias="endAt")
+    is_currently_working: bool = Field(default=False, alias="isCurrentlyWorking")
+    employment_type: str = Field(alias="employmentType")
+    responsibilities: str | None = None
+
+
+class ProfileEducation(BaseModel):
+    """프로필 - 학력"""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: int
+    education_type: str = Field(alias="educationType")
+    institution: str
+    major: str | None = None
+    status: str
+    start_at: str = Field(alias="startAt")
+    end_at: str | None = Field(default=None, alias="endAt")
+
+
+class ProfileActivity(BaseModel):
+    """프로필 - 활동"""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: int
+    title: str
+    organization: str | None = None
+    year: int | None = None
+    description: str | None = None
+
+
+class ProfileCertificate(BaseModel):
+    """프로필 - 자격증"""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: int
+    name: str
+    score: str | None = None
+    issuer: str | None = None
+    issued_at: str | None = Field(default=None, alias="issuedAt")
+
+
+class CandidateProfile(BaseModel):
+    """지원자 프로필 - PII 제외, 피드백에 필요한 정보만 사용"""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    introduction: str | None = None
+    tech_stacks: list[ProfileTechStack] = Field(default_factory=list, alias="techStacks")
+    experiences: list[ProfileExperience] = Field(default_factory=list, alias="experiences")
+    educations: list[ProfileEducation] = Field(default_factory=list, alias="educations")
+    activities: list[ProfileActivity] = Field(default_factory=list, alias="activities")
+    certificates: list[ProfileCertificate] = Field(default_factory=list, alias="certificates")
 
 
 class InterviewEndMessage(BaseModel):
@@ -39,6 +121,7 @@ class InterviewEndRequest(BaseModel):
     interview_type: Literal["technical", "behavioral"] = Field(alias="interviewType")
     position: str = Field(min_length=1, max_length=100)
     company: str = Field(min_length=1, max_length=100)
+    profile: CandidateProfile | None = None
     messages: list[InterviewEndMessage] = Field(min_length=1, max_length=20)
 
     @field_validator("interview_type", mode="before")

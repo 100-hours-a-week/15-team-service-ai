@@ -40,9 +40,10 @@ async def retrieve_node(state: FeedbackState) -> dict:
     scores = [c["score"] for c in chunks]
     retrieved_context = ""
     if chunks:
-        retrieved_context = "\n\n".join(
-            f"[{c['tech']} - {c['topic']}] {c['document']}" for c in chunks
-        )
+        parts = [
+            f"[{i}] [{c['tech']} - {c['topic']}] {c['document']}" for i, c in enumerate(chunks, 1)
+        ]
+        retrieved_context = "\n".join(parts)
 
     return {
         "retrieved_context": retrieved_context,
@@ -83,10 +84,8 @@ async def re_retrieve_node(state: FeedbackState) -> dict:
     min_score = settings.qdrant_score_threshold
     retrieved_context = ""
     if scores and max(scores) >= min_score:
-        filtered = [c for c in chunks if c["score"] >= min_score * 0.8]
-        retrieved_context = "\n\n".join(
-            f"[{c['tech']} - {c['topic']}] {c['document']}" for c in filtered
-        )
+        best = chunks[0]
+        retrieved_context = f"[{best['tech']} - {best['topic']}] {best['document']}"
     else:
         logger.info(
             "재검색 후에도 품질 미달 - context 주입 안 함",
